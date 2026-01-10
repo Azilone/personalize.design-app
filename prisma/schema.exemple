@@ -1,0 +1,133 @@
+// 1. CONFIGURATION DU CLIENT ET DE LA SOURCE DE DONNÉES
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" //
+  url      = "file:dev.sqlite"
+}
+
+// 2. SESSION SHOPIFY (Standard - Ne pas toucher)
+// Cette table est gérée automatiquement par le package @shopify/shopify-app-remix
+// Elle stocke les tokens d'accès OAuth.
+model Session {
+  id          String    @id
+  shop        String
+  state       String
+  isOnline    Boolean   @default(false)
+  scope       String?
+  expires     DateTime?
+  accessToken String
+  userId      BigInt?
+}
+
+// 3. MERCHANT (Le Client / La Boutique)
+// C'est le cœur de ta logique de facturation et d'abonnement.
+model Merchant {
+  id   String @id @default(uuid())
+  shop String @unique // L'identifiant principal (ex: my-shop.myshopify.com)
+
+  // --- SYSTÈME DE CRÉDITS (Early Adopter Plan) ---
+  // On commence à 20.0 crédits gratuits (valeur 1$).
+  // On utilise Decimal pour éviter les erreurs d'arrondi flottant (0.1 + 0.2 != 0.3)
+  freeCredits Decimal @default(20.0)
+
+  // --- SÉCURITÉ BILLING ---
+  // Le montant maximum mensuel (Capped Amount) approuvé par le marchand.
+  // Si (Total dépense mensuelle + coût génération) > cappedAmount, on bloque.
+  cappedAmount Decimal @default(0.00)
+
+  // ID de l'abonnement récurrent ou app install (nécessaire pour Usage Record)
+  subscriptionId String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // RELATIONS
+  blueprints  Blueprint[]
+  generations GeneratedImage[]
+}
+
+// 4. AI MODEL (La Configuration des Prix)
+// Permet de changer le coût d'un modèle sans redéployer le code.
+// C'est ici qu'on définit : 1 Crédit = Flux Schnell, 1.5 Crédits = Flux Dev.
+model AiModel {
+  id         String @id // Slug unique (ex: "flux-schnell", "remove-bg")
+  name       String // Nom affiché (ex: "Standard Fast")
+  providerId String // ID technique Fal.ai (ex: "fal-ai/flux/schnell")
+
+  // Le coût en CRÉDITS (ex: 1.0 ou 1.5).
+  // Rappel : 1 Crédit = 0.05$ (Fixé dans le code).
+  creditCost Decimal @default(1.0)
+
+  isActive Boolean @default(true) // Pour désactiver un vieux modèle si besoin
+
+  // RELATIONS
+  blueprints Blueprint[]
+}
+
+// 5. BLUEPRINT (La "Recette" de Design)
+// Configuration créée par le marchand pour générer des images spécifiques.
+model Blueprint {
+  id    String @id @default(uuid())
+  title String
+
+  // --- PROMPT ENGINEERING ---
+  // Le prompt peut contenir des variables comme {{text_user}} ou {{image_user}}
+  prompt         String
+  negativePrompt String?
+  aspectRatio    String  @default("1:1") // "1:1", "16:9", "9:16", "4:5"
+
+  // --- CONFIGURATION ---
+  // JSON stringifié contenant les IDs des produits Shopify liés à ce design.
+  // Ex: '["gid://shopify/Product/12345", "gid://shopify/Product/67890"]'
+  linkedProductIds String @default("[]")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // RELATIONS
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [shop], onDelete: Cascade)
+
+  aiModelId String
+  aiModel   AiModel @relation(fields: [aiModelId], references: [id]) // Si le modèle change, le blueprint garde le lien
+
+  generations GeneratedImage[]
+
+  @@index([merchantId])
+}
+
+// 6. GENERATED IMAGE (L'Historique / Logs)
+// Archive de chaque génération pour le SAV, le debug et l'audit financier.
+model GeneratedImage {
+  id String @id @default(uuid())
+
+  // URL de l'image finale stockée sur Cloudflare R2 / AWS S3
+  // (Les liens Fal.ai expirent, donc on doit stocker le nôtre)
+  imageUrl String
+
+  // ID de requête Fal.ai pour le debug
+  falRequestId String?
+
+  // --- AUDIT FINANCIER ---
+  // Combien ça a coûté au moment T (car les prix peuvent changer)
+  costInCredits Decimal
+
+  // Est-ce que ça a été facturé via Shopify Usage API (True)
+  // ou déduit des crédits gratuits (False) ?
+  isBilledToShopify Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  // RELATIONS
+  blueprintId String
+  blueprint   Blueprint @relation(fields: [blueprintId], references: [id], onDelete: Cascade)
+
+  merchantId String
+  merchant   Merchant @relation(fields: [merchantId], references: [shop], onDelete: Cascade)
+
+  @@index([merchantId])
+  @@index([blueprintId])
+}
