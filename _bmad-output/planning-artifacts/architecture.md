@@ -36,7 +36,7 @@ Architecturally, the functional scope breaks down into:
 - Reliability: retries + idempotency across generation/mockup/fulfillment; clear recoverable “stuck” states; safe reprocessing for failed jobs.
 - Security: TLS, secure secret storage, verified webhooks, scoped/time-limited URLs for user uploads and generated assets, baseline abuse controls for public endpoints.
 - Integration resilience: Shopify/Printify/fal.ai/storage failures must degrade safely with retries where appropriate and clear error surfacing where not.
-- Auditability/billing safety: auditable billable events (generation/fulfillment triggers), spend caps, explicit merchant consent gating paid usage beyond free credits.
+- Auditability/billing safety: auditable billable events (generation/fulfillment triggers), spend caps, explicit merchant consent gating paid usage beyond the free usage gift.
 - Accessibility & UX correctness: WCAG 2.1 AA target; stable layouts during generation; deterministic “Try again” recovery; preview fidelity as a trust constraint.
 
 **Scale & Complexity:**
@@ -63,7 +63,7 @@ Architecturally, the functional scope breaks down into:
 ### Cross-Cutting Concerns Identified
 
 - Tenant isolation across data, billing, and configuration.
-- Cost governance: credits, caps, consent gating, rate limits/session limits, abuse controls.
+- Cost governance: USD usage charges, caps, consent gating, rate limits/session limits, abuse controls.
 - Idempotency + retries across all async steps (generation, mockups, fulfillment, paid-order handling).
 - Observability: logs/diagnostics for each job/order line; operator-friendly recovery; PostHog event telemetry for product + ops signals.
 - Security of assets and integrations: webhook verification, scoped URLs, secrets management.

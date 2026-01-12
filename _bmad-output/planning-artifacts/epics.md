@@ -22,7 +22,7 @@ This document provides the complete epic and story breakdown for personalize-des
 
 ```
 FR1: Merchant can install the app and complete onboarding for their shop.
-FR2: Merchant can activate Early Access access using an invite code.
+FR2: Merchant can activate Early Access using an invite code.
 FR3: Merchant can view required prerequisites and setup status (e.g., supplier connection, storefront block enabled).
 FR4: Merchant can configure default spend controls for their shop (caps/limits).
 FR5: Merchant can create a design template with defined buyer inputs (photo required; optional text).
@@ -46,11 +46,11 @@ FR22: Buyer can add the product to cart with personalization metadata attached t
 FR23: Buyer can see clear messaging when they reach limits or when billing/spend policies affect further generations.
 FR24: Merchant can enable/disable the storefront personalization experience for their shop.
 FR25: Merchant can enable/disable personalization per product (or per assigned design template) without uninstalling the app.
-FR26: System can grant initial free credits on installation.
-FR27: System can track credit usage per shop and per buyer session.
+FR26: System can grant an initial free AI usage gift on plan activation (one-time, USD-denominated).
+FR27: System can track AI usage per shop and per buyer session.
 FR28: System can enforce a per-product generation limit.
 FR29: System can enforce a per-session generation limit.
-FR30: System can prevent paid generations until the merchant has explicitly consented to paid usage beyond free credits.
+FR30: System can prevent paid AI usage until the merchant has explicitly consented to paid usage beyond the free usage gift.
 FR31: Merchant can explicitly configure and confirm spend settings required for billing safety (capped amount + paid-usage consent status).
 FR32: Merchant can review current usage and estimated charges (at least at a basic level) for their shop.
 FR33: System can record an auditable history of billable events (generations and successful fulfilled orders).
@@ -115,7 +115,7 @@ NFR12: The integration layer is designed to allow swapping/adding suppliers and 
 FR1: Epic 1 - Install + onboarding
 FR2: Epic 1 - Early Access invite code
 FR3: Epic 1 - Prerequisites/setup readiness (incl. storefront block/app embed)
-FR4: Epic 1 - Default spend controls + capped amount requested at install
+FR4: Epic 5 - Spend safety defaults (caps/limits) + billing consent
 FR5: Epic 3 - Create template + buyer inputs
 FR6: Epic 3 - Generation configuration (model/cost visibility)
 FR7: Epic 3 - Test-generate outputs
@@ -137,11 +137,11 @@ FR22: Epic 6 - Add to cart with personalization metadata attached
 FR23: Epic 6 - Clear messaging for limits/spend/billing impacts
 FR24: Epic 1 - Shop-level enable/disable storefront personalization
 FR25: Epic 4 - Enable/disable personalization per product (or assignment)
-FR26: Epic 5 - Initial free credits granted at install
-FR27: Epic 5 - Track credit usage per shop and per buyer session
+FR26: Epic 5 - Initial free AI usage gift granted on plan activation
+FR27: Epic 5 - Track AI usage per shop and per buyer session
 FR28: Epic 5 - Enforce per-product generation limit
 FR29: Epic 5 - Enforce per-session generation limit
-FR30: Epic 5 - Prevent paid generations until merchant consents beyond free credits
+FR30: Epic 5 - Prevent paid AI usage until merchant consents beyond free usage gift
 FR31: Epic 5 - Configure/confirm spend settings (capped amount + consent)
 FR32: Epic 5 - Review current usage and estimated charges
 FR33: Epic 5 - Auditable billable events history
@@ -163,9 +163,9 @@ FR48: Epic 8 - Reporting/flagging for follow-up
 
 ## Epic List
 
-### Epic 1: Merchant Onboarding & Shop Setup (Early Access)
-Merchant can install, unlock Early Access, see setup readiness (incl. app embed/storefront block), configure baseline spend controls and capped amount, and enable/disable storefront personalization for their shop.
-**FRs covered:** FR1, FR2, FR3, FR4, FR24
+### Epic 1: Merchant Onboarding & Shop Setup
+Merchant can install, unlock Early Access (invite-only) or subscribe to Standard, see setup readiness (incl. app embed/storefront block), and enable/disable storefront personalization for their shop.
+**FRs covered:** FR1, FR2, FR3, FR24
 
 ### Epic 2: Supplier Connection (Printify) Setup
 Merchant can connect, verify, and manage Printify integration, and map/configure which Printify shop/account is used for fulfillment.
@@ -179,9 +179,9 @@ Merchant can create templates (buyer inputs + generation configuration), test-ge
 Merchant can sync/select Shopify products and assign/unassign a template to a product, enable/disable personalization per product, and validate the end-to-end listing experience via a merchant preview/simulator.
 **FRs covered:** FR11, FR12, FR25
 
-### Epic 5: Credits, Limits, Spend Safety, Billing (Early Adopter Plan)
-System grants welcome credits, tracks usage, enforces per-product and per-session limits, gates paid usage behind explicit merchant consent and spend settings (incl. capped amount), supports basic usage and estimated charges visibility, and records an auditable billable-events history; per-order commission is feature-flagged/waived for Early Access.
-**FRs covered:** FR26, FR27, FR28, FR29, FR30, FR31, FR32, FR33
+### Epic 5: AI Usage, Limits, Spend Safety, Billing
+System grants an initial free AI usage gift (Early Access + Standard), tracks AI usage, enforces per-product and per-session limits, gates paid usage behind explicit merchant consent and spend settings (incl. capped amount), supports basic usage and estimated charges visibility, and records an auditable billable-events history; per-order fee is charged on Standard and waived on Early Access.
+**FRs covered:** FR4, FR26, FR27, FR28, FR29, FR30, FR31, FR32, FR33
 
 ### Epic 6: Storefront Buyer Personalization (Single Template MVP)
 Buyer can open the personalization stepper, upload a photo (and optional text when enabled), request generation, securely preview the result on mockups, regenerate within limits, and add to cart with personalization metadata; buyer sees clear messaging when reaching limits or when spend/billing policies affect generation.
@@ -205,38 +205,51 @@ Enable multi-template assignment per product and allow buyers to choose between 
 
 <!-- Repeat for each epic in epics_list (N = 1, 2, 3...) -->
 
-## Epic 1: Merchant Onboarding & Shop Setup (Early Access)
+## Epic 1: Merchant Onboarding & Shop Setup
 
-Merchants can unlock Early Access during onboarding, understand setup readiness (incl. app embed/storefront block + Printify status), configure baseline spend controls, and enable/disable storefront personalization for their shop.
+Merchants can unlock Early Access (invite-only) or subscribe to the Standard plan, understand setup readiness (incl. app embed/storefront block + Printify status), and enable/disable storefront personalization for their shop.
 
-### Story 1.1: Paywall + Early Adopter (Beta) Activation
+### Story 1.1: Paywall + Early Access Activation (Invite Code)
 
 As a merchant,
-I want to see the default pricing paywall and unlock the Early Adopter beta plan with a promo code,
-So that I can use the app for free during the beta while still having billing infrastructure ready for usage charges.
+I want to see the default pricing paywall and either subscribe to the Standard plan or unlock Early Access with an invite code,
+So that I can access the product and understand pricing clearly.
 
 **Acceptance Criteria:**
 
-**Given** a shop opens the embedded admin app and does not have an active Early Adopter beta plan
+**Given** a shop opens the embedded admin app and does not have Early Access activated
 **When** they arrive in the app
-**Then** they see a paywall showing the default pricing (**$19/month + $0.25 per successful personalized order**)
+**Then** they see a paywall showing the default pricing (**$19/month + $0.25 per successful personalized order line**)
 **And** they cannot access the rest of the app until they unlock access
+**And** the paywall offers:
+- a “Subscribe” CTA (Standard plan)
+- an “Invite code” field + “Unlock Early Access” CTA
+**And** the paywall clearly states:
+- Standard includes a **7-day free trial** for the $19/month access fee
+- Standard and Early Access both include a one-time **$1.00 free AI usage gift**
 
-**Given** the merchant enters the promo code `EARLYACCESS` (case-sensitive)
+**Given** the merchant clicks “Subscribe”
+**When** they confirm the subscription in Shopify
+**Then** the system activates the **Standard** plan for that shop (**$19/month**)
+**And** the system creates a Shopify app subscription for the shop with recurring price **$19/month** and a **7-day free trial** (so Shopify Usage Charges can be used)
+**And** the system grants a **$1.00 USD free AI usage gift** to the shop and shows this in the billing UI
+**And** the UI clarifies the 7-day trial applies only to the **$19/month** access fee (it does not waive AI usage charges or the $0.25/order line fee)
+**And** the merchant is redirected into onboarding/dashboard
+
+**Given** the merchant enters the invite code `EARLYACCESS` (case-sensitive)
 **When** they submit the form
-**Then** the system activates the **Early Adopter** plan for that shop with beta pricing **$0/month + $0/order**
-**And** the system creates a Shopify **subscription** for the shop with recurring price **$0/month** (so Shopify Usage API can be used)
+**Then** the system activates **Early Access** for that shop (**$0/month** access; per-order fee waived during Early Access)
+**And** the system creates a Shopify **subscription** for the shop with recurring price **$0/month** (so Shopify Usage Charges can be used)
+**And** the system grants a **$1.00 USD free AI usage gift** to the shop and shows this in the billing UI
+**And** the UI clearly indicates the shop is in **Early Access** (privileged state)
 **And** the merchant is redirected into onboarding/dashboard
 
 **Given** the merchant enters any other code
 **When** they submit the form
 **Then** the shop remains on the paywall
-**And** an error message is shown
+**And** an error message is shown (generic; does not reveal whether a code exists)
+**And** the UI shows a fake loading state for ~3 seconds before responding (basic anti-bruteforce friction)
 
-**Given** the current time is **on or after 2026-04-01T00:00:00Z** (beta ended; end date was 2026-03-31 UTC)
-**When** the merchant opens the app
-**Then** the Early Adopter beta pricing is no longer available via promo code
-**And** the paywall blocks access until a post-beta plan is chosen (implemented later in Epic 5)
 
 ### Story 1.2: Onboarding Dashboard + Setup Readiness Checklist
 
@@ -246,7 +259,7 @@ So that I can quickly understand what’s blocking me from going live.
 
 **Acceptance Criteria:**
 
-**Given** the shop has activated Early Adopter access
+**Given** the shop has activated Early Access or subscribed to Standard
 **When** the merchant opens the app
 **Then** they land on an onboarding/dashboard screen that summarizes setup readiness
 
@@ -256,52 +269,41 @@ So that I can quickly understand what’s blocking me from going live.
 **And** the checklist includes at least:
 - Printify connection status (connected vs not connected)
 - Storefront personalization status (enabled vs disabled at shop level)
-- Spend safety status (capped amount configured vs not configured)
-- Plan status (Early Adopter active, beta ends **2026-03-31 UTC**)
+- Spend safety status (monthly cap configured + paid usage consent recorded vs not configured)
+- Plan status (Early Access active)
 
 **Given** a checklist item is incomplete
 **When** the merchant views it
 **Then** the UI shows a short “what to do next” hint (onboarding content like roadmap/video is nice-to-have)
 
-### Story 1.3: Spend Safety Disclosure + Monthly Cap (Explicit Confirmation)
+### Story 1.3: Spend Safety Onboarding (Routing + Disclosure)
 
 As a merchant,
-I want to explicitly confirm the billing rules and set a monthly spending cap,
-So that I fully understand when I’ll pay and I’m protected from unexpected charges.
+I want onboarding to clearly explain spend safety and route me to configure it,
+So that I understand the pricing and can avoid surprise charges.
 
 **Acceptance Criteria:**
 
-**Given** the merchant is in onboarding and has not confirmed spend controls
+**Given** the merchant is in onboarding and spend safety is not configured
 **When** they open the “Spend safety” step
 **Then** the app shows the following billing disclosure clearly (no ambiguity):
-- “You start with **20 free credits**.”
-- “**1 credit = $0.05 USD**.”
-- “Credits are billed via **Shopify Usage Charges**.”
-- “After the **20 free credits** are used, generations and tools may cost credits (paid).”
-- “You will **not be charged** unless you **explicitly confirm paid usage**.”
+- “You start with a **$1.00 USD free AI usage gift**.”
+- “Current pricing (USD): **$0.05** per generated image; **$0.025** per remove background operation.”
+- “Billable actions: **generate**, **regenerate**, **remove background**.”
+- “Printify mockup generation is **not** billed.”
+- “After the gift is used, usage is billed via **Shopify Usage Charges**.”
+- “You will **not be charged** unless you **enable paid usage**.”
 - “Your **monthly spending cap** limits the maximum amount that can be charged in a month.”
 
 **Given** the spend safety step is shown
-**When** the merchant views the cap input
-**Then** it is pre-filled with **$10.00 USD**
-**And** the merchant must explicitly confirm understanding + acceptance (e.g., checkbox + confirm CTA)
+**When** the merchant clicks “Configure spend safety”
+**Then** they are taken to the Billing/Spend Safety settings screen (Epic 5)
 
-**Given** the merchant tries to continue without explicitly confirming
-**When** they attempt to proceed
-**Then** the app blocks continuation
-**And** the “Spend safety” checklist item remains `Incomplete`
-
-**Given** the merchant enters a valid cap amount and explicitly confirms
-**When** they submit
-**Then** the system saves:
-- the cap amount for the shop
-- the consent/confirmation timestamp (audit trail)
-**And** the “Spend safety” checklist item becomes `Complete`
-
-**Given** the merchant enters an invalid amount (empty, non-numeric, negative, or zero)
-**When** they submit
-**Then** the cap is not saved
-**And** a validation error is shown
+**Given** the merchant returns to onboarding after configuring spend safety
+**When** the checklist is rendered
+**Then** the “Spend safety” item is `Complete` only if:
+- a valid monthly cap is configured
+- paid usage consent is recorded (audit timestamp)
 
 ### Story 1.4: Confirm Storefront Personalization Status (Required Onboarding Step)
 
@@ -323,7 +325,9 @@ So that I control whether buyers can access personalization on my storefront.
 
 **Given** the merchant explicitly enables storefront personalization
 **When** they confirm
-**Then** the system saves `storefront_personalization_enabled = true` for the shop
+**Then** the system checks spend safety prerequisites (monthly cap configured + paid usage consent recorded)
+**And** if prerequisites are not met, enabling is blocked with a clear message and a link to configure spend safety
+**And** if prerequisites are met, the system saves `storefront_personalization_enabled = true` for the shop
 **And** the “Storefront personalization” checklist item becomes `Complete`
 **And** the UI clarifies that storefront personalization may still require additional setup (e.g., templates assigned to products) before buyers can successfully generate
 
@@ -443,7 +447,7 @@ So that I can produce consistent “premium” outputs while letting buyers pers
 ### Story 3.2: Model Selector (1 option) + Cost Visibility (Seedream v4 Edit)
 
 As a merchant,
-I want to see which generation model is used and what it costs in credits/USD,
+I want to see which generation model is used and what it costs in USD,
 So that I understand the pricing before running generations.
 
 **Acceptance Criteria:**
@@ -455,12 +459,12 @@ So that I understand the pricing before running generations.
 
 **Given** the model option is shown
 **When** the merchant views pricing info
-**Then** the UI shows: “**1 generation = 1 credit ($0.05)**”
-**And** the UI clearly states: “**1 credit = $0.05 USD**”
+**Then** the UI shows: “**$0.05 per generated image**” (or the current model price)
+**And** the UI clarifies what is billable: generate/regenerate/remove-bg (Printify mockups are not billed)
 
 **Given** the merchant saves the template
 **When** generation settings are present
-**Then** the template stores the model identifier and `credit_cost_per_generation = 1`
+**Then** the template stores the model identifier and `price_usd_per_generation = 0.05`
 
 ### Story 3.3: Test Generate (1–4) + Results Gallery (Cost + Time)
 
@@ -478,7 +482,7 @@ So that I can validate quality before publishing.
 
 **Given** the merchant selects `N` images (1–4)
 **When** the UI shows the estimated cost
-**Then** it displays `N × 1 credit = N credits ($0.05 × N)` clearly before running
+**Then** it displays estimated cost in USD (e.g., `$0.05 × N`) clearly before running
 
 **Given** the merchant starts test generation
 **When** generation is running
@@ -489,14 +493,14 @@ So that I can validate quality before publishing.
 **When** the merchant views each generated image
 **Then** the UI shows per-image generation metadata including:
 - generation time (seconds)
-- cost (credits + USD)
+- cost (USD)
 
 **Given** the generation fails (timeout/provider error)
 **When** the UI shows the error
 **Then** it provides a deterministic recovery action (“Try again”)
 **And** it does not publish the template automatically
 
-### Story 3.4: Template-Level Remove Background (0.5 Credit)
+### Story 3.4: Template-Level Remove Background ($0.025)
 
 As a merchant,
 I want to enable “Remove Background” for a template,
@@ -510,8 +514,8 @@ So that uploaded photos are cleaned automatically before generation.
 
 **Given** “Remove Background” is enabled on the template
 **When** the UI displays pricing for a generation run
-**Then** the estimated cost includes the tool cost: `+ 0.5 credit ($0.025)`
-**And** total is shown as: `(generation credits × N) + (0.5 × N)`
+**Then** the estimated cost includes the tool cost: `+ $0.025` (per image where applied)
+**And** total is shown as: `(generation_cost_usd × N) + (remove_bg_cost_usd × N)`
 
 **Given** the merchant runs test generation for `N` images
 **When** Remove Background is enabled
@@ -579,6 +583,7 @@ So that I control exactly when a product becomes personalizable.
 **Given** the merchant is on a product configuration view
 **When** they view template assignment
 **Then** they can select exactly **one** `Published` template to assign (MVP constraint)
+**And** the UI shows a disabled “Multiple templates” control labeled **Coming soon** (post-MVP)
 
 **Given** no template is assigned
 **When** the merchant views product personalization status
@@ -608,55 +613,79 @@ So that I can validate the setup before buyers see it.
 
 **Given** the product has a template assigned and personalization is enabled for that product
 **When** the merchant clicks “Preview”
-**Then** the app shows a preview simulator that displays:
+**Then** the app shows an admin preview panel that displays:
 - product info fetched from Shopify
-- the personalization UI panel (upload → generate → mockups → add to cart flow, in “merchant preview” mode)
+- a way to run the same generation + mockup workflow used on storefront (same APIs/workflows), without add-to-cart
+- the generated preview image (hero)
+- a “Preview” button that opens a modal with all Printify-generated mockups (non-blocking)
 
 **Given** the product is not fully configured (no template assigned or personalization disabled)
 **When** the merchant clicks “Preview”
 **Then** the app blocks preview and explains what is missing
 
-## Epic 5: Credits, Limits, Spend Safety, Billing (Early Adopter Plan)
+## Epic 5: AI Usage, Limits, Spend Safety, Billing
 
-The system grants welcome credits, tracks credit usage and paid usage charges via Shopify Usage API, enforces per-product and per-session limits, gates paid usage behind explicit merchant consent, and enforces a monthly spend cap with explicit cap changes; it also provides usage visibility and an auditable billable-events history.
+The system grants an initial free AI usage gift, tracks AI usage and paid usage charges via Shopify Usage Charges, enforces per-product and per-session limits, gates paid usage behind explicit merchant consent, and enforces a monthly spend cap with explicit cap changes; it also provides usage visibility and an auditable billable-events history.
 
-### Story 5.1: Credits Ledger + Welcome Gift (20 Free Credits)
+### Story 5.1: Usage Ledger + $1 Free AI Usage Gift
 
 As a merchant,
-I want to receive free credits on install and see my current credit balance,
-So that I can test the product before paying.
+I want to receive a free usage gift and see my balance and pricing clearly,
+So that I can test the product and understand future costs.
 
 **Acceptance Criteria:**
 
-**Given** a shop installs the app and activates the Early Adopter plan
+**Given** a shop activates Early Access or subscribes to Standard
 **When** the app provisions billing/usage tracking for the shop
-**Then** the system grants **20 free credits** to the shop
-**And** the system records the grant in a credits ledger (auditable)
+**Then** the system grants a one-time **$1.00 USD free AI usage gift** to the shop
+**And** the system records the grant in an auditable ledger (USD amounts)
 
 **Given** the merchant views the billing/usage screen
 **When** the system shows their balance
 **Then** it displays:
-- remaining free credits
-- credit price: **1 credit = $0.05 USD**
-- a note that credits are billed via Shopify Usage Charges once paid usage begins
+- remaining free usage gift balance (USD)
+- paid usage spend month-to-date (if any)
+- current prices for billable actions (USD)
+- a note that the free gift is applied first before any paid charges (partial coverage is allowed)
+- a note that billable actions are billed via Shopify Usage Charges after the gift is used (generate/regenerate/remove-bg)
+- a note that Printify mockups do not consume billable AI usage
+**And** if the shop is on Standard, it shows the subscription trial status (e.g., “7-day free trial active”) and clarifies this does not waive usage or per-order fees
 
-### Story 5.2: Explicit Consent Gate at Free → Paid Transition
+### Story 5.2: Spend Safety Setup (Monthly Cap + Paid Usage Consent)
 
 As a merchant,
-I want to explicitly consent before the app starts charging after my free credits are used,
-So that there are no surprise charges.
+I want to set a monthly cap and explicitly consent to paid usage,
+So that there are no surprise charges and I stay in control of spend.
 
 **Acceptance Criteria:**
 
-**Given** the shop has **0 free credits remaining** and no paid-usage consent recorded
-**When** the merchant attempts an action that would consume paid credits (e.g., generation/tools)
-**Then** the action is blocked
-**And** the app shows an explicit consent prompt stating “After this, each credit costs **$0.05** billed via Shopify Usage Charges”
+**Given** the shop has not configured spend safety
+**When** the merchant opens Billing/Spend Safety settings
+**Then** the app shows:
+- a cap input pre-filled with **$10.00 USD**
+- a clear disclosure: “After the free $1 gift, usage is billed via Shopify Usage Charges (USD)”
+- a required consent control (checkbox + confirm CTA)
 
-**Given** the consent prompt is shown
-**When** the merchant explicitly confirms consent
-**Then** the system records paid-usage consent with a timestamp (audit trail)
-**And** the blocked action can be retried
+**Given** the merchant confirms spend safety
+**When** they submit
+**Then** the system saves:
+- monthly cap amount
+- paid usage consent timestamp (audit trail)
+**And** the shop becomes eligible for paid usage once the free gift is used
+
+**Given** the shop has **$0 free gift balance remaining** and no paid usage consent recorded
+**When** a billable action is attempted (generate/regenerate/remove-bg)
+**Then** the action is blocked
+**And** the UI clearly explains how to enable paid usage (link to Billing/Spend Safety settings)
+
+**Given** the shop has some free gift balance remaining but it is insufficient to cover the full cost of a billable action
+**When** a billable action is attempted
+**Then** the action is blocked unless paid usage consent is recorded
+**And** the UI explains the free gift would be partially used and the remaining amount would be billed via Shopify
+
+**Given** the shop is on Standard and the 7-day trial is active
+**When** a billable action is attempted
+**Then** the same gift/consent/cap rules apply (trial does not waive usage charges)
 
 ### Story 5.3: Monthly Cap Enforcement + Explicit Cap Increase Flow
 
@@ -690,7 +719,25 @@ So that I can audit charges and understand costs.
 **Given** the merchant opens the usage & billing screen
 **When** the page loads
 **Then** it shows month-to-date spend, current cap, and remaining capacity
-**And** it shows a list of billable events with timestamps and amounts (credits and USD)
+**And** it shows a list of billable events with timestamps and USD amounts
+**And** billable events include at least: event type (generation/regeneration/remove-bg/order_fee), status (succeeded/failed/waived), and an idempotency key so retries cannot double-charge
+**And** `order_fee` events are clearly labeled as “$0.25 per successful personalized order line” (Standard only)
+
+**Given** a billable action succeeds (provider cost incurred)
+**When** the system records billing
+**Then** exactly one billable event is created for that action
+**And** billing is only finalized once the result is successfully persisted and retrievable (end-to-end success)
+**And** exactly one Shopify Usage Charge is created for the billable USD amount after applying any remaining free gift balance (may be $0)
+
+**Given** a billable action fails and no provider cost is incurred
+**When** the system records the outcome
+**Then** the billable event is recorded as failed/voided
+**And** the merchant is not charged
+
+**Given** a billable action fails after the provider cost was incurred but the app could not deliver/persist the result (internal failure)
+**When** the system records the outcome
+**Then** the billable event is recorded as failed/waived
+**And** the merchant is not charged
 
 ### Story 5.5: Enforce Generation Limits (Per-Product, Per-Session, Reset Window)
 
@@ -823,7 +870,7 @@ So that I can try different results before purchasing.
 **Given** the buyer is on the result step and has remaining tries
 **When** they click “Try again”
 **Then** the system runs another generation using the same inputs/settings
-**And** it consumes the same cost rules as generation (1 credit + optional 0.5 credit for remove.bg)
+**And** it consumes the same USD billing rules as generation (+ remove background cost if enabled)
 
 **Given** the buyer is using regeneration
 **When** the UI shows the action
@@ -880,6 +927,16 @@ So that fulfillment can start automatically and safely.
 **Given** the same webhook is delivered multiple times
 **When** it is processed again
 **Then** the system does not create duplicate fulfillment runs or duplicate billable events
+
+**Given** the shop is on the **Standard** plan
+**And** an eligible order line is found (has `personalization_id`)
+**When** an order “paid” webhook is processed
+**Then** the system records a per-order fee billable event (`order_fee`) for that order line (**$0.25**) with an idempotency key
+**And** it creates the corresponding Shopify Usage Charge at that time
+
+**Given** the shop is on **Early Access**
+**When** an order “paid” webhook is processed for an eligible order line
+**Then** the per-order fee is waived (no charge is created)
 
 ### Story 7.2: Final Print-Ready Asset = Generated Preview (Persist + Retrieve)
 

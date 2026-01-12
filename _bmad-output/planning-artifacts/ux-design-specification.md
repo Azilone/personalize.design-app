@@ -42,7 +42,7 @@ Personalize Design is a multi-tenant Shopify app for POD merchants (Printify-fir
   - Desktop: stepper experience
   - Mobile: full-screen stepper (mobile-first)
 - A buyer flow optimized for the emotional peak: the preview/result is the hero, and the UI supports confidence and momentum into “Add to cart”.
-- Premium, consistent UI foundation for MVP using Solaris UI, creating a clean, trustworthy feel with minimal custom design overhead.
+- Premium, consistent UI foundation for MVP using **Polaris** (admin) and **shadcn UI + Tailwind** (storefront), creating a clean, trustworthy feel with minimal custom design overhead.
 
 ### Defaults & Guardrails (MVP)
 
@@ -89,7 +89,7 @@ Inside the Shopify product page, upload a photo and generate a personalized desi
 - **Result is the hero:** optimize UI for confidence in the generated preview and momentum into purchase.
 - **Contain complexity:** keep desktop in-block (no modal), keep steps minimal, avoid advanced controls unless necessary.
 - **Recovery over perfection:** prioritize resilient fulfillment/retry behaviors and clear failure states over complex editing features.
-- **Premium baseline UI:** use Solaris UI for MVP to keep the experience consistent and trustworthy.
+- **Premium baseline UI:** use **Polaris** for admin and **shadcn UI + Tailwind** for storefront to keep the experience consistent and trustworthy.
 
 ### Open Decisions (TBD)
 
@@ -177,7 +177,7 @@ Inside the Shopify product page, upload a photo and generate a personalized desi
 
 **Visual Patterns**
 
-- Premium minimal styling with a consistent system (Solaris UI for MVP foundation).
+- Premium minimal styling with a consistent system (Polaris + shadcn UI + Tailwind for MVP foundation).
 - Strong contrast for primary actions, restrained color use, and calm error styling to preserve trust.
 
 ### Anti-Patterns to Avoid
@@ -566,7 +566,7 @@ flowchart TD
 **Usage:** Post-generation; “Preview” button below the generated hero.  
 **States:** loading mockups, ready, error.  
 **Behavior:** uses Printify-generated mockups; does not block add-to-cart.  
-**Open decision (desktop):** product page block constraints vs modal requirement (resolve as inline expand/collapse, new tab, or allow modal).
+**Resolved behavior (desktop):** a “Preview” button opens a modal showing all Printify-generated mockups (non-blocking; informational only).
 
 ### Component Implementation Strategy
 
@@ -579,13 +579,13 @@ flowchart TD
 **Phase 1 (must-have MVP)**
 
 - TemplateBuilder + TemplateTestPanel
-- ProductAssignmentPanel (multiple templates per product)
+- ProductAssignmentPanel (single template per product in MVP; multi-template shows “Coming soon”)
 - PersonalizeStepperShell + GenerationResultViewer
 - Add-to-cart integration with personalization metadata
 
 **Phase 2 (conversion + confidence)**
 
-- TemplatePicker (storefront) for multi-template products
+- TemplatePicker (storefront) for multi-template products (Coming soon; post-MVP)
 - MockupPreviewLauncher (finalized desktop behavior)
 
 **Phase 3 (polish/ops)**
@@ -660,6 +660,7 @@ flowchart TD
   - Templates list → TemplateBuilder (create/edit/test/publish)
   - Products list → ProductAssignmentPanel (assign/enable/limits)
 - Onboarding is a linear checklist with clear “next action”.
+- Post-MVP features referenced in admin should appear as disabled controls labeled **“Coming soon”** (static only).
 
 **Storefront**
 

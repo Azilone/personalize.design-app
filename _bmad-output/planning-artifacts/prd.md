@@ -68,9 +68,9 @@ Printify is the initial supplier integration for the MVP; the longer-term vision
 
 - **Generation success:** At least **90%** of buyer generation attempts complete successfully (no errors/timeouts) (MVP target; increase post-MVP).
 - **Regeneration UX + guardrails (defaults):**
-  - **3 generations per product**
-  - **10 generations per buyer session**
-  - Reset window: **TBD** (configurable by merchant).
+  - **5 generations per product**
+  - **15 generations per buyer session**
+  - Reset window: **~30 minutes** (configurable by merchant).
 
 ### Business Success
 
@@ -328,25 +328,38 @@ personalize-design-app is a B2B SaaS-style Shopify app (multi-tenant) with:
 
 ### Subscription Tiers & Billing (subscription_tiers)
 
-**Plan:** Early Adopter
+**Plans**
 
-- **Install price:** $0/month (requires code `EARLYACCESS`)
-- **Credits:** 1 credit = $0.05 USD billed via Shopify Usage API
-- **Welcome credits:** 20 credits on install
+**Plan: Early Access (invite-only)**
+
+- **Access price:** $0/month (requires code `EARLYACCESS`)
+- **Billing primitive:** a $0/month Shopify app subscription so Shopify Usage Charges can be used for usage billing.
+- **Welcome gift:** first **$1.00 USD** of AI usage is free (one-time gift on Early Access activation).
 - **Usage pricing (examples):**
-  - Seedream/Flux Schnell: 1 credit ($0.05)
-  - Nano Banana/Flux Dev: 1.5 credits ($0.075)
-  - Tools (e.g., Remove BG): 0.5 credit ($0.025)
-- **Margin rule:** credit pricing must stay above provider cost (fal.ai) to preserve margin.
-- **Per-order fee:** $0.25 per successful order (free during early access; post-early-access candidate).
+  - Image generation (current primary model): **$0.05** per generated image
+  - Remove background tool: **$0.025** per operation
+- **Margin rule:** usage pricing must stay above provider cost (fal.ai) to preserve margin.
+- **Per-order fee:** waived during Early Access.
+
+**Plan: Standard**
+
+- **Access price:** **$19/month**
+- **Free trial:** **7 days** for the $19/month access fee (trial does not waive usage fees).
+- **Per-order fee:** **$0.25** per successful personalized order line (billed via Shopify Usage Charges).
+- **Per-order fee trigger:** charged when the order reaches **paid** status (Shopify paid webhook).
+- **Usage pricing:** same per-action USD pricing as above (billed via Shopify Usage Charges).
+- **Welcome gift:** first **$1.00 USD** of AI usage is free (one-time gift on Standard activation).
 
 **Spend Safety / Consent**
 
 - **Default capped amount:** $10.00 USD requested at installation.
-- Add an explicit consent step before the merchant exceeds free credits / enters paid usage:
-  - Clear UI messaging: “You are about to be charged via Shopify.”
+- Add an explicit consent step before any paid usage can occur (charges start only after the $1 gift is used):
+  - Clear UI messaging: “After the free $1 gift, usage is billed via Shopify.”
   - Merchant must actively confirm (e.g., checkbox + confirm button).
-  - If not confirmed, block further paid generations and show upgrade/consent prompt.
+  - If not confirmed, block paid generations/tools and show a clear explanation + a path to enable paid usage.
+- The free usage gift is applied first before any paid charge (partial coverage is allowed; only the remainder is billed).
+- Billing is per successful billable operation (generation/regeneration/remove-bg). If the provider call fails and no provider cost is incurred, the merchant is not billed.
+- Printify mockup generation does not consume billable AI usage (it is handled by Printify).
 
 ### Integrations (integration_list)
 
@@ -395,7 +408,7 @@ Merchant admin
 - Test generation flow + thumbs up/down
 - Assign design template to Shopify products
 - Configure storefront limits (regen/session) + spend caps
-- Explicit “paid usage consent” before charging beyond free credits
+- Explicit “paid usage consent” before charging beyond the free usage gift
 
 Storefront
 
@@ -412,8 +425,9 @@ Backend workflows (Inngest)
 
 Billing & safety
 
-- Early Adopter: $0 install with `EARLYACCESS`, 20 free credits
-- Usage billing via Shopify Usage API (credits priced above provider cost)
+- Early Access: $0/month access with `EARLYACCESS` + $1.00 free AI usage gift
+- Standard: $19/month access (7-day free trial) + $0.25/order line + $1.00 free AI usage gift
+- Usage billing via Shopify Usage Charges (USD amounts priced above provider cost)
 - Default capped amount: $10.00
 - Guardrails: per-product and per-session generation limits; abuse protection baseline
 
@@ -430,6 +444,8 @@ Billing & safety
 - Etsy / WooCommerce integrations
 - RBAC / team roles
 - Automated copyright detection (policy + hooks only)
+
+**UI expectation for post-MVP items:** When a post-MVP capability is referenced in the admin UI, it should be shown as a disabled control labeled **“Coming soon”** (static only; no functional behavior in MVP).
 
 ### Post-MVP Features
 
@@ -458,7 +474,7 @@ Billing & safety
 ### Merchant Setup & Onboarding
 
 - FR1: Merchant can install the app and complete onboarding for their shop.
-- FR2: Merchant can activate Early Access access using an invite code.
+- FR2: Merchant can activate Early Access using an invite code.
 - FR3: Merchant can view required prerequisites and setup status (e.g., supplier connection, storefront block enabled).
 - FR4: Merchant can configure default spend controls for their shop (caps/limits).
 
@@ -494,11 +510,11 @@ Billing & safety
 
 ### Limits, Spend Safety, and Billing Consent
 
-- FR26: System can grant initial free credits on installation.
-- FR27: System can track credit usage per shop and per buyer session.
+- FR26: System can grant an initial free AI usage gift on plan activation (one-time, USD-denominated).
+- FR27: System can track AI usage per shop and per buyer session.
 - FR28: System can enforce a per-product generation limit.
 - FR29: System can enforce a per-session generation limit.
-- FR30: System can prevent paid generations until the merchant has explicitly consented to paid usage beyond free credits.
+- FR30: System can prevent paid AI usage until the merchant has explicitly consented to paid usage beyond the free usage gift.
 - FR31: Merchant can explicitly configure and confirm spend settings required for billing safety (capped amount + paid-usage consent status).
 - FR32: Merchant can review current usage and estimated charges (at least at a basic level) for their shop.
 - FR33: System can record an auditable history of billable events (generations and successful fulfilled orders).
