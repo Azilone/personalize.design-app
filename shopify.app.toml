@@ -1,8 +1,8 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "5b54e50141bcf1a5eded350b944a2db8"
+client_id = "844ec4d0bd4abcdf43cb7ad13cbd3fbb"
 name = "personalize.design-app"
-application_url = "https://example.com"
+application_url = "https://dev.personalize.design"
 embedded = true
 
 [build]
@@ -25,4 +25,4 @@ api_version = "2026-04"
 scopes = "write_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://dev.personalize.design/auth/callback" ]

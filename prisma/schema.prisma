@@ -13,6 +13,14 @@ datasource db {
   url      = "file:dev.sqlite"
 }
 
+enum PlanStatus {
+  none
+  standard
+  early_access
+  standard_pending
+  early_access_pending
+}
+
 model Session {
   id            String    @id
   shop          String
@@ -31,4 +39,17 @@ model Session {
   emailVerified Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
+}
+
+model ShopPlan {
+  shop_id                        String     @id
+  plan_status                    PlanStatus @default(none)
+  shopify_subscription_id        String?
+  shopify_subscription_status    String?
+  free_usage_gift_cents          Int        @default(0)
+  free_usage_gift_remaining_cents Int       @default(0)
+  created_at                     DateTime   @default(now())
+  updated_at                     DateTime   @updatedAt
+
+  @@map("shop_plans")
 }

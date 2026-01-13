@@ -4,9 +4,24 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
+import { getShopIdFromSession } from "../lib/tenancy";
+import { isPaywallPath } from "../lib/routing";
+import { getShopPlanStatus, isPlanActive } from "../services/shops/plan.server";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session, redirect } = await authenticate.admin(request);
+  const pathname = new URL(request.url).pathname;
+  const shopId = getShopIdFromSession(session);
+  const planStatus = await getShopPlanStatus(shopId);
+  const hasAccess = isPlanActive(planStatus);
+
+  if (!hasAccess && !isPaywallPath(pathname)) {
+    return redirect("/app/paywall");
+  }
+
+  if (hasAccess && isPaywallPath(pathname)) {
+    return redirect("/app");
+  }
 
   // eslint-disable-next-line no-undef
   return { apiKey: process.env.SHOPIFY_API_KEY || "" };

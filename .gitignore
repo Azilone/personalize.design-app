@@ -13,6 +13,10 @@ database.sqlite
 .env
 .env.*
 
+# Shopify CLI multi-config files (keep base config tracked)
+shopify.app.*.toml
+!shopify.app.toml
+
 
 
 
