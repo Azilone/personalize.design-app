@@ -1,10 +1,14 @@
 export default function AdditionalPage() {
   return (
-    <s-page heading="Additional page">
-      <s-section heading="Multiple pages">
+    <s-page heading="Sandbox (dev)">
+      <s-section heading="Template sandbox">
         <s-paragraph>
-          The app template comes with an additional page which demonstrates how
-          to create multiple pages within app navigation using{" "}
+          This page is a sandbox used during development. It’s safe to delete
+          once you replace it with real product pages.
+        </s-paragraph>
+        <s-paragraph>
+          It demonstrates how to create multiple pages within app navigation
+          using{" "}
           <s-link
             href="https://shopify.dev/docs/apps/tools/app-bridge"
             target="_blank"
@@ -14,10 +18,8 @@ export default function AdditionalPage() {
           .
         </s-paragraph>
         <s-paragraph>
-          To create your own page and have it show up in the app navigation, add
-          a page inside <code>app/routes</code>, and a link to it in the{" "}
-          <code>&lt;ui-nav-menu&gt;</code> component found in{" "}
-          <code>app/routes/app.jsx</code>.
+          To add a page to the nav, create a route in <code>app/routes</code>{" "}
+          and add a link in <code>app/routes/app.tsx</code>.
         </s-paragraph>
       </s-section>
       <s-section slot="aside" heading="Resources">

@@ -102,11 +102,33 @@ type AppSubscriptionCreateResult = {
 type SubscriptionCreateArgs = {
   admin: AdminApiContext;
   subscriptionInput: AppSubscriptionCreateInput;
+  test: boolean;
+};
+
+const getIsTestSubscription = (): boolean => {
+  const configured =
+    process.env.SHOPIFY_BILLING_TEST_MODE ??
+    (process.env.NODE_ENV === "development" ? "true" : "false");
+
+  if (configured !== "true" && configured !== "false") {
+    throw new Error(
+      "Invalid SHOPIFY_BILLING_TEST_MODE (expected 'true' or 'false').",
+    );
+  }
+
+  if (configured === "true" && process.env.NODE_ENV !== "development") {
+    throw new Error(
+      "SHOPIFY_BILLING_TEST_MODE=true is only allowed in development.",
+    );
+  }
+
+  return configured === "true";
 };
 
 const createSubscription = async (
   input: SubscriptionCreateArgs,
 ): Promise<AppSubscriptionCreateResult> => {
+  const isTest = input.test;
   const response = await input.admin.graphql(
     `#graphql
       mutation createAppSubscription(
@@ -114,12 +136,14 @@ const createSubscription = async (
         $returnUrl: URL!
         $trialDays: Int!
         $lineItems: [AppSubscriptionLineItemInput!]!
+        $test: Boolean
       ) {
         appSubscriptionCreate(
           name: $name
           returnUrl: $returnUrl
           trialDays: $trialDays
           lineItems: $lineItems
+          test: $test
         ) {
           userErrors {
             field
@@ -133,7 +157,7 @@ const createSubscription = async (
         }
       }
     `,
-    { variables: input.subscriptionInput },
+    { variables: { ...input.subscriptionInput, test: isTest } },
   );
 
   const responseJson = await response.json();
@@ -164,17 +188,28 @@ export const createStandardSubscription = async (input: {
   admin: AdminApiContext;
   subscriptionInput: AppSubscriptionCreateInput;
 }): Promise<AppSubscriptionCreateResult> => {
-  return createSubscription(input);
+  return createSubscription({
+    ...input,
+    test: getIsTestSubscription(),
+  });
 };
 
 export const createEarlyAccessSubscription = async (input: {
   admin: AdminApiContext;
   subscriptionInput: AppSubscriptionCreateInput;
 }): Promise<AppSubscriptionCreateResult> => {
-  return createSubscription(input);
+  return createSubscription({
+    ...input,
+    test: getIsTestSubscription(),
+  });
 };
 
 type SubscriptionStatusResult = {
+  id: string;
+  status: string;
+};
+
+type SubscriptionCancelResult = {
   id: string;
   status: string;
 };
@@ -186,9 +221,11 @@ export const getSubscriptionStatus = async (input: {
   const response = await input.admin.graphql(
     `#graphql
       query subscriptionStatus($id: ID!) {
-        appSubscription(id: $id) {
-          id
-          status
+        node(id: $id) {
+          ... on AppSubscription {
+            id
+            status
+          }
         }
       }
     `,
@@ -196,7 +233,7 @@ export const getSubscriptionStatus = async (input: {
   );
 
   const responseJson = await response.json();
-  const subscription = responseJson?.data?.appSubscription;
+  const subscription = responseJson?.data?.node;
 
   if (!subscription?.id || !subscription?.status) {
     throw new Error("Subscription status not found.");
@@ -205,5 +242,47 @@ export const getSubscriptionStatus = async (input: {
   return {
     id: subscription.id,
     status: subscription.status,
+  };
+};
+
+export const cancelSubscription = async (input: {
+  admin: AdminApiContext;
+  subscriptionId: string;
+}): Promise<SubscriptionCancelResult> => {
+  const response = await input.admin.graphql(
+    `#graphql
+      mutation cancelSubscription($id: ID!) {
+        appSubscriptionCancel(id: $id) {
+          userErrors {
+            field
+            message
+          }
+          appSubscription {
+            id
+            status
+          }
+        }
+      }
+    `,
+    { variables: { id: input.subscriptionId } },
+  );
+
+  const responseJson = await response.json();
+  const payload = responseJson?.data?.appSubscriptionCancel;
+  const userErrors = payload?.userErrors ?? [];
+
+  if (userErrors.length > 0) {
+    const message = userErrors[0]?.message ?? "Unable to cancel subscription.";
+    throw new Error(message);
+  }
+
+  const cancelled = payload?.appSubscription;
+  if (!cancelled?.id || !cancelled?.status) {
+    throw new Error("Subscription cancel response was incomplete.");
+  }
+
+  return {
+    id: cancelled.id,
+    status: cancelled.status,
   };
 };

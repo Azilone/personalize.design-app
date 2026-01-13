@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import {
   buildEarlyAccessSubscriptionInput,
   buildStandardSubscriptionInput,
+  getSubscriptionStatus,
 } from "./billing.server";
 
 describe("buildStandardSubscriptionInput", () => {
@@ -42,5 +44,57 @@ describe("buildEarlyAccessSubscriptionInput", () => {
     expect(recurring?.price.currencyCode).toBe("USD");
     expect(usage?.cappedAmount.amount).toBe(10);
     expect(usage?.cappedAmount.currencyCode).toBe("USD");
+  });
+});
+
+describe("getSubscriptionStatus", () => {
+  it("reads status via node(id:) for AppSubscription", async () => {
+    const admin = {
+      graphql: async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              node: {
+                __typename: "AppSubscription",
+                id: "gid://shopify/AppSubscription/123",
+                status: "ACTIVE",
+              },
+            },
+          }),
+        ),
+    } satisfies Pick<AdminApiContext, "graphql"> as unknown as AdminApiContext;
+
+    const result = await getSubscriptionStatus({
+      admin,
+      subscriptionId: "gid://shopify/AppSubscription/123",
+    });
+
+    expect(result).toEqual({
+      id: "gid://shopify/AppSubscription/123",
+      status: "ACTIVE",
+    });
+  });
+
+  it("throws when node is not an AppSubscription", async () => {
+    const admin = {
+      graphql: async () =>
+        new Response(
+          JSON.stringify({
+            data: {
+              node: {
+                __typename: "Shop",
+                id: "gid://shopify/Shop/1",
+              },
+            },
+          }),
+        ),
+    } satisfies Pick<AdminApiContext, "graphql"> as unknown as AdminApiContext;
+
+    await expect(
+      getSubscriptionStatus({
+        admin,
+        subscriptionId: "gid://shopify/AppSubscription/123",
+      }),
+    ).rejects.toThrow("Subscription status not found.");
   });
 });

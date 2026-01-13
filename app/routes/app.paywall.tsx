@@ -3,11 +3,19 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { data, useActionData, useNavigation } from "react-router";
+import {
+  Form,
+  data,
+  useActionData,
+  useLoaderData,
+  useNavigation,
+} from "react-router";
+import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { paywallActionSchema } from "../schemas/admin";
 import { getShopIdFromSession } from "../lib/tenancy";
+import { buildEmbeddedRedirectPath } from "../lib/routing";
 import { inviteCodeErrorMessage, isInviteCodeValid } from "../lib/invite-code";
 import logger from "../lib/logger";
 import { captureEvent } from "../lib/posthog.server";
@@ -16,11 +24,19 @@ import {
   createStandardSubscription,
   buildEarlyAccessSubscriptionInput,
   createEarlyAccessSubscription,
+  getSubscriptionStatus,
 } from "../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
+  activateStandardPlan,
+  clearPendingPlan,
+  clearPlanToNone,
   getShopPlanStatus,
+  getShopPlan,
   isPlanActive,
+  reserveEarlyAccessPlanPending,
+  reserveStandardPlanPending,
+  resetPlanForDev,
   setEarlyAccessPlanPending,
   setStandardPlanPending,
 } from "../services/shops/plan.server";
@@ -29,11 +45,19 @@ import { PlanStatus } from "@prisma/client";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
+  const plan = await getShopPlan(shopId);
+  const planStatus = plan?.plan_status ?? PlanStatus.none;
+  const isDev = process.env.NODE_ENV === "development";
 
   captureEvent("paywall.viewed", { shop_id: shopId });
   logger.info({ shop_id: shopId }, "Paywall viewed");
 
-  return null;
+  return {
+    planStatus,
+    confirmationUrl: plan?.shopify_confirmation_url ?? null,
+    subscriptionStatus: plan?.shopify_subscription_status ?? null,
+    isDev,
+  };
 };
 
 const buildReturnUrl = (request: Request): string => {
@@ -41,6 +65,8 @@ const buildReturnUrl = (request: Request): string => {
   const returnUrl = new URL("/app/billing/confirm", requestUrl.origin);
   const host = requestUrl.searchParams.get("host");
   const embedded = requestUrl.searchParams.get("embedded");
+  const shop = requestUrl.searchParams.get("shop");
+  const locale = requestUrl.searchParams.get("locale");
 
   if (host) {
     returnUrl.searchParams.set("host", host);
@@ -48,6 +74,14 @@ const buildReturnUrl = (request: Request): string => {
 
   if (embedded) {
     returnUrl.searchParams.set("embedded", embedded);
+  }
+
+  if (shop) {
+    returnUrl.searchParams.set("shop", shop);
+  }
+
+  if (locale) {
+    returnUrl.searchParams.set("locale", locale);
   }
 
   return returnUrl.toString();
@@ -67,19 +101,97 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const shopId = getShopIdFromSession(session);
   const planStatus = await getShopPlanStatus(shopId);
+  const plan = await getShopPlan(shopId);
 
   if (isPlanActive(planStatus)) {
-    return redirect("/app");
+    return redirect(buildEmbeddedRedirectPath(request, "/app"));
   }
+
+  if (parsed.data.intent === "reset_billing_dev") {
+    if (process.env.NODE_ENV !== "development") {
+      return data(
+        { error: { code: "not_found", message: "Not found." } },
+        { status: 404 },
+      );
+    }
+
+    await resetPlanForDev(shopId);
+    return redirect(buildEmbeddedRedirectPath(request, "/app/paywall"));
+  }
+
+  const resolveBillingErrorMessage = (
+    error: unknown,
+    fallback: string,
+  ): string => {
+    if (error instanceof Error) {
+      if (error.message.includes("public distribution")) {
+        return "Billing isn’t available yet. In the Partner Dashboard, set App distribution to Public and configure your plan, then retry.";
+      }
+    }
+
+    return fallback;
+  };
 
   if (parsed.data.intent === "subscribe") {
     if (planStatus === PlanStatus.standard_pending) {
+      if (plan?.shopify_confirmation_url) {
+        return data({ confirmation_url: plan.shopify_confirmation_url });
+      }
+
       return data(
         {
           error: {
             code: "subscription_pending",
             message:
               "Your subscription is pending. Please confirm it in Shopify or contact support.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const reservation = await reserveStandardPlanPending(shopId);
+    if (!reservation.acquired) {
+      if (reservation.planStatus === PlanStatus.standard_pending) {
+        if (plan?.shopify_confirmation_url) {
+          return data({ confirmation_url: plan.shopify_confirmation_url });
+        }
+
+        return data(
+          {
+            error: {
+              code: "subscription_pending",
+              message:
+                "Your subscription is pending. Please confirm it in Shopify or contact support.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      if (reservation.planStatus === PlanStatus.early_access_pending) {
+        return data(
+          {
+            error: {
+              code: "other_plan_pending",
+              message:
+                "Your Early Access activation is pending. Please confirm it in Shopify or restart billing setup.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      if (isPlanActive(reservation.planStatus)) {
+        return redirect(buildEmbeddedRedirectPath(request, "/app"));
+      }
+
+      return data(
+        {
+          error: {
+            code: "subscription_locked",
+            message:
+              "We’re already processing your subscription. Please wait a moment and try again.",
           },
         },
         { status: 409 },
@@ -106,6 +218,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopId,
         subscriptionId: result.subscriptionId,
         subscriptionStatus: result.subscriptionStatus,
+        confirmationUrl: result.confirmationUrl,
       });
 
       captureEvent("paywall.subscribe_succeeded", {
@@ -122,17 +235,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         "Paywall subscribe created",
       );
 
-      return redirect(result.confirmationUrl);
+      return data({ confirmation_url: result.confirmationUrl });
     } catch (error) {
       captureEvent("paywall.subscribe_failed", { shop_id: shopId });
       logger.error({ shop_id: shopId, err: error }, "Paywall subscribe failed");
+      await clearPendingPlan({
+        shopId,
+        pendingStatus: "standard_pending",
+      });
 
       return data(
         {
           error: {
             code: "billing_failed",
-            message:
+            message: resolveBillingErrorMessage(
+              error,
               "We couldn’t start the subscription. Please try again or contact support.",
+            ),
           },
         },
         { status: 500 },
@@ -142,12 +261,64 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (parsed.data.intent === "invite_unlock") {
     if (planStatus === PlanStatus.early_access_pending) {
+      if (plan?.shopify_confirmation_url) {
+        return data({ confirmation_url: plan.shopify_confirmation_url });
+      }
+
       return data(
         {
           error: {
             code: "subscription_pending",
             message:
               "Your Early Access activation is pending. Please confirm it in Shopify or contact support.",
+          },
+        },
+        { status: 409 },
+      );
+    }
+
+    const reservation = await reserveEarlyAccessPlanPending(shopId);
+    if (!reservation.acquired) {
+      if (reservation.planStatus === PlanStatus.early_access_pending) {
+        if (plan?.shopify_confirmation_url) {
+          return data({ confirmation_url: plan.shopify_confirmation_url });
+        }
+
+        return data(
+          {
+            error: {
+              code: "subscription_pending",
+              message:
+                "Your Early Access activation is pending. Please confirm it in Shopify or contact support.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      if (reservation.planStatus === PlanStatus.standard_pending) {
+        return data(
+          {
+            error: {
+              code: "other_plan_pending",
+              message:
+                "Your Standard subscription is pending. Please confirm it in Shopify or restart billing setup.",
+            },
+          },
+          { status: 409 },
+        );
+      }
+
+      if (isPlanActive(reservation.planStatus)) {
+        return redirect(buildEmbeddedRedirectPath(request, "/app"));
+      }
+
+      return data(
+        {
+          error: {
+            code: "subscription_locked",
+            message:
+              "We’re already processing your Early Access activation. Please wait a moment and try again.",
           },
         },
         { status: 409 },
@@ -194,6 +365,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         shopId,
         subscriptionId: result.subscriptionId,
         subscriptionStatus: result.subscriptionStatus,
+        confirmationUrl: result.confirmationUrl,
       });
 
       if (result.subscriptionStatus === "ACTIVE") {
@@ -218,25 +390,110 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         "Paywall invite unlock succeeded",
       );
 
-      return redirect(result.confirmationUrl);
+      return data({ confirmation_url: result.confirmationUrl });
     } catch (error) {
       captureEvent("paywall.invite_unlock_failed", { shop_id: shopId });
       logger.error(
         { shop_id: shopId, err: error },
         "Paywall invite unlock failed",
       );
+      await clearPendingPlan({
+        shopId,
+        pendingStatus: "early_access_pending",
+      });
 
       return data(
         {
           error: {
             code: "billing_failed",
-            message:
+            message: resolveBillingErrorMessage(
+              error,
               "We couldn’t unlock Early Access. Please try again or contact support.",
+            ),
           },
         },
         { status: 500 },
       );
     }
+  }
+
+  if (parsed.data.intent === "sync_pending_status") {
+    if (
+      plan?.shopify_subscription_id &&
+      (planStatus === PlanStatus.standard_pending ||
+        planStatus === PlanStatus.early_access_pending)
+    ) {
+      try {
+        const subscription = await getSubscriptionStatus({
+          admin,
+          subscriptionId: plan.shopify_subscription_id,
+        });
+
+        if (subscription.status === "ACTIVE") {
+          if (planStatus === PlanStatus.standard_pending) {
+            await activateStandardPlan({
+              shopId,
+              subscriptionId: subscription.id,
+              subscriptionStatus: subscription.status,
+            });
+          }
+
+          if (planStatus === PlanStatus.early_access_pending) {
+            await activateEarlyAccessPlan({
+              shopId,
+              subscriptionId: subscription.id,
+              subscriptionStatus: subscription.status,
+            });
+          }
+
+          return redirect(buildEmbeddedRedirectPath(request, "/app"));
+        }
+
+        if (subscription.status !== "PENDING") {
+          await clearPlanToNone(shopId);
+          return data(
+            {
+              error: {
+                code: "subscription_not_active",
+                message:
+                  "The subscription wasn’t approved. Please try again to start a new subscription.",
+              },
+            },
+            { status: 409 },
+          );
+        }
+
+        if (plan.shopify_confirmation_url) {
+          return data({ confirmation_url: plan.shopify_confirmation_url });
+        }
+
+        return data(
+          {
+            error: {
+              code: "subscription_pending",
+              message:
+                "Your subscription is pending. Please confirm it in Shopify.",
+            },
+          },
+          { status: 409 },
+        );
+      } catch (error) {
+        logger.error(
+          { shop_id: shopId, err: error },
+          "Paywall subscription status sync failed",
+        );
+      }
+    }
+
+    return data(
+      {
+        error: {
+          code: "subscription_not_found",
+          message: "No pending subscription found.",
+        },
+      },
+      { status: 404 },
+    );
   }
 
   return data(
@@ -247,6 +504,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
 export default function Paywall() {
   const actionData = useActionData<typeof action>();
+  const { planStatus, confirmationUrl, subscriptionStatus, isDev } =
+    useLoaderData<typeof loader>();
   const navigation = useNavigation();
   const isInviteSubmitting =
     navigation.state === "submitting" &&
@@ -254,14 +513,94 @@ export default function Paywall() {
   const isSubscribeSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "subscribe";
+  const isResetSubmitting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "reset_billing_dev";
+  const isSyncSubmitting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "sync_pending_status";
+  const showReset =
+    planStatus === PlanStatus.standard_pending ||
+    planStatus === PlanStatus.early_access_pending;
+
+  const errorMessage =
+    actionData && typeof actionData === "object" && "error" in actionData
+      ? actionData.error.message
+      : null;
+
+  useEffect(() => {
+    if (!actionData || typeof actionData !== "object") {
+      return;
+    }
+
+    if (!("confirmation_url" in actionData)) {
+      return;
+    }
+
+    const url = actionData.confirmation_url;
+    if (typeof url !== "string" || !url) {
+      return;
+    }
+
+    window.open(url, "_top");
+  }, [actionData]);
 
   return (
-    <s-page heading="Personalize Design – Access Required">
+    <s-page heading="Paywall – Access Required">
       <s-section heading="Choose how to unlock access">
         <s-stack direction="block" gap="base">
-          {actionData?.error ? (
+          {errorMessage ? (
             <s-banner tone="critical">
-              <s-text>{actionData.error.message}</s-text>
+              <s-text>{errorMessage}</s-text>
+            </s-banner>
+          ) : null}
+          {showReset ? (
+            <s-banner tone="warning">
+              <s-text>
+                A subscription is pending. If you don’t see the Shopify
+                confirmation screen, you may have closed it or it may have been
+                blocked.
+              </s-text>
+              {subscriptionStatus ? (
+                <s-paragraph>Status: {subscriptionStatus}</s-paragraph>
+              ) : null}
+              {confirmationUrl ? (
+                <s-button
+                  variant="primary"
+                  onClick={() => window.open(confirmationUrl, "_top")}
+                >
+                  Continue on Shopify
+                </s-button>
+              ) : null}
+              <s-paragraph>
+                If you hit Back or closed the screen, use “Continue on Shopify”.
+              </s-paragraph>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="sync_pending_status"
+                />
+                <s-button
+                  type="submit"
+                  variant="secondary"
+                  {...(isSyncSubmitting ? { loading: true } : {})}
+                >
+                  I already approved
+                </s-button>
+              </Form>
+              {isDev ? (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="reset_billing_dev" />
+                  <s-button
+                    type="submit"
+                    variant="tertiary"
+                    {...(isResetSubmitting ? { loading: true } : {})}
+                  >
+                    Reset billing state (dev)
+                  </s-button>
+                </Form>
+              ) : null}
             </s-banner>
           ) : null}
           <s-box padding="base" borderWidth="base" borderRadius="base">
@@ -276,7 +615,7 @@ export default function Paywall() {
             <s-paragraph>
               Standard and Early Access both include a one-time $1.00 free AI usage gift.
             </s-paragraph>
-            <form method="post">
+            <Form method="post">
               <input type="hidden" name="intent" value="subscribe" />
               <s-button
                 type="submit"
@@ -285,7 +624,7 @@ export default function Paywall() {
               >
                 Subscribe
               </s-button>
-            </form>
+            </Form>
           </s-box>
 
           <s-box padding="base" borderWidth="base" borderRadius="base">
@@ -293,7 +632,7 @@ export default function Paywall() {
             <s-paragraph>
               Unlock Early Access with your invite code to access $0/month pricing during the program.
             </s-paragraph>
-            <form method="post">
+            <Form method="post">
               <input type="hidden" name="intent" value="invite_unlock" />
               <s-stack direction="inline" gap="base">
                 <s-text-field
@@ -310,7 +649,7 @@ export default function Paywall() {
                   Unlock Early Access
                 </s-button>
               </s-stack>
-            </form>
+            </Form>
           </s-box>
         </s-stack>
       </s-section>
