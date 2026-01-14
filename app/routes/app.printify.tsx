@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -19,7 +20,7 @@ import logger from "../lib/logger";
 import { printifyActionSchema } from "../schemas/admin";
 import {
   PrintifyRequestError,
-  validatePrintifyToken,
+  listPrintifyShops,
 } from "../services/printify/client.server";
 import { encryptPrintifyToken } from "../services/printify/token-encryption.server";
 import {
@@ -49,25 +50,52 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { status: 400 },
     );
   }
-
   try {
-    const shop = await validatePrintifyToken(parsed.data.printify_api_token);
-    const encryptedToken = encryptPrintifyToken(parsed.data.printify_api_token);
+    const token = parsed.data.printify_api_token;
+    const shops = await listPrintifyShops(token);
+    const shopCount = shops.length;
+    let selectedShop = shops[0];
+
+    if (shopCount > 1) {
+      if (parsed.data.printify_shop_id) {
+        const matched = shops.find(
+          (shop) => shop.shopId === parsed.data.printify_shop_id,
+        );
+
+        if (!matched) {
+          return data(
+            {
+              error: {
+                code: "invalid_request",
+                message: "Select a valid Printify shop.",
+              },
+            },
+            { status: 400 },
+          );
+        }
+
+        selectedShop = matched;
+      } else {
+        return data({ needsSelection: true, shops });
+      }
+    }
+
+    const encryptedToken = encryptPrintifyToken(token);
 
     await upsertPrintifyIntegration({
       shopId,
       encryptedToken,
-      printifyShopId: shop.shopId,
-      printifyShopTitle: shop.shopTitle,
-      printifySalesChannel: shop.salesChannel,
+      printifyShopId: selectedShop.shopId,
+      printifyShopTitle: selectedShop.shopTitle,
+      printifySalesChannel: selectedShop.salesChannel,
     });
 
     logger.info(
-      { shop_id: shopId, printify_shop_id: shop.shopId },
+      { shop_id: shopId, printify_shop_id: selectedShop.shopId },
       "Printify connected",
     );
 
-    return data({ success: true, shopCount: shop.shopCount });
+    return data({ success: true, shopCount });
   } catch (error) {
     if (error instanceof PrintifyRequestError) {
       const status =
@@ -127,6 +155,28 @@ export default function PrintifySetup() {
     typeof (actionData as { shopCount?: unknown }).shopCount === "number"
       ? (actionData as { shopCount: number }).shopCount
       : null;
+  const needsSelection =
+    actionData &&
+    typeof actionData === "object" &&
+    "needsSelection" in actionData
+      ? (actionData as { needsSelection?: boolean }).needsSelection === true
+      : false;
+  const shopOptions =
+    actionData &&
+    typeof actionData === "object" &&
+    "shops" in actionData &&
+    Array.isArray((actionData as { shops?: unknown }).shops)
+      ? (
+          actionData as {
+            shops: Array<{
+              shopId: string;
+              shopTitle: string;
+              salesChannel: string | null;
+            }>;
+          }
+        ).shops
+      : null;
+  const [tokenValue, setTokenValue] = useState("");
 
   return (
     <s-page heading="Printify setup">
@@ -142,11 +192,18 @@ export default function PrintifySetup() {
               <s-text>{successMessage}</s-text>
             </s-banner>
           ) : null}
+          {needsSelection ? (
+            <s-banner tone="warning">
+              <s-text>
+                This token has access to multiple Printify shops. Select the one
+                to connect.
+              </s-text>
+            </s-banner>
+          ) : null}
           {shopCount && shopCount > 1 ? (
             <s-banner tone="warning">
               <s-text>
-                This token has access to {shopCount} Printify shops. The app is
-                currently connected to the first shop returned by Printify.
+                This token has access to {shopCount} Printify shops.
               </s-text>
             </s-banner>
           ) : null}
@@ -184,15 +241,29 @@ export default function PrintifySetup() {
                 name="printify_api_token"
                 placeholder="Enter your token"
                 autocomplete="off"
+                disabled={isSubmitting}
+                value={tokenValue}
+                onChange={(event) => setTokenValue(event.currentTarget.value)}
                 details="You can generate a token in your Printify account settings."
               ></s-password-field>
-              
-              <s-button
-                type="submit"
-                variant="primary"
-                loading={isSubmitting}
-              >
-                Connect Printify
+              {needsSelection && shopOptions ? (
+                <s-box padding="base" borderWidth="base" borderRadius="base">
+                  <s-choice-list label="Printify shop" name="printify_shop_id">
+                    {shopOptions.map((shop, index) => (
+                      <s-choice
+                        key={shop.shopId}
+                        value={shop.shopId}
+                        selected={index === 0}
+                      >
+                        {shop.shopTitle} (ID: {shop.shopId})
+                        {shop.salesChannel ? ` — ${shop.salesChannel}` : ""}
+                      </s-choice>
+                    ))}
+                  </s-choice-list>
+                </s-box>
+              ) : null}
+              <s-button type="submit" variant="primary" loading={isSubmitting}>
+                {needsSelection ? "Connect selected shop" : "Connect Printify"}
               </s-button>
             </s-stack>
           </Form>

@@ -1,9 +1,36 @@
 import { describe, expect, it, beforeEach, vi } from "vitest";
-import { PrintifyRequestError, validatePrintifyToken } from "./client.server";
+import {
+  PrintifyRequestError,
+  listPrintifyShops,
+  validatePrintifyToken,
+} from "./client.server";
 
 beforeEach(() => {
   vi.restoreAllMocks();
   process.env.PRINTIFY_USER_AGENT = "test-agent";
+});
+
+describe("listPrintifyShops", () => {
+  it("parses shop data from the data wrapper and returns choices", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [{ id: 99, title: "Wrapped", sales_channel: "shopify" }],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    const shops = await listPrintifyShops("token");
+
+    expect(shops).toEqual([
+      {
+        shopId: "99",
+        shopTitle: "Wrapped",
+        salesChannel: "shopify",
+      },
+    ]);
+  });
 });
 
 describe("validatePrintifyToken", () => {
