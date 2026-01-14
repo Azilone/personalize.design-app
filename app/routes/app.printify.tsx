@@ -21,22 +21,102 @@ import { printifyActionSchema } from "../schemas/admin";
 import {
   PrintifyRequestError,
   listPrintifyShops,
+  type PrintifyShopChoice,
 } from "../services/printify/client.server";
-import { encryptPrintifyToken } from "../services/printify/token-encryption.server";
 import {
-  getPrintifyIntegration,
+  encryptPrintifyToken,
+  decryptPrintifyToken,
+} from "../services/printify/token-encryption.server";
+import {
+  getPrintifyIntegrationWithToken,
   upsertPrintifyIntegration,
+  clearPrintifyIntegration,
+  type PrintifyIntegration,
 } from "../services/printify/integration.server";
+
+type LoaderData = {
+  integration: Omit<PrintifyIntegration, "createdAt" | "updatedAt"> | null;
+  availableShops: PrintifyShopChoice[] | null;
+  shopInvalid: boolean;
+};
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
-  const integration = await getPrintifyIntegration(shopId);
+  const integration = await getPrintifyIntegrationWithToken(shopId);
 
-  return {
-    integration,
-  };
+  if (!integration) {
+    return {
+      integration: null,
+      availableShops: null,
+      shopInvalid: false,
+    } satisfies LoaderData;
+  }
+
+  try {
+    const token = decryptPrintifyToken(integration.encryptedToken);
+    const shops = await listPrintifyShops(token);
+    const isCurrentShopValid = shops.some(
+      (shop) => shop.shopId === integration.printifyShopId,
+    );
+
+    if (!isCurrentShopValid) {
+      await clearPrintifyIntegration(shopId);
+      logger.warn(
+        { shop_id: shopId, printify_shop_id: integration.printifyShopId },
+        "Printify shop no longer available, integration cleared",
+      );
+      return {
+        integration: null,
+        availableShops: shops,
+        shopInvalid: true,
+      } satisfies LoaderData;
+    }
+
+    return {
+      integration: {
+        shopId: integration.shopId,
+        printifyShopId: integration.printifyShopId,
+        printifyShopTitle: integration.printifyShopTitle,
+        printifySalesChannel: integration.printifySalesChannel,
+      },
+      availableShops: shops,
+      shopInvalid: false,
+    } satisfies LoaderData;
+  } catch (error) {
+    if (
+      error instanceof PrintifyRequestError &&
+      error.code === "invalid_token"
+    ) {
+      await clearPrintifyIntegration(shopId);
+      logger.warn(
+        { shop_id: shopId },
+        "Printify token invalid, integration cleared",
+      );
+      return {
+        integration: null,
+        availableShops: null,
+        shopInvalid: true,
+      } satisfies LoaderData;
+    }
+
+    logger.error(
+      { shop_id: shopId, err: error },
+      "Failed to fetch Printify shops on load",
+    );
+    return {
+      integration: {
+        shopId: integration.shopId,
+        printifyShopId: integration.printifyShopId,
+        printifyShopTitle: integration.printifyShopTitle,
+        printifySalesChannel: integration.printifySalesChannel,
+      },
+      availableShops: null,
+      shopInvalid: false,
+    } satisfies LoaderData;
+  }
 };
+
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -131,7 +211,8 @@ export const headers: HeadersFunction = (headersArgs) => {
 };
 
 export default function PrintifySetup() {
-  const { integration } = useLoaderData<typeof loader>();
+  const { integration, availableShops, shopInvalid } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { search } = useLocation();
@@ -161,7 +242,7 @@ export default function PrintifySetup() {
     "needsSelection" in actionData
       ? (actionData as { needsSelection?: boolean }).needsSelection === true
       : false;
-  const shopOptions =
+  const shopOptionsFromAction =
     actionData &&
     typeof actionData === "object" &&
     "shops" in actionData &&
@@ -176,6 +257,9 @@ export default function PrintifySetup() {
           }
         ).shops
       : null;
+  // Use shops from action (after token submit) or loader (on page load)
+  const shopOptions = shopOptionsFromAction ?? availableShops;
+  const showShopSelector = needsSelection && shopOptions;
   const [tokenValue, setTokenValue] = useState("");
 
   return (
@@ -187,9 +271,12 @@ export default function PrintifySetup() {
               <s-text>{errorMessage}</s-text>
             </s-banner>
           ) : null}
-          {successMessage ? (
-            <s-banner tone="success">
-              <s-text>{successMessage}</s-text>
+          {shopInvalid ? (
+            <s-banner tone="critical">
+              <s-text>
+                Your Printify connection is no longer valid. Please reconnect
+                with a valid API token.
+              </s-text>
             </s-banner>
           ) : null}
           {needsSelection ? (
@@ -207,15 +294,15 @@ export default function PrintifySetup() {
               </s-text>
             </s-banner>
           ) : null}
-          {integration ? (
+          {integration || successMessage ? (
             <s-banner tone="success">
               <s-text>Connected</s-text>
             </s-banner>
-          ) : (
+          ) : !shopInvalid && !needsSelection ? (
             <s-banner tone="warning">
               <s-text>Not connected</s-text>
             </s-banner>
-          )}
+          ) : null}
           {integration ? (
             <s-stack direction="block" gap="small">
               <s-paragraph>
@@ -246,7 +333,7 @@ export default function PrintifySetup() {
                 onChange={(event) => setTokenValue(event.currentTarget.value)}
                 details="You can generate a token in your Printify account settings."
               ></s-password-field>
-              {needsSelection && shopOptions ? (
+              {showShopSelector ? (
                 <s-box padding="base" borderWidth="base" borderRadius="base">
                   <s-choice-list label="Printify shop" name="printify_shop_id">
                     {shopOptions.map((shop, index) => (

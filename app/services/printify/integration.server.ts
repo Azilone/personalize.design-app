@@ -71,3 +71,51 @@ export const upsertPrintifyIntegration = async (
     },
   });
 };
+
+export type PrintifyIntegrationWithToken = PrintifyIntegration & {
+  encryptedToken: EncryptedToken;
+};
+
+export const getPrintifyIntegrationWithToken = async (
+  shopId: string,
+): Promise<PrintifyIntegrationWithToken | null> => {
+  const integration = await prisma.shopPrintifyIntegration.findUnique({
+    where: { shop_id: shopId },
+    select: {
+      shop_id: true,
+      token_ciphertext: true,
+      token_iv: true,
+      token_auth_tag: true,
+      printify_shop_id: true,
+      printify_shop_title: true,
+      printify_sales_channel: true,
+      created_at: true,
+      updated_at: true,
+    },
+  });
+
+  if (!integration) {
+    return null;
+  }
+
+  return {
+    shopId: integration.shop_id,
+    printifyShopId: integration.printify_shop_id,
+    printifyShopTitle: integration.printify_shop_title,
+    printifySalesChannel: integration.printify_sales_channel,
+    encryptedToken: {
+      ciphertext: integration.token_ciphertext,
+      iv: integration.token_iv,
+      authTag: integration.token_auth_tag,
+    },
+    createdAt: integration.created_at,
+    updatedAt: integration.updated_at,
+  };
+};
+
+export const clearPrintifyIntegration = async (shopId: string) => {
+  await prisma.shopPrintifyIntegration.delete({
+    where: { shop_id: shopId },
+  });
+};
+
