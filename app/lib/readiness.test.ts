@@ -132,13 +132,19 @@ describe("buildReadinessChecklist", () => {
 describe("canFinishOnboarding", () => {
   it("allows finishing when personalization is confirmed", () => {
     expect(
-      canFinishOnboarding({ storefrontPersonalizationConfirmed: true }),
+      canFinishOnboarding({
+        printifyConnected: true,
+        storefrontPersonalizationConfirmed: true,
+      }),
     ).toBe(true);
   });
 
   it("blocks finishing when personalization is not confirmed", () => {
     expect(
-      canFinishOnboarding({ storefrontPersonalizationConfirmed: false }),
+      canFinishOnboarding({
+        printifyConnected: true,
+        storefrontPersonalizationConfirmed: false,
+      }),
     ).toBe(false);
   });
 });

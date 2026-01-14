@@ -58,6 +58,17 @@ export const spendSafetyActionSchema = z.discriminatedUnion("intent", [
 
 export type SpendSafetyActionInput = z.infer<typeof spendSafetyActionSchema>;
 
+const printifyConnectSchema = z.object({
+  intent: z.literal("printify_connect"),
+  printify_api_token: z.string().min(1),
+});
+
+export const printifyActionSchema = z.discriminatedUnion("intent", [
+  printifyConnectSchema,
+]);
+
+export type PrintifyActionInput = z.infer<typeof printifyActionSchema>;
+
 const storefrontPersonalizationSchema = z.object({
   intent: z.literal("storefront_personalization_choice"),
   storefront_personalization_choice: z.enum(["enabled", "disabled"]),

@@ -186,6 +186,9 @@ export default function Index() {
             Connect Printify and confirm your storefront personalization choice
             before finishing onboarding.
           </s-paragraph>
+          {!readinessSignals?.printifyConnected ? (
+            <Link to={`/app/printify${embeddedSearch}`}>Connect Printify</Link>
+          ) : null}
           <Form method="post">
             <input type="hidden" name="intent" value="finish_onboarding" />
             <s-button

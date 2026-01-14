@@ -8,7 +8,6 @@ import {
   data,
   useActionData,
   useLoaderData,
-  useNavigate,
   useNavigation,
 } from "react-router";
 import { useEffect } from "react";
@@ -508,7 +507,6 @@ export default function Paywall() {
   const { planStatus, confirmationUrl, subscriptionStatus, isDev } =
     useLoaderData<typeof loader>();
   const navigation = useNavigation();
-  const navigate = useNavigate();
   const isInviteSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "invite_unlock";
@@ -530,6 +528,14 @@ export default function Paywall() {
       ? actionData.error.message
       : null;
 
+  const redirectToConfirmation = (url: string) => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    window.open(url, "_top");
+  };
+
   useEffect(() => {
     if (!actionData || typeof actionData !== "object") {
       return;
@@ -544,8 +550,8 @@ export default function Paywall() {
       return;
     }
 
-    navigate(url);
-  }, [actionData, navigate]);
+    redirectToConfirmation(url);
+  }, [actionData]);
 
   return (
     <s-page heading="Paywall – Access Required">
@@ -569,7 +575,7 @@ export default function Paywall() {
               {confirmationUrl ? (
                 <s-button
                   variant="primary"
-                  onClick={() => navigate(confirmationUrl)}
+                  onClick={() => redirectToConfirmation(confirmationUrl)}
                 >
                   Continue on Shopify
                 </s-button>

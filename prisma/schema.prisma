@@ -73,3 +73,17 @@ model ShopStorefrontPersonalization {
 
   @@map("shop_storefront_personalization")
 }
+
+model ShopPrintifyIntegration {
+  shop_id                String   @id
+  token_ciphertext       String
+  token_iv               String
+  token_auth_tag         String
+  printify_shop_id       String
+  printify_shop_title    String
+  printify_sales_channel String?
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@map("shop_printify_integrations")
+}
