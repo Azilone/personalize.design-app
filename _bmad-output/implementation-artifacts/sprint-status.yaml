@@ -45,7 +45,7 @@ development_status:
   1-4-confirm-storefront-personalization-status-required-onboarding-step: done
   epic-1-retrospective: optional
   epic-2: backlog
-  2-1-connect-printify-via-api-token-validate-status: backlog
+  2-1-connect-printify-via-api-token-validate-status: in-progress
   2-2-select-printify-shop-account-for-this-shopify-shop: backlog
   2-3-manage-printify-integration-status-rotate-token-disconnect: backlog
   epic-2-retrospective: optional

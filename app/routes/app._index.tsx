@@ -1,7 +1,6 @@
 import type { ActionFunctionArgs, HeadersFunction } from "react-router";
 import {
   Form,
-  Link,
   data,
   useActionData,
   useLocation,
@@ -88,51 +87,68 @@ export default function Index() {
   return (
     <s-page heading="Setup">
       <s-section heading="Plan status">
-        {planStatus === PlanStatus.early_access ? (
-          <s-banner tone="success">
-            <s-text>Early Access is active for your shop.</s-text>
-          </s-banner>
-        ) : null}
-        {planStatus === PlanStatus.standard ? (
-          <s-banner tone="success">
-            <s-text>Standard plan is active for your shop.</s-text>
-          </s-banner>
-        ) : null}
-        {planStatus === PlanStatus.none ? (
-          <s-banner tone="critical">
-            <s-text>
-              Access is locked. Visit the paywall to subscribe or unlock Early
-              Access.
-            </s-text>
-          </s-banner>
-        ) : null}
-        {planStatus === PlanStatus.standard_pending ? (
-          <s-banner tone="warning">
-            <s-text>
-              Your Standard plan is pending. Please confirm the subscription in
-              Shopify.
-            </s-text>
-          </s-banner>
-        ) : null}
-        {planStatus === PlanStatus.early_access_pending ? (
-          <s-banner tone="warning">
-            <s-text>
-              Your Early Access activation is pending. Please confirm the
-              subscription in Shopify.
-            </s-text>
-          </s-banner>
-        ) : null}
-        <s-paragraph>
-          {planStatus === PlanStatus.standard
-            ? "Standard includes a 7-day trial for the $19/month access fee only."
-            : null}
-          {planStatus === PlanStatus.early_access
-            ? "Early Access is $0/month while the program is active."
-            : null}
-        </s-paragraph>
-        {planStatus === PlanStatus.none ? (
-          <Link to={`/app/paywall${embeddedSearch}`}>Go to paywall</Link>
-        ) : null}
+        <s-stack direction="block" gap="base">
+          {planStatus === PlanStatus.early_access ? (
+            <s-banner tone="success">
+              <s-stack direction="inline" gap="small">
+                <s-badge tone="success">Active</s-badge>
+                <s-text>Early Access is active for your shop.</s-text>
+              </s-stack>
+            </s-banner>
+          ) : null}
+          {planStatus === PlanStatus.standard ? (
+            <s-banner tone="success">
+              <s-stack direction="inline" gap="small">
+                <s-badge tone="success">Active</s-badge>
+                <s-text>Standard plan is active for your shop.</s-text>
+              </s-stack>
+            </s-banner>
+          ) : null}
+          {planStatus === PlanStatus.none ? (
+            <s-banner tone="critical">
+              <s-stack direction="inline" gap="small">
+                <s-badge tone="critical">Locked</s-badge>
+                <s-text>
+                  Access is locked. Visit the paywall to subscribe or unlock Early
+                  Access.
+                </s-text>
+              </s-stack>
+            </s-banner>
+          ) : null}
+          {planStatus === PlanStatus.standard_pending ? (
+            <s-banner tone="warning">
+              <s-stack direction="inline" gap="small">
+                <s-badge tone="warning">Pending</s-badge>
+                <s-text>
+                  Your Standard plan is pending. Please confirm the subscription in
+                  Shopify.
+                </s-text>
+              </s-stack>
+            </s-banner>
+          ) : null}
+          {planStatus === PlanStatus.early_access_pending ? (
+            <s-banner tone="warning">
+              <s-stack direction="inline" gap="small">
+                <s-badge tone="warning">Pending</s-badge>
+                <s-text>
+                  Your Early Access activation is pending. Please confirm the
+                  subscription in Shopify.
+                </s-text>
+              </s-stack>
+            </s-banner>
+          ) : null}
+          <s-paragraph>
+            {planStatus === PlanStatus.standard
+              ? "Standard includes a 7-day trial for the $19/month access fee only."
+              : null}
+            {planStatus === PlanStatus.early_access
+              ? "Early Access is $0/month while the program is active."
+              : null}
+          </s-paragraph>
+          {planStatus === PlanStatus.none ? (
+            <s-link href={`/app/paywall${embeddedSearch}`}>Go to paywall</s-link>
+          ) : null}
+        </s-stack>
       </s-section>
 
       <s-section heading="Setup checklist">
@@ -143,28 +159,26 @@ export default function Index() {
             </s-banner>
           ) : null}
           {readinessItems.map((item) => {
-            const statusLabel =
-              item.status === "complete" ? "Complete" : "Incomplete";
+            const isComplete = item.status === "complete";
             const actionHref = item.actionHref
               ? `${item.actionHref}${embeddedSearch}`
               : null;
 
             return (
-              <s-box
-                key={item.key}
-                padding="base"
-                borderWidth="base"
-                borderRadius="base"
-              >
-                <s-stack direction="block" gap="base">
-                  <s-heading>{item.label}</s-heading>
-                  <s-text>Status: {statusLabel}</s-text>
+              <s-card key={item.key}>
+                <s-stack direction="block" gap="small">
+                  <s-stack direction="inline" gap="small">
+                    <s-heading>{item.label}</s-heading>
+                    <s-badge tone={isComplete ? "success" : "warning"}>
+                      {isComplete ? "Complete" : "Incomplete"}
+                    </s-badge>
+                  </s-stack>
                   <s-paragraph>{item.hint}</s-paragraph>
                   {actionHref && item.actionLabel ? (
-                    <Link to={actionHref}>{item.actionLabel}</Link>
+                    <s-link href={actionHref}>{item.actionLabel}</s-link>
                   ) : null}
                 </s-stack>
-              </s-box>
+              </s-card>
             );
           })}
         </s-stack>
@@ -187,7 +201,7 @@ export default function Index() {
             before finishing onboarding.
           </s-paragraph>
           {!readinessSignals?.printifyConnected ? (
-            <Link to={`/app/printify${embeddedSearch}`}>Connect Printify</Link>
+            <s-link href={`/app/printify${embeddedSearch}`}>Connect Printify</s-link>
           ) : null}
           <Form method="post">
             <input type="hidden" name="intent" value="finish_onboarding" />
@@ -195,7 +209,7 @@ export default function Index() {
               type="submit"
               variant="primary"
               disabled={!canFinish}
-              {...(isSubmitting ? { loading: true } : {})}
+              loading={isSubmitting}
             >
               Finish onboarding
             </s-button>
@@ -204,14 +218,16 @@ export default function Index() {
       </s-section>
 
       <s-section heading="Billing overview">
-        <s-paragraph>
-          Free AI usage gift: ${formatUsd(freeGiftRemainingCents)} remaining (of
-          ${formatUsd(freeGiftCents)}).
-        </s-paragraph>
-        <s-paragraph>
-          Usage charges apply after the gift is used. Standard plan trial does
-          not waive usage charges or the per-order fee.
-        </s-paragraph>
+        <s-stack direction="block" gap="small">
+          <s-paragraph>
+            Free AI usage gift: ${formatUsd(freeGiftRemainingCents)} remaining (of
+            ${formatUsd(freeGiftCents)}).
+          </s-paragraph>
+          <s-paragraph>
+            Usage charges apply after the gift is used. Standard plan trial does
+            not waive usage charges or the per-order fee.
+          </s-paragraph>
+        </s-stack>
       </s-section>
     </s-page>
   );
@@ -220,3 +236,4 @@ export default function Index() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+

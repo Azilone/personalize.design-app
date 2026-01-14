@@ -61,6 +61,9 @@ export type SpendSafetyActionInput = z.infer<typeof spendSafetyActionSchema>;
 const printifyConnectSchema = z.object({
   intent: z.literal("printify_connect"),
   printify_api_token: z.string().min(1),
+  printify_shop_id: z.string().min(1).optional(),
+  printify_shop_title: z.string().min(1).optional(),
+  printify_sales_channel: z.string().min(1).optional(),
 });
 
 export const printifyActionSchema = z.discriminatedUnion("intent", [

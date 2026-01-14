@@ -35,7 +35,25 @@ describe("validatePrintifyToken", () => {
       shopId: "123",
       shopTitle: "Primary",
       salesChannel: "etsy",
+      shopCount: 1,
     });
+  });
+
+  it("includes the total shop count when multiple shops exist", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify([
+          { id: 1, title: "First" },
+          { id: 2, title: "Second", sales_channel: "etsy" },
+        ]),
+        { status: 200 },
+      ),
+    );
+
+    const result = await validatePrintifyToken("token");
+
+    expect(result.shopId).toBe("1");
+    expect(result.shopCount).toBe(2);
   });
 
   it("throws for invalid tokens", async () => {
@@ -72,6 +90,14 @@ describe("validatePrintifyToken", () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response("Server error", { status: 500 }),
     );
+
+    await expect(validatePrintifyToken("token")).rejects.toMatchObject({
+      code: "unexpected_response",
+    });
+  });
+
+  it("throws for network errors", async () => {
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("boom"));
 
     await expect(validatePrintifyToken("token")).rejects.toMatchObject({
       code: "unexpected_response",

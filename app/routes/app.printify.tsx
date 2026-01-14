@@ -5,7 +5,6 @@ import type {
 } from "react-router";
 import {
   Form,
-  Link,
   data,
   useActionData,
   useLoaderData,
@@ -68,7 +67,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       "Printify connected",
     );
 
-    return data({ success: true });
+    return data({ success: true, shopCount: shop.shopCount });
   } catch (error) {
     if (error instanceof PrintifyRequestError) {
       const status =
@@ -99,6 +98,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 };
 
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
+
 export default function PrintifySetup() {
   const { integration } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -117,6 +120,13 @@ export default function PrintifySetup() {
     actionData && typeof actionData === "object" && "success" in actionData
       ? "Printify connected."
       : null;
+  const shopCount =
+    actionData &&
+    typeof actionData === "object" &&
+    "shopCount" in actionData &&
+    typeof (actionData as { shopCount?: unknown }).shopCount === "number"
+      ? (actionData as { shopCount: number }).shopCount
+      : null;
 
   return (
     <s-page heading="Printify setup">
@@ -130,6 +140,14 @@ export default function PrintifySetup() {
           {successMessage ? (
             <s-banner tone="success">
               <s-text>{successMessage}</s-text>
+            </s-banner>
+          ) : null}
+          {shopCount && shopCount > 1 ? (
+            <s-banner tone="warning">
+              <s-text>
+                This token has access to {shopCount} Printify shops. The app is
+                currently connected to the first shop returned by Printify.
+              </s-text>
             </s-banner>
           ) : null}
           {integration ? (
@@ -161,28 +179,26 @@ export default function PrintifySetup() {
           <Form method="post">
             <input type="hidden" name="intent" value="printify_connect" />
             <s-stack direction="block" gap="base">
-              <s-text-field
+              <s-password-field
                 label="Printify API token"
                 name="printify_api_token"
                 placeholder="Enter your token"
-                disabled={isSubmitting}
-              />
+                autocomplete="off"
+                details="You can generate a token in your Printify account settings."
+              ></s-password-field>
+              
               <s-button
                 type="submit"
                 variant="primary"
-                {...(isSubmitting ? { loading: true } : {})}
+                loading={isSubmitting}
               >
                 Connect Printify
               </s-button>
             </s-stack>
           </Form>
-          <Link to={setupHref}>Back to setup</Link>
+          <s-link href={setupHref}>Back to setup</s-link>
         </s-stack>
       </s-section>
     </s-page>
   );
 }
-
-export const headers: HeadersFunction = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};

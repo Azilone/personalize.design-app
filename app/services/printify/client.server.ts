@@ -1,6 +1,15 @@
+import { z } from "zod";
+
 const PRINTIFY_BASE_URL = "https://api.printify.com/v1";
 
 export type PrintifyShopSummary = {
+  shopId: string;
+  shopTitle: string;
+  salesChannel: string | null;
+  shopCount: number;
+};
+
+export type PrintifyShopChoice = {
   shopId: string;
   shopTitle: string;
   salesChannel: string | null;
@@ -27,40 +36,49 @@ const getPrintifyUserAgent = (): string => {
   return process.env.PRINTIFY_USER_AGENT ?? "personalize-design-app";
 };
 
-type PrintifyShopPayload = {
-  id: number | string;
-  title?: string | null;
-  sales_channel?: string | null;
-};
+const printifyShopSchema = z.object({
+  id: z.union([z.number(), z.string()]),
+  title: z.string().nullish(),
+  sales_channel: z.string().nullish(),
+});
+
+type PrintifyShopPayload = z.infer<typeof printifyShopSchema>;
+
+const printifyShopsResponseSchema = z.union([
+  z.array(printifyShopSchema),
+  z.object({ data: z.array(printifyShopSchema) }),
+]);
 
 const resolveShopPayload = (payload: unknown): PrintifyShopPayload[] => {
-  if (Array.isArray(payload)) {
-    return payload as PrintifyShopPayload[];
+  const parsed = printifyShopsResponseSchema.safeParse(payload);
+
+  if (!parsed.success) {
+    return [];
   }
 
-  if (
-    payload &&
-    typeof payload === "object" &&
-    "data" in payload &&
-    Array.isArray((payload as { data?: unknown }).data)
-  ) {
-    return (payload as { data: PrintifyShopPayload[] }).data;
-  }
-
-  return [];
+  return Array.isArray(parsed.data) ? parsed.data : parsed.data.data;
 };
 
-export const validatePrintifyToken = async (
+export const listPrintifyShops = async (
   token: string,
-): Promise<PrintifyShopSummary> => {
-  const response = await fetch(`${PRINTIFY_BASE_URL}/shops.json`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "User-Agent": getPrintifyUserAgent(),
-      Accept: "application/json",
-    },
-  });
+): Promise<PrintifyShopChoice[]> => {
+  let response: Response;
+
+  try {
+    response = await fetch(`${PRINTIFY_BASE_URL}/shops.json`, {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "User-Agent": getPrintifyUserAgent(),
+        Accept: "application/json",
+      },
+    });
+  } catch {
+    throw new PrintifyRequestError(
+      "unexpected_response",
+      "Unable to validate the Printify token right now.",
+    );
+  }
 
   if (response.status === 401 || response.status === 403) {
     throw new PrintifyRequestError(
@@ -97,14 +115,24 @@ export const validatePrintifyToken = async (
     );
   }
 
+  return shops.map((shop) => ({
+    shopId: String(shop.id),
+    shopTitle: shop.title ? String(shop.title) : "Printify shop",
+    salesChannel:
+      typeof shop.sales_channel === "string" ? shop.sales_channel : null,
+  }));
+};
+
+export const validatePrintifyToken = async (
+  token: string,
+): Promise<PrintifyShopSummary> => {
+  const shops = await listPrintifyShops(token);
   const primaryShop = shops[0];
 
   return {
-    shopId: String(primaryShop.id),
-    shopTitle: primaryShop.title ? String(primaryShop.title) : "Printify shop",
-    salesChannel:
-      typeof primaryShop.sales_channel === "string"
-        ? primaryShop.sales_channel
-        : null,
+    shopId: primaryShop.shopId,
+    shopTitle: primaryShop.shopTitle,
+    salesChannel: primaryShop.salesChannel,
+    shopCount: shops.length,
   };
 };

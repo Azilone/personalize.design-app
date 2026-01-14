@@ -35,3 +35,41 @@ describe("encryptPrintifyToken", () => {
     );
   });
 });
+
+describe("decryptPrintifyToken", () => {
+  it("throws when decrypting with the wrong key", () => {
+    process.env.PRINTIFY_TOKEN_ENCRYPTION_KEY = keyFromBytes(32);
+    const encrypted = encryptPrintifyToken("printify-token");
+
+    process.env.PRINTIFY_TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString(
+      "base64",
+    );
+
+    expect(() => decryptPrintifyToken(encrypted)).toThrow();
+  });
+
+  it("throws when the auth tag is tampered", () => {
+    const encrypted = encryptPrintifyToken("printify-token");
+    const authTag = Buffer.from(encrypted.authTag, "base64");
+
+    authTag[0] = authTag[0] ^ 1;
+
+    expect(() =>
+      decryptPrintifyToken({
+        ...encrypted,
+        authTag: authTag.toString("base64"),
+      }),
+    ).toThrow();
+  });
+
+  it("throws when the IV is invalid", () => {
+    const encrypted = encryptPrintifyToken("printify-token");
+
+    expect(() =>
+      decryptPrintifyToken({
+        ...encrypted,
+        iv: Buffer.alloc(4, 1).toString("base64"),
+      }),
+    ).toThrow();
+  });
+});

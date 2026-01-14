@@ -5,7 +5,6 @@ import type {
 } from "react-router";
 import {
   Form,
-  Link,
   data,
   useActionData,
   useLoaderData,
@@ -129,10 +128,12 @@ export default function StorefrontPersonalizationOnboarding() {
         <s-stack direction="block" gap="base">
           {errorMessage ? (
             <s-banner tone="critical">
-              <s-text>{errorMessage}</s-text>
-              {requiresSpendSafety ? (
-                <Link to={billingHref}>Configure spend safety</Link>
-              ) : null}
+              <s-stack direction="block" gap="small">
+                <s-text>{errorMessage}</s-text>
+                {requiresSpendSafety ? (
+                  <s-link href={billingHref}>Configure spend safety</s-link>
+                ) : null}
+              </s-stack>
             </s-banner>
           ) : null}
           {successMessage ? (
@@ -153,8 +154,9 @@ export default function StorefrontPersonalizationOnboarding() {
             Default is disabled until you explicitly confirm.
           </s-paragraph>
 
-          <s-section heading="Step-by-step setup">
+          <s-card>
             <s-stack direction="block" gap="base">
+              <s-heading>Step-by-step setup</s-heading>
               <s-paragraph>
                 Personalization lets buyers add text or images and see a live
                 preview on the product page.
@@ -175,7 +177,7 @@ export default function StorefrontPersonalizationOnboarding() {
                 → Apps → select the Personalize.design block → Save.
               </s-paragraph>
 
-              <s-stack direction="block" gap="base">
+              <s-stack direction="inline" gap="base">
                 <s-link href={demoVideoUrl} target="_blank">
                   Watch demo video
                 </s-link>
@@ -186,7 +188,8 @@ export default function StorefrontPersonalizationOnboarding() {
                 ) : null}
               </s-stack>
             </s-stack>
-          </s-section>
+          </s-card>
+
           <Form method="post">
             <input
               type="hidden"
@@ -194,28 +197,21 @@ export default function StorefrontPersonalizationOnboarding() {
               value="storefront_personalization_choice"
             />
             <s-stack direction="block" gap="base">
-              <label>
-                <input
-                  type="radio"
-                  name="storefront_personalization_choice"
-                  value="enabled"
-                  defaultChecked={defaultChoice === "enabled"}
-                />
-                Enable storefront personalization
-              </label>
-              <label>
-                <input
-                  type="radio"
-                  name="storefront_personalization_choice"
-                  value="disabled"
-                  defaultChecked={defaultChoice === "disabled"}
-                />
-                Keep disabled
-              </label>
+              <s-choice-list
+                label="Storefront personalization"
+                name="storefront_personalization_choice"
+              >
+                <s-choice value="enabled" selected={defaultChoice === "enabled"}>
+                  Enable storefront personalization
+                </s-choice>
+                <s-choice value="disabled" selected={defaultChoice === "disabled"}>
+                  Keep disabled
+                </s-choice>
+              </s-choice-list>
               <s-button
                 type="submit"
                 variant="primary"
-                {...(isSubmitting ? { loading: true } : {})}
+                loading={isSubmitting}
               >
                 Save choice
               </s-button>
@@ -226,7 +222,7 @@ export default function StorefrontPersonalizationOnboarding() {
             buyer previews available. Next, assign a published template to a
             product.
           </s-paragraph>
-          <Link to={`/app${embeddedSearch}`}>Back to setup</Link>
+          <s-link href={`/app${embeddedSearch}`}>Back to setup</s-link>
         </s-stack>
       </s-section>
     </s-page>
@@ -236,3 +232,4 @@ export default function StorefrontPersonalizationOnboarding() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
+

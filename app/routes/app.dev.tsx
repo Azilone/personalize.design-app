@@ -196,13 +196,13 @@ export default function DevToolsBilling() {
           <Form method="post">
             <input type="hidden" name="intent" value="dev_onboarding_reset" />
             <s-button disabled={!showDanger} tone="critical" type="submit">
-              Reset onboarding state (spend safety + storefront personalization)
+              Reset onboarding state (spend safety + storefront + printify)
             </s-button>
           </Form>
           <s-paragraph>
-            This resets onboarding completion for the current shop so you can
-            re-test the setup checklist. Printify reset will be added when the
-            integration ships.
+            This resets onboarding completion for the current shop (spend
+            safety, storefront personalization, and Printify integration) so you
+            can re-test the setup checklist.
           </s-paragraph>
         </s-box>
 

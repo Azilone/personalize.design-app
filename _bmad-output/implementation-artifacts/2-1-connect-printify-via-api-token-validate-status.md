@@ -1,6 +1,6 @@
 # Story 2.1: Connect Printify via API Token (Validate + Status)
 
-Status: review
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -165,6 +165,7 @@ GPT-5.2 (Codex CLI)
 
 - Test run: `npm test -- app/services/printify/token-encryption.server.test.ts app/services/printify/client.server.test.ts app/services/shops/readiness.server.test.ts app/lib/readiness.test.ts`
 - Test run: `npm test`
+- Test run: `npm test -- app/services/printify/token-encryption.server.test.ts app/services/printify/client.server.test.ts`
 
 ### Completion Notes List
 
@@ -173,6 +174,7 @@ GPT-5.2 (Codex CLI)
 - Updated Printify setup route to show status, shop info, and connect form.
 - Wired readiness signals to stored integration and added a Printify link in onboarding.
 - Tests: `npm test -- app/services/printify/token-encryption.server.test.ts app/services/printify/client.server.test.ts app/services/shops/readiness.server.test.ts app/lib/readiness.test.ts`, `npm test`.
+- Review fixes: Masked token input, hardened Printify response parsing, expanded crypto failure-mode tests, and surfaced multi-shop token warning.
 
 ### File List
 
@@ -194,3 +196,29 @@ GPT-5.2 (Codex CLI)
 ### Change Log
 
 - 2026-01-14: Rebuilt Printify integration storage, validation, setup UI, and tests.
+- 2026-01-14: Senior dev review fixes: validated Printify payload shape, masked token input, expanded encryption failure-mode tests, and added multi-shop warning.
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Kevin
+**Date:** 2026-01-14
+**Outcome:** Changes requested
+
+### What I validated
+
+- Token validation happens server-side via Printify `GET /v1/shops.json` with `Authorization: Bearer …` and `User-Agent`.
+- Token is encrypted at rest using AES-256-GCM with key from `PRINTIFY_TOKEN_ENCRYPTION_KEY`.
+- UI shows `Connected` / `Not connected` and displays basic shop info when connected.
+
+### Fixes applied during review
+
+- Hardened Printify response handling (schema validation + network error handling).
+- Expanded encryption tests to cover tampering/wrong-key failure modes.
+- Masked the Printify API token input field.
+- Surfaced a warning when a token has access to multiple Printify shops.
+
+### Remaining concerns
+
+- Printify multi-shop selection is not implemented yet (token validation still connects to the first shop returned).
+- Prisma is currently configured for SQLite in `prisma/schema.prisma`; confirm production DB strategy (Supabase Postgres) and ensure migrations match it.
+- AC4 references blocking “Printify-required flows” (mockups/fulfillment/etc.). Those flows don’t exist in this codebase yet, so this requirement can’t be fully validated here.

@@ -8,5 +8,8 @@ export const resetOnboardingForDev = async (shopId: string) => {
     prisma.shopStorefrontPersonalization
       .delete({ where: { shop_id: shopId } })
       .catch(() => undefined),
+    prisma.shopPrintifyIntegration
+      .delete({ where: { shop_id: shopId } })
+      .catch(() => undefined),
   ]);
 };
