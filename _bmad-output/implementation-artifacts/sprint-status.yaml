@@ -1,6 +1,6 @@
-# generated: 2026-01-12
+# generated: 2026-01-14
 # project: personalize-design-app
-# project_key: personalized-design-app
+# project_key: personalize-design-app
 # tracking_system: file-system
 # story_location: _bmad-output/implementation-artifacts
 
@@ -32,23 +32,27 @@
 # - Stories can be worked in parallel if team capacity allows
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
-generated: 2026-01-12
+
+generated: 2026-01-14
 project: personalize-design-app
-project_key: personalized-design-app
+project_key: personalize-design-app
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
+
 development_status:
   epic-1: in-progress
-  1-1-paywall-early-access-activation-invite-code: review
+  1-1-paywall-early-access-activation-invite-code: done
   1-2-onboarding-dashboard-setup-readiness-checklist: done
   1-3-spend-safety-onboarding-routing-disclosure: done
   1-4-confirm-storefront-personalization-status-required-onboarding-step: done
   epic-1-retrospective: optional
-  epic-2: backlog
-  2-1-connect-printify-via-api-token-validate-status: in-progress
-  2-2-select-printify-shop-account-for-this-shopify-shop: backlog
-  2-3-manage-printify-integration-status-rotate-token-disconnect: backlog
+
+  epic-2: in-progress
+  2-1-connect-printify-via-api-token-validate-status: done
+  2-2-select-printify-shop-account-for-this-shopify-shop: done
+  2-3-manage-printify-integration-status-rotate-token-disconnect: in-progress
   epic-2-retrospective: optional
+
   epic-3: backlog
   3-1-create-design-template-with-prompt-variables-draft: backlog
   3-2-model-selector-1-option-cost-visibility-seedream-v4-edit: backlog
@@ -56,11 +60,13 @@ development_status:
   3-4-template-level-remove-background-0-025: backlog
   3-5-publish-unpublish-templates-templates-list-draft-published: backlog
   epic-3-retrospective: optional
+
   epic-4: backlog
   4-1-sync-shopify-products-select-product-to-configure: backlog
   4-2-assign-single-template-to-product-explicit-enable-mvp: backlog
   4-3-merchant-product-preview-simulator-only-when-configured: backlog
   epic-4-retrospective: optional
+
   epic-5: backlog
   5-1-usage-ledger-1-free-ai-usage-gift: backlog
   5-2-spend-safety-setup-monthly-cap-paid-usage-consent: backlog
@@ -68,6 +74,7 @@ development_status:
   5-4-usage-visibility-auditable-billing-events: backlog
   5-5-enforce-generation-limits-per-product-per-session-reset-window: backlog
   epic-5-retrospective: optional
+
   epic-6: backlog
   6-1-open-storefront-personalization-stepper-single-template-mvp: backlog
   6-2-upload-photo-optional-text-input-validation: backlog
@@ -76,12 +83,14 @@ development_status:
   6-5-regenerate-preview-within-limits-cost-tries-left-reset-timer: backlog
   6-6-add-to-cart-with-personalization-id-metadata: backlog
   epic-6-retrospective: optional
+
   epic-7: backlog
   7-1-detect-paid-orders-with-personalization-id-webhook-idempotent-intake: backlog
   7-2-final-print-ready-asset-generated-preview-persist-retrieve: backlog
   7-3-submit-to-printify-track-status-visibility: backlog
   7-4-operator-reprocess-failed-order-line-diagnostics: backlog
   epic-7-retrospective: optional
+
   epic-8: backlog
   8-1-policy-acceptance-inline-minimal-friction: backlog
   epic-8-retrospective: optional

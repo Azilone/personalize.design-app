@@ -1,10 +1,18 @@
 # BMM workflow status tracking
 # Created by create-product-brief workflow
 
-updated_at: 2026-01-10T15:57:18Z
+generated: 2026-01-10T15:57:18Z
+updated_at: 2026-01-14T15:30:00Z
+project: personalize-design-app
+project_type: bmad-method
+selected_track: bmad-method
+field_type: greenfield
+workflow_path: method-greenfield.yaml
 
 workflow_status:
   product-brief: _bmad-output/planning-artifacts/product-brief-personalize-design-app-2026-01-10.md
   prd: _bmad-output/planning-artifacts/prd.md
   create-ux-design: _bmad-output/planning-artifacts/ux-design-specification.md
   create-architecture: _bmad-output/planning-artifacts/architecture.md
+  create-epics-and-stories: _bmad-output/planning-artifacts/epics.md
+  implementation-readiness: _bmad-output/planning-artifacts/implementation-readiness-report-2026-01-12.md

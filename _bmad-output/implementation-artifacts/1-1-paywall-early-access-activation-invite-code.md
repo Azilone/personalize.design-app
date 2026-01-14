@@ -1,6 +1,6 @@
 # Story 1.1: Paywall + Early Access Activation (Invite Code)
 
-Status: review
+Status: done
 
 Story Key: 1-1-paywall-early-access-activation-invite-code
 Generated: 2026-01-12

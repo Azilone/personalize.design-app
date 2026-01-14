@@ -66,8 +66,13 @@ const printifyConnectSchema = z.object({
   printify_sales_channel: z.string().min(1).optional(),
 });
 
+const printifyDisconnectSchema = z.object({
+  intent: z.literal("printify_disconnect"),
+});
+
 export const printifyActionSchema = z.discriminatedUnion("intent", [
   printifyConnectSchema,
+  printifyDisconnectSchema,
 ]);
 
 export type PrintifyActionInput = z.infer<typeof printifyActionSchema>;

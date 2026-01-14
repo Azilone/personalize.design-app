@@ -113,9 +113,12 @@ export const getPrintifyIntegrationWithToken = async (
   };
 };
 
+/**
+ * Clear the Printify integration for a shop.
+ * Uses deleteMany for idempotency - safe to call even if already disconnected.
+ */
 export const clearPrintifyIntegration = async (shopId: string) => {
-  await prisma.shopPrintifyIntegration.delete({
+  await prisma.shopPrintifyIntegration.deleteMany({
     where: { shop_id: shopId },
   });
 };
-
