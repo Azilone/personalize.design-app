@@ -24,7 +24,10 @@ import {
   getShopPlanStatus,
   isPlanActive,
 } from "../services/shops/plan.server";
-import { getShopReadinessSignals } from "../services/shops/readiness.server";
+import {
+  getShopReadinessSignals,
+  type ShopReadinessSignals,
+} from "../services/shops/readiness.server";
 import { PlanStatus } from "@prisma/client";
 
 export type AppLoaderData = {
@@ -35,6 +38,7 @@ export type AppLoaderData = {
   subscriptionId: string | null;
   subscriptionStatus: string | null;
   readinessItems: ReadinessItem[];
+  readinessSignals: ShopReadinessSignals;
   freeGiftCents: number;
   freeGiftRemainingCents: number;
 };
@@ -120,6 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     subscriptionId: plan?.shopify_subscription_id ?? null,
     subscriptionStatus: plan?.shopify_subscription_status ?? null,
     readinessItems,
+    readinessSignals,
     freeGiftCents: plan?.free_usage_gift_cents ?? 0,
     freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
   };

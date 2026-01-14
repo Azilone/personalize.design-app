@@ -33,6 +33,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const readinessSignals = await getShopReadinessSignals(shopId);
   const canFinish = canFinishOnboarding({
+    printifyConnected: readinessSignals.printifyConnected,
     storefrontPersonalizationConfirmed:
       readinessSignals.storefrontPersonalizationConfirmed,
   });
@@ -41,9 +42,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return data(
       {
         error: {
-          code: "storefront_personalization_required",
+          code: "onboarding_requirements_incomplete",
           message:
-            "Confirm storefront personalization before finishing onboarding.",
+            "Connect Printify and confirm storefront personalization before finishing onboarding.",
         },
       },
       { status: 400 },
@@ -59,6 +60,7 @@ export default function Index() {
   const freeGiftCents = appData?.freeGiftCents ?? 0;
   const freeGiftRemainingCents = appData?.freeGiftRemainingCents ?? 0;
   const readinessItems: ReadinessItem[] = appData?.readinessItems ?? [];
+  const readinessSignals = appData?.readinessSignals ?? null;
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { search } = useLocation();
@@ -75,6 +77,13 @@ export default function Index() {
       : null;
   const isSubmitting =
     navigation.formData?.get("intent") === "finish_onboarding";
+  const canFinish = readinessSignals
+    ? canFinishOnboarding({
+        printifyConnected: readinessSignals.printifyConnected,
+        storefrontPersonalizationConfirmed:
+          readinessSignals.storefrontPersonalizationConfirmed,
+      })
+    : false;
 
   return (
     <s-page heading="Setup">
@@ -174,14 +183,15 @@ export default function Index() {
             </s-banner>
           ) : null}
           <s-paragraph>
-            Confirm your storefront personalization choice before finishing
-            onboarding.
+            Connect Printify and confirm your storefront personalization choice
+            before finishing onboarding.
           </s-paragraph>
           <Form method="post">
             <input type="hidden" name="intent" value="finish_onboarding" />
             <s-button
               type="submit"
               variant="primary"
+              disabled={!canFinish}
               {...(isSubmitting ? { loading: true } : {})}
             >
               Finish onboarding

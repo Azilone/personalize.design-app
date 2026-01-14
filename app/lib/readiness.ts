@@ -47,8 +47,12 @@ export type ReadinessChecklistInput = {
 };
 
 export const canFinishOnboarding = (
-  input: Pick<ReadinessChecklistInput, "storefrontPersonalizationConfirmed">,
-): boolean => input.storefrontPersonalizationConfirmed;
+  input: Pick<
+    ReadinessChecklistInput,
+    "printifyConnected" | "storefrontPersonalizationConfirmed"
+  >,
+): boolean =>
+  input.printifyConnected && input.storefrontPersonalizationConfirmed;
 
 export const buildReadinessChecklist = (
   input: ReadinessChecklistInput,
