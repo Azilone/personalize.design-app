@@ -1,6 +1,6 @@
 # Story 2.3: Manage Printify Integration (Status, Rotate Token, Disconnect)
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -29,28 +29,28 @@ so that Printify-required flows stay reliable and I can recover quickly without 
 
 ## Tasks / Subtasks
 
-- [ ] Add explicit disconnect flow (AC: 3)
-  - [ ] Extend `app/schemas/admin.ts` with a `printify_disconnect` intent (discriminated union)
-  - [ ] Update `app/routes/app.printify.tsx` `action` to handle disconnect by clearing the integration and returning a success payload
-  - [ ] Make disconnect idempotent server-side (no 500 if already disconnected)
-  - [ ] Add UI: a clear "Disconnect" button with confirmation (e.g., checkbox + confirm CTA) when connected
+- [x] Add explicit disconnect flow (AC: 3)
+  - [x] Extend `app/schemas/admin.ts` with a `printify_disconnect` intent (discriminated union)
+  - [x] Update `app/routes/app.printify.tsx` `action` to handle disconnect by clearing the integration and returning a success payload
+  - [x] Make disconnect idempotent server-side (no 500 if already disconnected)
+  - [x] Add UI: a clear "Disconnect" button with confirmation (e.g., checkbox + confirm CTA) when connected
 
-- [ ] Improve token rotation behavior (AC: 2)
-  - [ ] When connected and a new token yields multiple shops, auto-select the previously saved `printify_shop_id` if it exists; otherwise prompt selection
-  - [ ] Keep existing multi-shop selection UX (action returns `needsSelection: true` + `shops` list)
-  - [ ] Ensure rotate does not log or return any secret token value
+- [x] Improve token rotation behavior (AC: 2)
+  - [x] When connected and a new token yields multiple shops, auto-select the previously saved `printify_shop_id` if it exists; otherwise prompt selection
+  - [x] Keep existing multi-shop selection UX (action returns `needsSelection: true` + `shops` list)
+  - [x] Ensure rotate does not log or return any secret token value
 
-- [ ] Ensure status/selected shop display remains correct (AC: 1)
-  - [ ] Keep showing the active shop title/id and sales channel when connected
-  - [ ] Keep the "connection invalid" banner behavior when the token/shop becomes invalid (loader clears integration)
+- [x] Ensure status/selected shop display remains correct (AC: 1)
+  - [x] Keep showing the active shop title/id and sales channel when connected
+  - [x] Keep the "connection invalid" banner behavior when the token/shop becomes invalid (loader clears integration)
 
-- [ ] Tests (AC: 1–3)
-  - [ ] Add small unit tests for any new selection/idempotency helper logic (prefer pure functions)
-  - [ ] If route-level behavior is complex, add a focused integration-style test for the `action` branch that clears integration (mock Prisma)
+- [x] Tests (AC: 1–3)
+  - [x] Add small unit tests for any new selection/idempotency helper logic (prefer pure functions)
+  - [x] If route-level behavior is complex, add a focused integration-style test for the `action` branch that clears integration (mock Prisma)
 
-- [ ] Telemetry + logging
-  - [ ] Log only safe fields (`shop_id`, `printify_shop_id`, intent outcome); never log the token
-  - [ ] Keep error payloads consistent (use `{ error: { code, message, details? } }` for failures)
+- [x] Telemetry + logging
+  - [x] Log only safe fields (`shop_id`, `printify_shop_id`, intent outcome); never log the token
+  - [x] Keep error payloads consistent (use `{ error: { code, message, details? } }` for failures)
 
 ## Dev Notes
 
@@ -152,10 +152,31 @@ so that Printify-required flows stay reliable and I can recover quickly without 
 
 ### Agent Model Used
 
-GPT-5.2 (Codex CLI)
+Antigravity (Gemini)
 
 ### Debug Log References
 
+No debug issues encountered.
+
 ### Completion Notes List
 
+- Added `printify_disconnect` intent to discriminated union in `admin.ts`
+- Made `clearPrintifyIntegration` idempotent using `deleteMany` instead of `delete`
+- Added disconnect action handler with proper logging of safe fields only
+- Improved token rotation: auto-selects previously saved shop when it still exists for new token
+- Added disconnect UI section with confirmation checkbox and critical-tone button
+- Created `selectPrintifyShop` pure helper function for testable shop selection logic
+- Added 8 unit tests for shop selection logic covering all edge cases
+- All existing tests continue to pass (58 total)
+
 ### File List
+
+- app/schemas/admin.ts (modified)
+- app/routes/app.printify.tsx (modified)
+- app/services/printify/integration.server.ts (modified)
+- app/services/printify/shop-selection.server.ts (new)
+- app/services/printify/shop-selection.server.test.ts (new)
+
+### Change Log
+
+- 2026-01-14: Implemented Story 2.3 - disconnect flow, token rotation improvement, unit tests

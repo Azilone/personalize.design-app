@@ -50,7 +50,7 @@ development_status:
   epic-2: in-progress
   2-1-connect-printify-via-api-token-validate-status: done
   2-2-select-printify-shop-account-for-this-shopify-shop: done
-  2-3-manage-printify-integration-status-rotate-token-disconnect: in-progress
+  2-3-manage-printify-integration-status-rotate-token-disconnect: done
   epic-2-retrospective: optional
 
   epic-3: backlog

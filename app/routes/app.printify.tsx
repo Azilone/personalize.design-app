@@ -130,16 +130,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       { status: 400 },
     );
   }
+
+  // Handle disconnect intent
+  if (parsed.data.intent === "printify_disconnect") {
+    await clearPrintifyIntegration(shopId);
+    logger.info({ shop_id: shopId }, "Printify disconnected");
+    return data({ disconnected: true });
+  }
+
+  // Handle connect intent
+  const connectData = parsed.data;
   try {
-    const token = parsed.data.printify_api_token;
+    const token = connectData.printify_api_token;
     const shops = await listPrintifyShops(token);
     const shopCount = shops.length;
     let selectedShop = shops[0];
 
     if (shopCount > 1) {
-      if (parsed.data.printify_shop_id) {
+      // Check if we have a previously saved shop ID that's still valid
+      const existingIntegration = await getPrintifyIntegrationWithToken(shopId);
+      const previousShopId = existingIntegration?.printifyShopId;
+
+      if (connectData.printify_shop_id) {
+        // User explicitly selected a shop
         const matched = shops.find(
-          (shop) => shop.shopId === parsed.data.printify_shop_id,
+          (shop) => shop.shopId === connectData.printify_shop_id,
         );
 
         if (!matched) {
@@ -155,7 +170,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         }
 
         selectedShop = matched;
+      } else if (previousShopId) {
+        // Auto-select previously saved shop if still valid
+        const previousShopMatch = shops.find(
+          (shop) => shop.shopId === previousShopId,
+        );
+
+        if (previousShopMatch) {
+          selectedShop = previousShopMatch;
+          logger.info(
+            { shop_id: shopId, printify_shop_id: previousShopId },
+            "Auto-selected previously saved Printify shop during token rotation",
+          );
+        } else {
+          // Previous shop no longer valid, prompt for selection
+          return data({ needsSelection: true, shops });
+        }
       } else {
+        // No previous shop, prompt for selection
         return data({ needsSelection: true, shops });
       }
     }
@@ -198,7 +230,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: {
           code: "printify_unavailable",
           message:
-            "We couldn’t validate the Printify token. Please try again soon.",
+            "We couldn't validate the Printify token. Please try again soon.",
         },
       },
       { status: 500 },
@@ -221,6 +253,9 @@ export default function PrintifySetup() {
   const isSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "printify_connect";
+  const isDisconnecting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "printify_disconnect";
   const errorMessage =
     actionData && typeof actionData === "object" && "error" in actionData
       ? actionData.error.message
@@ -228,6 +263,10 @@ export default function PrintifySetup() {
   const successMessage =
     actionData && typeof actionData === "object" && "success" in actionData
       ? "Printify connected."
+      : null;
+  const disconnectedMessage =
+    actionData && typeof actionData === "object" && "disconnected" in actionData
+      ? "Printify disconnected."
       : null;
   const shopCount =
     actionData &&
@@ -261,6 +300,10 @@ export default function PrintifySetup() {
   const shopOptions = shopOptionsFromAction ?? availableShops;
   const showShopSelector = needsSelection && shopOptions;
   const [tokenValue, setTokenValue] = useState("");
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+
+  // Show connected when we have an integration and haven't just disconnected
+  const isConnected = integration && !disconnectedMessage;
 
   return (
     <s-page heading="Printify setup">
@@ -279,6 +322,11 @@ export default function PrintifySetup() {
               </s-text>
             </s-banner>
           ) : null}
+          {disconnectedMessage ? (
+            <s-banner tone="info">
+              <s-text>{disconnectedMessage}</s-text>
+            </s-banner>
+          ) : null}
           {needsSelection ? (
             <s-banner tone="warning">
               <s-text>
@@ -294,16 +342,16 @@ export default function PrintifySetup() {
               </s-text>
             </s-banner>
           ) : null}
-          {integration || successMessage ? (
+          {isConnected || successMessage ? (
             <s-banner tone="success">
               <s-text>Connected</s-text>
             </s-banner>
-          ) : !shopInvalid && !needsSelection ? (
+          ) : !shopInvalid && !needsSelection && !disconnectedMessage ? (
             <s-banner tone="warning">
               <s-text>Not connected</s-text>
             </s-banner>
           ) : null}
-          {integration ? (
+          {isConnected ? (
             <s-stack direction="block" gap="small">
               <s-paragraph>
                 Shop: {integration.printifyShopTitle} (ID:{" "}
@@ -317,7 +365,7 @@ export default function PrintifySetup() {
             </s-stack>
           ) : null}
           <s-paragraph>
-            Paste a Printify API token to connect your account. We’ll store it
+            Paste a Printify API token to connect your account. We'll store it
             securely and use it to validate your Printify shop connection.
           </s-paragraph>
           <Form method="post">
@@ -357,6 +405,37 @@ export default function PrintifySetup() {
           <s-link href={setupHref}>Back to setup</s-link>
         </s-stack>
       </s-section>
+
+      {isConnected ? (
+        <s-section heading="Disconnect Printify">
+          <s-stack direction="block" gap="base">
+            <s-paragraph>
+              Disconnecting will remove your Printify API token and shop
+              selection. Printify-required features will be unavailable until
+              you reconnect.
+            </s-paragraph>
+            <Form method="post">
+              <input type="hidden" name="intent" value="printify_disconnect" />
+              <s-stack direction="block" gap="base">
+                <s-checkbox
+                  label="I understand this will disconnect Printify"
+                  checked={confirmDisconnect}
+                  onChange={() => setConfirmDisconnect(!confirmDisconnect)}
+                />
+                <s-button
+                  type="submit"
+                  variant="tertiary"
+                  tone="critical"
+                  disabled={!confirmDisconnect}
+                  loading={isDisconnecting}
+                >
+                  Disconnect Printify
+                </s-button>
+              </s-stack>
+            </Form>
+          </s-stack>
+        </s-section>
+      ) : null}
     </s-page>
   );
 }
