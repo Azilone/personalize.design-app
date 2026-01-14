@@ -1,6 +1,6 @@
 # Story 1.2: Onboarding Dashboard + Setup Readiness Checklist
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -31,21 +31,21 @@ so that I can quickly understand what’s blocking me from going live.
 
 ## Tasks / Subtasks
 
-- [ ] Onboarding dashboard readiness checklist UI (AC: 1–3)
-  - [ ] Render checklist list with status labels and hint copy
-  - [ ] Show plan status banner summary
+- [x] Onboarding dashboard readiness checklist UI (AC: 1–3)
+  - [x] Render checklist list with status labels and hint copy
+  - [x] Show plan status banner summary
 
-- [ ] Readiness data sourcing (AC: 2)
-  - [ ] Plan status from `ShopPlan` (already in loader)
-  - [ ] Printify connection status (future Epic 2 integration; define placeholder now)
-  - [ ] Storefront personalization status (shop-level setting; define storage/source)
-  - [ ] Spend safety status (monthly cap + paid usage consent; future Epic 5)
+- [x] Readiness data sourcing (AC: 2)
+  - [x] Plan status from `ShopPlan` (already in loader)
+  - [x] Printify connection status (future Epic 2 integration; define placeholder now)
+  - [x] Storefront personalization status (shop-level setting; define storage/source)
+  - [x] Spend safety status (monthly cap + paid usage consent; future Epic 5)
 
-- [ ] Server-side loader data for checklist
-  - [ ] Extend `app/routes/app._index.tsx` or shared loader to provide readiness items
+- [x] Server-side loader data for checklist
+  - [x] Extend `app/routes/app._index.tsx` or shared loader to provide readiness items
 
-- [ ] Incomplete-item hints
-  - [ ] Provide next-step hints and links to relevant settings/screens
+- [x] Incomplete-item hints
+  - [x] Provide next-step hints and links to relevant settings/screens
 
 ## Dev Notes
 
@@ -145,16 +145,62 @@ Codex CLI (GPT-5)
 
 ### Debug Log References
 
-- _bmad-output/implementation-artifacts/validation-report-2026-01-13T13-03-21Z.md
+- \_bmad-output/implementation-artifacts/validation-report-2026-01-13T13-03-21Z.md
+
+### Implementation Plan
+
+- Define a typed readiness checklist helper mapped from plan status.
+- Render the checklist in the dashboard with status labels and hints.
+- Keep plan status banners and provide a paywall link when needed.
 
 ### Completion Notes List
 
 - Ultimate context engine analysis completed - comprehensive developer guide created.
 - Sprint status updated: 1-2-onboarding-dashboard-setup-readiness-checklist -> ready-for-dev.
 - Validation report generated for create-story checklist.
+- Added readiness checklist UI with helper mapping; tests: `npm test`, `npm run lint`.
+- Moved checklist data to the server loader (`routes/app`) and added placeholders for Printify/storefront/spend safety.
+- Updated story status to `review` and sprint-status entry to `review`.
+- Senior code review completed; fixed findings and re-ran `npm test` + `npm run lint`.
 
 ### File List
 
-- _bmad-output/implementation-artifacts/1-2-onboarding-dashboard-setup-readiness-checklist.md
-- _bmad-output/implementation-artifacts/sprint-status.yaml
-- _bmad-output/implementation-artifacts/validation-report-2026-01-13T13-03-21Z.md
+- \_bmad-output/implementation-artifacts/1-2-onboarding-dashboard-setup-readiness-checklist.md
+- \_bmad-output/implementation-artifacts/sprint-status.yaml
+- app/lib/embedded-search.ts
+- app/lib/readiness.test.ts
+- app/lib/readiness.ts
+- app/routes/app.billing.tsx
+- app/routes/app.printify.tsx
+- app/routes/app.storefront.tsx
+- app/routes/app.tsx
+- app/routes/app.\_index.tsx
+- app/services/shops/readiness.server.ts
+
+### Change Log
+
+- 2026-01-13: Add onboarding readiness checklist UI and server-side readiness data.
+- 2026-01-13: Code review fixes (links + placeholders + shared helpers).
+
+## Senior Developer Review (AI)
+
+Date: 2026-01-13
+Outcome: Approved (after fixes)
+
+### Findings (resolved)
+
+- [x] [HIGH] Task claimed links but checklist items had no action links (`app/lib/readiness.ts`, `app/routes/app._index.tsx`)
+- [x] [HIGH] Story File List included unchanged validation report (git vs story mismatch)
+- [x] [MED] Readiness signals were hardcoded in the loader with no clear future source (`app/routes/app.tsx`)
+- [x] [MED] Duplicated embedded query param handling across routes (`app/routes/app.tsx`, `app/routes/app._index.tsx`)
+
+### Fixes applied
+
+- Added action links for incomplete checklist items and minimal placeholder routes (`app/routes/app.printify.tsx`, `app/routes/app.storefront.tsx`, `app/routes/app.billing.tsx`)
+- Centralized embedded query param preservation (`app/lib/embedded-search.ts`)
+- Defined a clear server-side readiness signals source (`app/services/shops/readiness.server.ts`)
+
+### Validation
+
+- `npm test`
+- `npm run lint`

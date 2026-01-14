@@ -54,3 +54,13 @@ model ShopPlan {
 
   @@map("shop_plans")
 }
+
+model ShopSpendSafety {
+  shop_id                String   @id
+  monthly_cap_cents      Int?
+  paid_usage_consent_at  DateTime?
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+
+  @@map("shop_spend_safety")
+}

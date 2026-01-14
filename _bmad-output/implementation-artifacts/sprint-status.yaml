@@ -40,8 +40,8 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   epic-1: in-progress
   1-1-paywall-early-access-activation-invite-code: review
-  1-2-onboarding-dashboard-setup-readiness-checklist: ready-for-dev
-  1-3-spend-safety-onboarding-routing-disclosure: backlog
+  1-2-onboarding-dashboard-setup-readiness-checklist: done
+  1-3-spend-safety-onboarding-routing-disclosure: done
   1-4-confirm-storefront-personalization-status-required-onboarding-step: backlog
   epic-1-retrospective: optional
   epic-2: backlog

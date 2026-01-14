@@ -40,3 +40,15 @@ export const devBillingActionSchema = z.discriminatedUnion("intent", [
 ]);
 
 export type DevBillingActionInput = z.infer<typeof devBillingActionSchema>;
+
+const spendSafetySaveSchema = z.object({
+  intent: z.literal("save_spend_safety"),
+  monthly_cap_usd: z.coerce.number().finite().gt(0),
+  paid_usage_consent: z.string().optional(),
+});
+
+export const spendSafetyActionSchema = z.discriminatedUnion("intent", [
+  spendSafetySaveSchema,
+]);
+
+export type SpendSafetyActionInput = z.infer<typeof spendSafetyActionSchema>;

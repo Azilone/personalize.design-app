@@ -2,6 +2,8 @@ import type { HeadersFunction } from "react-router";
 import { useLocation, useRouteLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { PlanStatus } from "@prisma/client";
+import { buildEmbeddedSearch } from "../lib/embedded-search";
+import type { ReadinessItem } from "../lib/readiness";
 import type { AppLoaderData } from "./app";
 
 export default function Index() {
@@ -9,27 +11,15 @@ export default function Index() {
   const planStatus = appData?.planStatus ?? PlanStatus.none;
   const freeGiftCents = appData?.freeGiftCents ?? 0;
   const freeGiftRemainingCents = appData?.freeGiftRemainingCents ?? 0;
+  const readinessItems: ReadinessItem[] = appData?.readinessItems ?? [];
   const { search } = useLocation();
   const formatUsd = (cents: number) => (cents / 100).toFixed(2);
 
-  const embeddedSearch = (() => {
-    const current = new URLSearchParams(search);
-    const next = new URLSearchParams();
-
-    for (const key of ["host", "embedded", "shop", "locale"] as const) {
-      const value = current.get(key);
-      if (value) {
-        next.set(key, value);
-      }
-    }
-
-    const query = next.toString();
-    return query ? `?${query}` : "";
-  })();
+  const embeddedSearch = buildEmbeddedSearch(search);
 
   return (
     <s-page heading="Dashboard">
-      <s-section heading="Access status">
+      <s-section heading="Plan status">
         {planStatus === PlanStatus.early_access ? (
           <s-banner tone="success">
             <s-text>Early Access is active for your shop.</s-text>
@@ -75,6 +65,41 @@ export default function Index() {
         {planStatus === PlanStatus.none ? (
           <s-link href={`/app/paywall${embeddedSearch}`}>Go to paywall</s-link>
         ) : null}
+      </s-section>
+
+      <s-section heading="Setup checklist">
+        <s-stack direction="block" gap="base">
+          {readinessItems.length === 0 ? (
+            <s-banner tone="warning">
+              <s-text>Setup checklist is unavailable right now.</s-text>
+            </s-banner>
+          ) : null}
+          {readinessItems.map((item) => {
+            const statusLabel =
+              item.status === "complete" ? "Complete" : "Incomplete";
+            const actionHref = item.actionHref
+              ? `${item.actionHref}${embeddedSearch}`
+              : null;
+
+            return (
+              <s-box
+                key={item.key}
+                padding="base"
+                borderWidth="base"
+                borderRadius="base"
+              >
+                <s-stack direction="block" gap="base">
+                  <s-heading>{item.label}</s-heading>
+                  <s-text>Status: {statusLabel}</s-text>
+                  <s-paragraph>{item.hint}</s-paragraph>
+                  {actionHref && item.actionLabel ? (
+                    <s-link href={actionHref}>{item.actionLabel}</s-link>
+                  ) : null}
+                </s-stack>
+              </s-box>
+            );
+          })}
+        </s-stack>
       </s-section>
 
       <s-section heading="Billing overview">

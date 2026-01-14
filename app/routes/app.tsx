@@ -1,11 +1,18 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Outlet, useLoaderData, useLocation, useRouteError } from "react-router";
+import {
+  Outlet,
+  useLoaderData,
+  useLocation,
+  useRouteError,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
 import { authenticate } from "../shopify.server";
 import { getShopIdFromSession } from "../lib/tenancy";
 import { buildEmbeddedRedirectPath, isPaywallPath } from "../lib/routing";
+import { buildEmbeddedSearch } from "../lib/embedded-search";
+import { buildReadinessChecklist, type ReadinessItem } from "../lib/readiness";
 import { getSubscriptionStatus } from "../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
@@ -15,12 +22,14 @@ import {
   getShopPlanStatus,
   isPlanActive,
 } from "../services/shops/plan.server";
+import { getShopReadinessSignals } from "../services/shops/readiness.server";
 import { PlanStatus } from "@prisma/client";
 
 export type AppLoaderData = {
   apiKey: string;
   isDev: boolean;
   planStatus: PlanStatus;
+  readinessItems: ReadinessItem[];
   freeGiftCents: number;
   freeGiftRemainingCents: number;
 };
@@ -85,12 +94,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const plan = await getShopPlan(shopId);
+  const planStatusForUi = plan?.plan_status ?? PlanStatus.none;
+  const readinessSignals = await getShopReadinessSignals(shopId);
+
+  const readinessItems = buildReadinessChecklist({
+    planStatus: planStatusForUi,
+    ...readinessSignals,
+  });
 
   // eslint-disable-next-line no-undef
   const data: AppLoaderData = {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     isDev,
-    planStatus: plan?.plan_status ?? PlanStatus.none,
+    planStatus: planStatusForUi,
+    readinessItems,
     freeGiftCents: plan?.free_usage_gift_cents ?? 0,
     freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
   };
@@ -101,21 +118,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 export default function App() {
   const { apiKey, isDev } = useLoaderData<typeof loader>();
   const { search } = useLocation();
-
-  const embeddedSearch = (() => {
-    const current = new URLSearchParams(search);
-    const next = new URLSearchParams();
-
-    for (const key of ["host", "embedded", "shop", "locale"] as const) {
-      const value = current.get(key);
-      if (value) {
-        next.set(key, value);
-      }
-    }
-
-    const query = next.toString();
-    return query ? `?${query}` : "";
-  })();
+  const embeddedSearch = buildEmbeddedSearch(search);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -127,7 +130,9 @@ export default function App() {
           </s-link>
         ) : null}
         {isDev ? (
-          <s-link href={`/app/dev${embeddedSearch}`}>Billing tools (dev)</s-link>
+          <s-link href={`/app/dev${embeddedSearch}`}>
+            Billing tools (dev)
+          </s-link>
         ) : null}
       </s-app-nav>
       <Outlet />

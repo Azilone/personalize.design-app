@@ -1,4 +1,5 @@
-import type { LoaderFunctionArgs } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import logger from "../lib/logger";
 
@@ -50,16 +51,66 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     if (error instanceof Response) {
       if (shouldLog()) {
+        const contentType = error.headers.get("content-type");
+        const contentSecurityPolicy = error.headers.get(
+          "content-security-policy",
+        );
+        const location = error.headers.get("location");
+
         logger.info(
-          { ...logCtx, status: error.status },
+          {
+            ...logCtx,
+            status: error.status,
+            content_type: contentType,
+            has_csp: Boolean(contentSecurityPolicy),
+            csp_includes_admin: contentSecurityPolicy
+              ? contentSecurityPolicy.includes("admin.shopify.com")
+              : null,
+            has_location: Boolean(location),
+          },
           "Auth exit-iframe responded",
         );
+
+        if (
+          process.env.NODE_ENV === "development" &&
+          process.env.PD_DEBUG_AUTH_BOUNCE_BODY === "1"
+        ) {
+          try {
+            const bodyText = await error.clone().text();
+            logger.info(
+              {
+                ...logCtx,
+                status: error.status,
+                body_preview: bodyText.slice(0, 300),
+              },
+              "Auth exit-iframe body preview",
+            );
+          } catch (bodyError) {
+            const bodyMessage =
+              bodyError instanceof Error
+                ? bodyError.message
+                : String(bodyError);
+            logger.warn(
+              { ...logCtx, status: error.status, err_message: bodyMessage },
+              "Auth exit-iframe body preview failed",
+            );
+          }
+        }
       }
-    } else {
-      const message = error instanceof Error ? error.message : String(error);
-      logger.error({ ...logCtx, err_message: message }, "Auth exit-iframe failed");
+
+      return error;
     }
+
+    const message = error instanceof Error ? error.message : String(error);
+    logger.error(
+      { ...logCtx, err_message: message },
+      "Auth exit-iframe failed",
+    );
 
     throw error;
   }
+};
+
+export const headers: HeadersFunction = (headersArgs) => {
+  return boundary.headers(headersArgs);
 };
