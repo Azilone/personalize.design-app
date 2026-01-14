@@ -19,7 +19,7 @@ export default function AdditionalPage() {
         </s-paragraph>
         <s-paragraph>
           To add a page to the nav, create a route in <code>app/routes</code>{" "}
-          and add a link in <code>app/routes/app.tsx</code>.
+          and add a link in <code>app/routes/app/route.tsx</code>.
         </s-paragraph>
       </s-section>
       <s-section slot="aside" heading="Resources">

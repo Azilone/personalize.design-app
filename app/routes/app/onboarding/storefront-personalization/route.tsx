@@ -12,15 +12,15 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import { storefrontPersonalizationActionSchema } from "../schemas/admin";
-import { getShopReadinessSignals } from "../services/shops/readiness.server";
+import { authenticate } from "../../../../shopify.server";
+import { getShopIdFromSession } from "../../../../lib/tenancy";
+import { buildEmbeddedSearch } from "../../../../lib/embedded-search";
+import { storefrontPersonalizationActionSchema } from "../../../../schemas/admin";
+import { getShopReadinessSignals } from "../../../../services/shops/readiness.server";
 import {
   getStorefrontPersonalizationSettings,
   upsertStorefrontPersonalizationSettings,
-} from "../services/shops/storefront-personalization.server";
+} from "../../../../services/shops/storefront-personalization.server";
 
 const spendSafetyErrorMessage =
   "Before you can enable storefront personalization, set a monthly spending cap and enable paid usage.";
@@ -201,18 +201,20 @@ export default function StorefrontPersonalizationOnboarding() {
                 label="Storefront personalization"
                 name="storefront_personalization_choice"
               >
-                <s-choice value="enabled" selected={defaultChoice === "enabled"}>
+                <s-choice
+                  value="enabled"
+                  selected={defaultChoice === "enabled"}
+                >
                   Enable storefront personalization
                 </s-choice>
-                <s-choice value="disabled" selected={defaultChoice === "disabled"}>
+                <s-choice
+                  value="disabled"
+                  selected={defaultChoice === "disabled"}
+                >
                   Keep disabled
                 </s-choice>
               </s-choice-list>
-              <s-button
-                type="submit"
-                variant="primary"
-                loading={isSubmitting}
-              >
+              <s-button type="submit" variant="primary" loading={isSubmitting}>
                 Save choice
               </s-button>
             </s-stack>
@@ -232,4 +234,3 @@ export default function StorefrontPersonalizationOnboarding() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
-

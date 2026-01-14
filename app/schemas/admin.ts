@@ -102,3 +102,46 @@ export const finishOnboardingActionSchema = z.discriminatedUnion("intent", [
 export type FinishOnboardingActionInput = z.infer<
   typeof finishOnboardingActionSchema
 >;
+
+// Template action schemas
+
+/**
+ * Template variable_names is sent as JSON string to avoid FormData array issues
+ * with Object.fromEntries. Parse and validate in the route action.
+ */
+const templateCreateSchema = z.object({
+  intent: z.literal("template_create"),
+  template_name: z.string().min(1, "Template name is required"),
+  text_input_enabled: z.enum(["true", "false"]).default("false"),
+  prompt: z
+    .string()
+    .max(5000, "Prompt must be less than 5000 characters")
+    .optional(),
+  // Variable names as JSON array string (FormData workaround)
+  variable_names_json: z.string().default("[]"),
+});
+
+const templateUpdateSchema = z.object({
+  intent: z.literal("template_update"),
+  template_id: z.string().min(1, "Template ID is required"),
+  template_name: z.string().min(1, "Template name is required"),
+  text_input_enabled: z.enum(["true", "false"]).default("false"),
+  prompt: z
+    .string()
+    .max(5000, "Prompt must be less than 5000 characters")
+    .optional(),
+  variable_names_json: z.string().default("[]"),
+});
+
+const templateDeleteSchema = z.object({
+  intent: z.literal("template_delete"),
+  template_id: z.string().min(1, "Template ID is required"),
+});
+
+export const templateActionSchema = z.discriminatedUnion("intent", [
+  templateCreateSchema,
+  templateUpdateSchema,
+  templateDeleteSchema,
+]);
+
+export type TemplateActionInput = z.infer<typeof templateActionSchema>;

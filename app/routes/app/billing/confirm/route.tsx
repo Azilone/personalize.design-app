@@ -1,17 +1,17 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedRedirectPath } from "../lib/routing";
-import { getSubscriptionStatus } from "../services/shopify/billing.server";
+import { authenticate } from "../../../../shopify.server";
+import { getShopIdFromSession } from "../../../../lib/tenancy";
+import { buildEmbeddedRedirectPath } from "../../../../lib/routing";
+import { getSubscriptionStatus } from "../../../../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
   activateStandardPlan,
   clearPlanToNone,
   getShopPlan,
-} from "../services/shops/plan.server";
+} from "../../../../services/shops/plan.server";
 import { PlanStatus } from "@prisma/client";
-import logger from "../lib/logger";
+import logger from "../../../../lib/logger";
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 

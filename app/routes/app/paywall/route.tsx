@@ -12,20 +12,23 @@ import {
 } from "react-router";
 import { useEffect } from "react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { paywallActionSchema } from "../schemas/admin";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedRedirectPath } from "../lib/routing";
-import { inviteCodeErrorMessage, isInviteCodeValid } from "../lib/invite-code";
-import logger from "../lib/logger";
-import { captureEvent } from "../lib/posthog.server";
+import { authenticate } from "../../../shopify.server";
+import { paywallActionSchema } from "../../../schemas/admin";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import { buildEmbeddedRedirectPath } from "../../../lib/routing";
+import {
+  inviteCodeErrorMessage,
+  isInviteCodeValid,
+} from "../../../lib/invite-code";
+import logger from "../../../lib/logger";
+import { captureEvent } from "../../../lib/posthog.server";
 import {
   buildStandardSubscriptionInput,
   createStandardSubscription,
   buildEarlyAccessSubscriptionInput,
   createEarlyAccessSubscription,
   getSubscriptionStatus,
-} from "../services/shopify/billing.server";
+} from "../../../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
   activateStandardPlan,
@@ -39,7 +42,7 @@ import {
   resetPlanForDev,
   setEarlyAccessPlanPending,
   setStandardPlanPending,
-} from "../services/shops/plan.server";
+} from "../../../services/shops/plan.server";
 import { PlanStatus } from "@prisma/client";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {

@@ -87,3 +87,38 @@ model ShopPrintifyIntegration {
 
   @@map("shop_printify_integrations")
 }
+
+enum DesignTemplateStatus {
+  draft
+  published
+}
+
+model DesignTemplate {
+  id                 String               @id @default(cuid())
+  shop_id            String
+  template_name      String
+  photo_required     Boolean              @default(true)
+  text_input_enabled Boolean              @default(false)
+  prompt             String?
+  status             DesignTemplateStatus @default(draft)
+  created_at         DateTime             @default(now())
+  updated_at         DateTime             @updatedAt
+
+  variables DesignTemplateVariable[]
+
+  @@index([shop_id])
+  @@map("design_templates")
+}
+
+model DesignTemplateVariable {
+  id          String         @id @default(cuid())
+  template_id String
+  name        String
+  created_at  DateTime       @default(now())
+  updated_at  DateTime       @updatedAt
+
+  template DesignTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@unique([template_id, name])
+  @@map("design_template_variables")
+}

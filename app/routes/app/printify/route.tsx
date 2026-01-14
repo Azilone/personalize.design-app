@@ -13,26 +13,26 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import logger from "../lib/logger";
-import { printifyActionSchema } from "../schemas/admin";
+import { authenticate } from "../../../shopify.server";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import { buildEmbeddedSearch } from "../../../lib/embedded-search";
+import logger from "../../../lib/logger";
+import { printifyActionSchema } from "../../../schemas/admin";
 import {
   PrintifyRequestError,
   listPrintifyShops,
   type PrintifyShopChoice,
-} from "../services/printify/client.server";
+} from "../../../services/printify/client.server";
 import {
   encryptPrintifyToken,
   decryptPrintifyToken,
-} from "../services/printify/token-encryption.server";
+} from "../../../services/printify/token-encryption.server";
 import {
   getPrintifyIntegrationWithToken,
   upsertPrintifyIntegration,
   clearPrintifyIntegration,
   type PrintifyIntegration,
-} from "../services/printify/integration.server";
+} from "../../../services/printify/integration.server";
 
 type LoaderData = {
   integration: Omit<PrintifyIntegration, "createdAt" | "updatedAt"> | null;
@@ -116,7 +116,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     } satisfies LoaderData;
   }
 };
-
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);

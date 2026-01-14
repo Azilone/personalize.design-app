@@ -10,12 +10,15 @@ import type { ShouldRevalidateFunction } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedRedirectPath, isPaywallPath } from "../lib/routing";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import { buildReadinessChecklist, type ReadinessItem } from "../lib/readiness";
-import { getSubscriptionStatus } from "../services/shopify/billing.server";
+import { authenticate } from "../../shopify.server";
+import { getShopIdFromSession } from "../../lib/tenancy";
+import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
+import { buildEmbeddedSearch } from "../../lib/embedded-search";
+import {
+  buildReadinessChecklist,
+  type ReadinessItem,
+} from "../../lib/readiness";
+import { getSubscriptionStatus } from "../../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
   activateStandardPlan,
@@ -23,11 +26,11 @@ import {
   getShopPlan,
   getShopPlanStatus,
   isPlanActive,
-} from "../services/shops/plan.server";
+} from "../../services/shops/plan.server";
 import {
   getShopReadinessSignals,
   type ShopReadinessSignals,
-} from "../services/shops/readiness.server";
+} from "../../services/shops/readiness.server";
 import { PlanStatus } from "@prisma/client";
 
 export type AppLoaderData = {
@@ -168,6 +171,7 @@ export default function App() {
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
         <Link to={`/app${embeddedSearch}`}>Setup</Link>
+        <Link to={`/app/templates${embeddedSearch}`}>Templates</Link>
         {isDev ? (
           <Link to={`/app/additional${embeddedSearch}`}>Sandbox (dev)</Link>
         ) : null}

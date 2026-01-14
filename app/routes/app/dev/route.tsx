@@ -10,17 +10,20 @@ import {
   useRouteLoaderData,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import { devBillingActionSchema } from "../schemas/admin";
-import { buildEmbeddedRedirectPath } from "../lib/routing";
-import { getShopPlan, resetPlanForDev } from "../services/shops/plan.server";
-import { cancelSubscription } from "../services/shopify/billing.server";
-import { resetOnboardingForDev } from "../services/shops/onboarding-reset.server";
-import logger from "../lib/logger";
-import { captureEvent } from "../lib/posthog.server";
-import type { AppLoaderData } from "./app";
+import { authenticate } from "../../../shopify.server";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import { buildEmbeddedSearch } from "../../../lib/embedded-search";
+import { devBillingActionSchema } from "../../../schemas/admin";
+import { buildEmbeddedRedirectPath } from "../../../lib/routing";
+import {
+  getShopPlan,
+  resetPlanForDev,
+} from "../../../services/shops/plan.server";
+import { cancelSubscription } from "../../../services/shopify/billing.server";
+import { resetOnboardingForDev } from "../../../services/shops/onboarding-reset.server";
+import logger from "../../../lib/logger";
+import { captureEvent } from "../../../lib/posthog.server";
+import type { AppLoaderData } from "../route";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (process.env.NODE_ENV !== "development") {

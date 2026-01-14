@@ -9,13 +9,16 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { PlanStatus } from "@prisma/client";
-import { authenticate } from "../shopify.server";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { canFinishOnboarding, type ReadinessItem } from "../lib/readiness";
-import { finishOnboardingActionSchema } from "../schemas/admin";
-import { getShopReadinessSignals } from "../services/shops/readiness.server";
-import type { AppLoaderData } from "./app";
+import { authenticate } from "../../../shopify.server";
+import { buildEmbeddedSearch } from "../../../lib/embedded-search";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import {
+  canFinishOnboarding,
+  type ReadinessItem,
+} from "../../../lib/readiness";
+import { finishOnboardingActionSchema } from "../../../schemas/admin";
+import { getShopReadinessSignals } from "../../../services/shops/readiness.server";
+import type { AppLoaderData } from "../route";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -109,8 +112,8 @@ export default function Index() {
               <s-stack direction="inline" gap="small">
                 <s-badge tone="critical">Locked</s-badge>
                 <s-text>
-                  Access is locked. Visit the paywall to subscribe or unlock Early
-                  Access.
+                  Access is locked. Visit the paywall to subscribe or unlock
+                  Early Access.
                 </s-text>
               </s-stack>
             </s-banner>
@@ -120,8 +123,8 @@ export default function Index() {
               <s-stack direction="inline" gap="small">
                 <s-badge tone="warning">Pending</s-badge>
                 <s-text>
-                  Your Standard plan is pending. Please confirm the subscription in
-                  Shopify.
+                  Your Standard plan is pending. Please confirm the subscription
+                  in Shopify.
                 </s-text>
               </s-stack>
             </s-banner>
@@ -146,7 +149,9 @@ export default function Index() {
               : null}
           </s-paragraph>
           {planStatus === PlanStatus.none ? (
-            <s-link href={`/app/paywall${embeddedSearch}`}>Go to paywall</s-link>
+            <s-link href={`/app/paywall${embeddedSearch}`}>
+              Go to paywall
+            </s-link>
           ) : null}
         </s-stack>
       </s-section>
@@ -201,7 +206,9 @@ export default function Index() {
             before finishing onboarding.
           </s-paragraph>
           {!readinessSignals?.printifyConnected ? (
-            <s-link href={`/app/printify${embeddedSearch}`}>Connect Printify</s-link>
+            <s-link href={`/app/printify${embeddedSearch}`}>
+              Connect Printify
+            </s-link>
           ) : null}
           <Form method="post">
             <input type="hidden" name="intent" value="finish_onboarding" />
@@ -220,8 +227,8 @@ export default function Index() {
       <s-section heading="Billing overview">
         <s-stack direction="block" gap="small">
           <s-paragraph>
-            Free AI usage gift: ${formatUsd(freeGiftRemainingCents)} remaining (of
-            ${formatUsd(freeGiftCents)}).
+            Free AI usage gift: ${formatUsd(freeGiftRemainingCents)} remaining
+            (of ${formatUsd(freeGiftCents)}).
           </s-paragraph>
           <s-paragraph>
             Usage charges apply after the gift is used. Standard plan trial does
@@ -236,4 +243,3 @@ export default function Index() {
 export const headers: HeadersFunction = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
-

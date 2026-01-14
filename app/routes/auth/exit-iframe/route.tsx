@@ -1,7 +1,7 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import logger from "../lib/logger";
+import { authenticate } from "../../../shopify.server";
+import logger from "../../../lib/logger";
 
 const shouldLog = () =>
   process.env.NODE_ENV === "development" ||

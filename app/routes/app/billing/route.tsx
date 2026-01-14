@@ -13,15 +13,15 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { authenticate } from "../shopify.server";
-import { getShopIdFromSession } from "../lib/tenancy";
-import { buildEmbeddedSearch } from "../lib/embedded-search";
-import logger from "../lib/logger";
-import { spendSafetyActionSchema } from "../schemas/admin";
+import { authenticate } from "../../../shopify.server";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import { buildEmbeddedSearch } from "../../../lib/embedded-search";
+import logger from "../../../lib/logger";
+import { spendSafetyActionSchema } from "../../../schemas/admin";
 import {
   getSpendSafetySettings,
   upsertSpendSafetySettings,
-} from "../services/shops/spend-safety.server";
+} from "../../../services/shops/spend-safety.server";
 
 const DEFAULT_MONTHLY_CAP_CENTS = 1000;
 
