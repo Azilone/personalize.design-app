@@ -64,3 +64,12 @@ model ShopSpendSafety {
 
   @@map("shop_spend_safety")
 }
+
+model ShopStorefrontPersonalization {
+  shop_id                             String   @id
+  storefront_personalization_enabled  Boolean  @default(false)
+  created_at                          DateTime @default(now())
+  updated_at                          DateTime @updatedAt
+
+  @@map("shop_storefront_personalization")
+}

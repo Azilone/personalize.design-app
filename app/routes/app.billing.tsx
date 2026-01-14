@@ -5,6 +5,7 @@ import type {
 } from "react-router";
 import {
   Form,
+  Link,
   data,
   useActionData,
   useLoaderData,
@@ -174,7 +175,7 @@ export default function BillingSettings() {
   const navigation = useNavigation();
   const { search } = useLocation();
   const embeddedSearch = buildEmbeddedSearch(search);
-  const dashboardHref = `/app${embeddedSearch}`;
+  const setupHref = `/app${embeddedSearch}`;
 
   const errorMessage =
     actionData && typeof actionData === "object" && "error" in actionData
@@ -251,7 +252,7 @@ export default function BillingSettings() {
               </s-button>
             </s-stack>
           </Form>
-          <s-link href={dashboardHref}>Back to dashboard</s-link>
+          <Link to={setupHref}>Back to setup</Link>
         </s-stack>
       </s-section>
     </s-page>

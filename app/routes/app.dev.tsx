@@ -1,61 +1,26 @@
-import type {
-  ActionFunctionArgs,
-  HeadersFunction,
-  LoaderFunctionArgs,
-} from "react-router";
 import {
+  ActionFunctionArgs,
   Form,
+  HeadersFunction,
+  Link,
   data,
   useActionData,
-  useLoaderData,
+  useLocation,
   useRouteError,
+  useRouteLoaderData,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getShopIdFromSession } from "../lib/tenancy";
+import { buildEmbeddedSearch } from "../lib/embedded-search";
 import { devBillingActionSchema } from "../schemas/admin";
 import { buildEmbeddedRedirectPath } from "../lib/routing";
-import {
-  getShopPlan,
-  resetPlanForDev,
-} from "../services/shops/plan.server";
+import { getShopPlan, resetPlanForDev } from "../services/shops/plan.server";
 import { cancelSubscription } from "../services/shopify/billing.server";
+import { resetOnboardingForDev } from "../services/shops/onboarding-reset.server";
 import logger from "../lib/logger";
 import { captureEvent } from "../lib/posthog.server";
-
-export const loader = async ({ request }: LoaderFunctionArgs) => {
-  if (process.env.NODE_ENV !== "development") {
-    throw new Response("Not found", { status: 404 });
-  }
-
-  const url = new URL(request.url);
-  const showDanger =
-    url.searchParams.get("danger") === "1" ||
-    url.searchParams.get("danger") === "true";
-
-  const { session } = await authenticate.admin(request);
-  const shopId = getShopIdFromSession(session);
-  const plan = await getShopPlan(shopId);
-
-  const embeddedSearchParams = new URLSearchParams();
-  for (const key of ["host", "embedded", "shop", "locale"] as const) {
-    const value = url.searchParams.get(key);
-    if (value) {
-      embeddedSearchParams.set(key, value);
-    }
-  }
-
-  return {
-    shopId,
-    planStatus: plan?.plan_status ?? null,
-    subscriptionId: plan?.shopify_subscription_id ?? null,
-    subscriptionStatus: plan?.shopify_subscription_status ?? null,
-    showDanger,
-    embeddedSearch: embeddedSearchParams.toString()
-      ? `?${embeddedSearchParams.toString()}`
-      : "",
-  };
-};
+import type { AppLoaderData } from "./app";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   if (process.env.NODE_ENV !== "development") {
@@ -69,11 +34,27 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopId = getShopIdFromSession(session);
   const formData = Object.fromEntries(await request.formData());
   const parsed = devBillingActionSchema.safeParse(formData);
+  const url = new URL(request.url);
+  const showDanger =
+    url.searchParams.get("danger") === "1" ||
+    url.searchParams.get("danger") === "true";
 
   if (!parsed.success) {
     return data(
       { error: { code: "invalid_request", message: "Invalid request." } },
       { status: 400 },
+    );
+  }
+
+  if (!showDanger) {
+    return data(
+      {
+        error: {
+          code: "danger_required",
+          message: "Enable danger actions before using dev resets.",
+        },
+      },
+      { status: 403 },
     );
   }
 
@@ -138,6 +119,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(buildEmbeddedRedirectPath(request, "/app/paywall"));
   }
 
+  if (parsed.data.intent === "dev_onboarding_reset") {
+    captureEvent("dev.onboarding_reset", { shop_id: shopId });
+    await resetOnboardingForDev(shopId);
+    return redirect(buildEmbeddedRedirectPath(request, "/app"));
+  }
+
   return data(
     { error: { code: "unsupported_intent", message: "Unsupported action." } },
     { status: 400 },
@@ -145,19 +132,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function DevToolsBilling() {
-  const {
-    shopId,
-    planStatus,
-    subscriptionId,
-    subscriptionStatus,
-    showDanger,
-    embeddedSearch,
-  } = useLoaderData<typeof loader>();
+  const appData = useRouteLoaderData<AppLoaderData>("routes/app");
+  const { search } = useLocation();
   const actionData = useActionData<typeof action>();
-  const dangerSearch = embeddedSearch ? `${embeddedSearch}&danger=1` : "?danger=1";
+  const embeddedSearch = buildEmbeddedSearch(search);
+  const dangerSearch = embeddedSearch
+    ? `${embeddedSearch}&danger=1`
+    : "?danger=1";
+  const searchParams = new URLSearchParams(search);
+  const showDanger =
+    searchParams.get("danger") === "1" || searchParams.get("danger") === "true";
+  const shopId = appData?.shopId ?? "";
+  const planStatus = appData?.planStatus ?? null;
+  const subscriptionId = appData?.subscriptionId ?? null;
+  const subscriptionStatus = appData?.subscriptionStatus ?? null;
 
   return (
-    <s-page heading="Billing tools (dev)">
+    <s-page heading="Dev tools (dev)">
       <s-section heading="Current state">
         <s-paragraph>
           <strong>Shop:</strong> {shopId}
@@ -181,12 +172,12 @@ export default function DevToolsBilling() {
         ) : null}
 
         <s-paragraph>
-          Use these actions to re-test the paywall and switching plans on a dev
+          Use these actions to re-test onboarding and billing flows on a dev
           store.
         </s-paragraph>
 
         <s-box padding="base">
-          <s-link href={`/app/paywall${embeddedSearch}`}>Go to paywall</s-link>
+          <Link to={`/app/paywall${embeddedSearch}`}>Go to paywall</Link>
         </s-box>
 
         <s-paragraph>
@@ -196,14 +187,32 @@ export default function DevToolsBilling() {
           <s-banner tone="warning">
             <s-text>
               Destructive buttons are disabled.{" "}
-              <s-link href={`/app/dev${dangerSearch}`}>Enable danger actions</s-link>.
+              <Link to={`/app/dev${dangerSearch}`}>Enable danger actions</Link>.
             </s-text>
           </s-banner>
         ) : null}
 
         <s-box padding="base">
           <Form method="post">
-            <input type="hidden" name="intent" value="dev_cancel_subscription" />
+            <input type="hidden" name="intent" value="dev_onboarding_reset" />
+            <s-button disabled={!showDanger} tone="critical" type="submit">
+              Reset onboarding state (spend safety + storefront personalization)
+            </s-button>
+          </Form>
+          <s-paragraph>
+            This resets onboarding completion for the current shop so you can
+            re-test the setup checklist. Printify reset will be added when the
+            integration ships.
+          </s-paragraph>
+        </s-box>
+
+        <s-box padding="base">
+          <Form method="post">
+            <input
+              type="hidden"
+              name="intent"
+              value="dev_cancel_subscription"
+            />
             <s-button disabled={!showDanger} tone="critical" type="submit">
               Cancel subscription on Shopify + reset local state
             </s-button>

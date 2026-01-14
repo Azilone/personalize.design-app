@@ -127,7 +127,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   } catch (error) {
     if (error instanceof Response) {
       const contentType = error.headers.get("content-type");
-      const isHtmlResponse = Boolean(contentType?.includes("text/html"));
 
       if (shouldLog()) {
         const contentSecurityPolicy = error.headers.get(

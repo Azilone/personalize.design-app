@@ -1,10 +1,12 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import {
+  Link,
   Outlet,
   useLoaderData,
   useLocation,
   useRouteError,
 } from "react-router";
+import type { ShouldRevalidateFunction } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -28,7 +30,10 @@ import { PlanStatus } from "@prisma/client";
 export type AppLoaderData = {
   apiKey: string;
   isDev: boolean;
+  shopId: string;
   planStatus: PlanStatus;
+  subscriptionId: string | null;
+  subscriptionStatus: string | null;
   readinessItems: ReadinessItem[];
   freeGiftCents: number;
   freeGiftRemainingCents: number;
@@ -85,6 +90,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const isDevToolsPath = pathname === "/app/dev" || pathname === "/app/dev/";
   const allowWhenLocked = isPaywallPath(pathname) || (isDev && isDevToolsPath);
 
+  if (!isDev && isDevToolsPath) {
+    throw new Response("Not found", { status: 404 });
+  }
+
   if (!hasAccess && !allowWhenLocked) {
     return redirect(buildEmbeddedRedirectPath(request, "/app/paywall"));
   }
@@ -106,13 +115,43 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const data: AppLoaderData = {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     isDev,
+    shopId,
     planStatus: planStatusForUi,
+    subscriptionId: plan?.shopify_subscription_id ?? null,
+    subscriptionStatus: plan?.shopify_subscription_status ?? null,
     readinessItems,
     freeGiftCents: plan?.free_usage_gift_cents ?? 0,
     freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
   };
 
   return data;
+};
+
+export const shouldRevalidate: ShouldRevalidateFunction = ({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}) => {
+  if (formMethod) {
+    return defaultShouldRevalidate;
+  }
+
+  const navigatingWithinApp =
+    currentUrl.pathname.startsWith("/app") &&
+    nextUrl.pathname.startsWith("/app");
+  const paywallTransition =
+    isPaywallPath(currentUrl.pathname) || isPaywallPath(nextUrl.pathname);
+
+  if (
+    navigatingWithinApp &&
+    !paywallTransition &&
+    currentUrl.pathname !== nextUrl.pathname
+  ) {
+    return false;
+  }
+
+  return defaultShouldRevalidate;
 };
 
 export default function App() {
@@ -123,16 +162,12 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <s-link href={`/app${embeddedSearch}`}>Dashboard</s-link>
+        <Link to={`/app${embeddedSearch}`}>Setup</Link>
         {isDev ? (
-          <s-link href={`/app/additional${embeddedSearch}`}>
-            Sandbox (dev)
-          </s-link>
+          <Link to={`/app/additional${embeddedSearch}`}>Sandbox (dev)</Link>
         ) : null}
         {isDev ? (
-          <s-link href={`/app/dev${embeddedSearch}`}>
-            Billing tools (dev)
-          </s-link>
+          <Link to={`/app/dev${embeddedSearch}`}>Dev tools (dev)</Link>
         ) : null}
       </s-app-nav>
       <Outlet />

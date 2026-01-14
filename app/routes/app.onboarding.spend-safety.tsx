@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLocation } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 import { getShopIdFromSession } from "../lib/tenancy";
@@ -21,6 +21,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function SpendSafetyOnboarding() {
   const { search } = useLocation();
+  const navigate = useNavigate();
   const embeddedSearch = buildEmbeddedSearch(search);
   const billingHref = `/app/billing${embeddedSearch}`;
 
@@ -60,10 +61,7 @@ export default function SpendSafetyOnboarding() {
               amount that can be charged in a month.
             </s-list-item>
           </s-unordered-list>
-          <s-button
-            variant="primary"
-            onClick={() => window.open(billingHref, "_top")}
-          >
+          <s-button variant="primary" onClick={() => navigate(billingHref)}>
             Configure spend safety
           </s-button>
         </s-stack>

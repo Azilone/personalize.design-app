@@ -34,9 +34,14 @@ const devCancelSubscriptionSchema = z.object({
   intent: z.literal("dev_cancel_subscription"),
 });
 
+const devOnboardingResetSchema = z.object({
+  intent: z.literal("dev_onboarding_reset"),
+});
+
 export const devBillingActionSchema = z.discriminatedUnion("intent", [
   devBillingResetSchema,
   devCancelSubscriptionSchema,
+  devOnboardingResetSchema,
 ]);
 
 export type DevBillingActionInput = z.infer<typeof devBillingActionSchema>;
@@ -52,3 +57,29 @@ export const spendSafetyActionSchema = z.discriminatedUnion("intent", [
 ]);
 
 export type SpendSafetyActionInput = z.infer<typeof spendSafetyActionSchema>;
+
+const storefrontPersonalizationSchema = z.object({
+  intent: z.literal("storefront_personalization_choice"),
+  storefront_personalization_choice: z.enum(["enabled", "disabled"]),
+});
+
+export const storefrontPersonalizationActionSchema = z.discriminatedUnion(
+  "intent",
+  [storefrontPersonalizationSchema],
+);
+
+export type StorefrontPersonalizationActionInput = z.infer<
+  typeof storefrontPersonalizationActionSchema
+>;
+
+const finishOnboardingSchema = z.object({
+  intent: z.literal("finish_onboarding"),
+});
+
+export const finishOnboardingActionSchema = z.discriminatedUnion("intent", [
+  finishOnboardingSchema,
+]);
+
+export type FinishOnboardingActionInput = z.infer<
+  typeof finishOnboardingActionSchema
+>;

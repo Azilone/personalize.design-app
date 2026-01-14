@@ -42,8 +42,13 @@ export type ReadinessChecklistInput = {
   planStatus: PlanStatus;
   printifyConnected: boolean;
   storefrontPersonalizationEnabled: boolean;
+  storefrontPersonalizationConfirmed: boolean;
   spendSafetyConfigured: boolean;
 };
+
+export const canFinishOnboarding = (
+  input: Pick<ReadinessChecklistInput, "storefrontPersonalizationConfirmed">,
+): boolean => input.storefrontPersonalizationConfirmed;
 
 export const buildReadinessChecklist = (
   input: ReadinessChecklistInput,
@@ -72,18 +77,24 @@ export const buildReadinessChecklist = (
     {
       key: "storefront_personalization",
       label: "Storefront personalization",
-      status: input.storefrontPersonalizationEnabled
+      status: input.storefrontPersonalizationConfirmed
         ? "complete"
         : "incomplete",
-      hint: input.storefrontPersonalizationEnabled
-        ? "Personalization is enabled."
-        : "Enable personalization in store settings (coming soon).",
-      actionHref: input.storefrontPersonalizationEnabled
-        ? undefined
-        : "/app/storefront",
-      actionLabel: input.storefrontPersonalizationEnabled
-        ? undefined
-        : "Review storefront settings",
+      hint: input.storefrontPersonalizationConfirmed
+        ? input.storefrontPersonalizationEnabled
+          ? "Personalization is enabled."
+          : "Personalization is disabled. Use the setup guide to update it anytime."
+        : "Enable storefront personalization to let buyers customize products (or keep it disabled).",
+      actionHref: input.storefrontPersonalizationConfirmed
+        ? input.storefrontPersonalizationEnabled
+          ? undefined
+          : "/app/onboarding/storefront-personalization"
+        : "/app/onboarding/storefront-personalization",
+      actionLabel: input.storefrontPersonalizationConfirmed
+        ? input.storefrontPersonalizationEnabled
+          ? undefined
+          : "Review storefront setting"
+        : "Open setup guide",
     },
     {
       key: "spend_safety",

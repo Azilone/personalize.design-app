@@ -8,6 +8,7 @@ import {
   data,
   useActionData,
   useLoaderData,
+  useNavigate,
   useNavigation,
 } from "react-router";
 import { useEffect } from "react";
@@ -507,6 +508,7 @@ export default function Paywall() {
   const { planStatus, confirmationUrl, subscriptionStatus, isDev } =
     useLoaderData<typeof loader>();
   const navigation = useNavigation();
+  const navigate = useNavigate();
   const isInviteSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "invite_unlock";
@@ -542,8 +544,8 @@ export default function Paywall() {
       return;
     }
 
-    window.open(url, "_top");
-  }, [actionData]);
+    navigate(url);
+  }, [actionData, navigate]);
 
   return (
     <s-page heading="Paywall – Access Required">
@@ -567,7 +569,7 @@ export default function Paywall() {
               {confirmationUrl ? (
                 <s-button
                   variant="primary"
-                  onClick={() => window.open(confirmationUrl, "_top")}
+                  onClick={() => navigate(confirmationUrl)}
                 >
                   Continue on Shopify
                 </s-button>
@@ -591,7 +593,11 @@ export default function Paywall() {
               </Form>
               {isDev ? (
                 <Form method="post">
-                  <input type="hidden" name="intent" value="reset_billing_dev" />
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="reset_billing_dev"
+                  />
                   <s-button
                     type="submit"
                     variant="tertiary"
@@ -605,15 +611,19 @@ export default function Paywall() {
           ) : null}
           <s-box padding="base" borderWidth="base" borderRadius="base">
             <s-heading>Standard Plan</s-heading>
-            <s-paragraph>$19/month + $0.25 per successful personalized order line</s-paragraph>
+            <s-paragraph>
+              $19/month + $0.25 per successful personalized order line
+            </s-paragraph>
             <s-paragraph>
               Includes a 7-day free trial for the $19/month access fee.
             </s-paragraph>
             <s-paragraph>
-              The trial does not waive AI usage charges or the $0.25 per order line fee.
+              The trial does not waive AI usage charges or the $0.25 per order
+              line fee.
             </s-paragraph>
             <s-paragraph>
-              Standard and Early Access both include a one-time $1.00 free AI usage gift.
+              Standard and Early Access both include a one-time $1.00 free AI
+              usage gift.
             </s-paragraph>
             <Form method="post">
               <input type="hidden" name="intent" value="subscribe" />
@@ -630,7 +640,8 @@ export default function Paywall() {
           <s-box padding="base" borderWidth="base" borderRadius="base">
             <s-heading>Early Access (Invite Code)</s-heading>
             <s-paragraph>
-              Unlock Early Access with your invite code to access $0/month pricing during the program.
+              Unlock Early Access with your invite code to access $0/month
+              pricing during the program.
             </s-paragraph>
             <Form method="post">
               <input type="hidden" name="intent" value="invite_unlock" />

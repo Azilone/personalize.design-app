@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { PlanStatus } from "@prisma/client";
 import {
   buildReadinessChecklist,
+  canFinishOnboarding,
   type ReadinessChecklistInput,
 } from "./readiness";
 
@@ -10,6 +11,7 @@ const build = (overrides: Partial<ReadinessChecklistInput>) => {
     planStatus: PlanStatus.none,
     printifyConnected: false,
     storefrontPersonalizationEnabled: false,
+    storefrontPersonalizationConfirmed: false,
     spendSafetyConfigured: false,
     ...overrides,
   });
@@ -59,6 +61,7 @@ describe("buildReadinessChecklist", () => {
     const items = build({
       planStatus: PlanStatus.standard,
       storefrontPersonalizationEnabled: true,
+      storefrontPersonalizationConfirmed: true,
     });
     const item = items.find(
       (candidate) => candidate.key === "storefront_personalization",
@@ -66,6 +69,23 @@ describe("buildReadinessChecklist", () => {
 
     expect(item?.status).toBe("complete");
     expect(item?.actionHref).toBeUndefined();
+  });
+
+  it("marks storefront personalization as complete when disabled", () => {
+    const items = build({
+      planStatus: PlanStatus.standard,
+      storefrontPersonalizationEnabled: false,
+      storefrontPersonalizationConfirmed: true,
+    });
+    const item = items.find(
+      (candidate) => candidate.key === "storefront_personalization",
+    );
+
+    expect(item?.status).toBe("complete");
+    expect(item?.actionHref).toBe("/app/onboarding/storefront-personalization");
+    expect(item?.hint).toBe(
+      "Personalization is disabled. Use the setup guide to update it anytime.",
+    );
   });
 
   it("marks spend safety as complete when configured", () => {
@@ -90,7 +110,7 @@ describe("buildReadinessChecklist", () => {
     expect(
       items.find((candidate) => candidate.key === "storefront_personalization")
         ?.actionHref,
-    ).toBe("/app/storefront");
+    ).toBe("/app/onboarding/storefront-personalization");
 
     expect(
       items.find((candidate) => candidate.key === "spend_safety")?.actionHref,
@@ -106,5 +126,19 @@ describe("buildReadinessChecklist", () => {
       "storefront_personalization",
       "spend_safety",
     ]);
+  });
+});
+
+describe("canFinishOnboarding", () => {
+  it("allows finishing when personalization is confirmed", () => {
+    expect(
+      canFinishOnboarding({ storefrontPersonalizationConfirmed: true }),
+    ).toBe(true);
+  });
+
+  it("blocks finishing when personalization is not confirmed", () => {
+    expect(
+      canFinishOnboarding({ storefrontPersonalizationConfirmed: false }),
+    ).toBe(false);
   });
 });
