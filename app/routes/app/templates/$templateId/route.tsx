@@ -30,6 +30,11 @@ import {
   type DesignTemplateDto,
 } from "../../../../services/templates/templates.server";
 import logger from "../../../../lib/logger";
+import {
+  MVP_GENERATION_MODEL_ID,
+  MVP_GENERATION_MODEL_DISPLAY_NAME,
+  MVP_PRICE_USD_PER_GENERATION,
+} from "../../../../lib/generation-settings";
 
 export type LoaderData = {
   template: DesignTemplateDto | null;
@@ -111,8 +116,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
-  const { template_name, text_input_enabled, prompt, variable_names_json } =
-    parsed.data;
+  const {
+    template_name,
+    text_input_enabled,
+    prompt,
+    variable_names_json,
+    generation_model_identifier,
+    price_usd_per_generation,
+  } = parsed.data;
 
   // Parse variable names from JSON
   let variableNames: string[] = [];
@@ -169,6 +180,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       photoRequired: true,
       textInputEnabled: text_input_enabled === "true",
       prompt: prompt || null,
+      generationModelIdentifier: generation_model_identifier ?? null,
+      priceUsdPerGeneration: price_usd_per_generation ?? null,
       variableNames,
     });
 
@@ -256,6 +269,12 @@ export default function TemplateEditPage() {
   const [variableInput, setVariableInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // Generation settings (MVP: use constants, read persisted from template)
+  const generationModel =
+    template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
+  const generationPrice =
+    template?.priceUsdPerGeneration ?? MVP_PRICE_USD_PER_GENERATION;
+
   // Serialize variable names to JSON for form submission
   const variableNamesJson = JSON.stringify(variableNames);
 
@@ -336,6 +355,16 @@ export default function TemplateEditPage() {
               type="hidden"
               name="variable_names_json"
               value={variableNamesJson}
+            />
+            <input
+              type="hidden"
+              name="generation_model_identifier"
+              value={generationModel}
+            />
+            <input
+              type="hidden"
+              name="price_usd_per_generation"
+              value={generationPrice}
             />
 
             <s-stack direction="block" gap="base">
@@ -444,6 +473,78 @@ export default function TemplateEditPage() {
                   Use {"{{variable_name}}"} to reference your defined variables.
                 </s-text>
               </s-stack>
+
+              <s-divider />
+
+              {/* Generation Settings Section (AC#1, AC#2) */}
+              <s-stack direction="block" gap="small">
+                <s-text>
+                  <strong>Generation settings</strong>
+                </s-text>
+                <s-text color="subdued">
+                  Configure the AI model used to generate images.
+                </s-text>
+              </s-stack>
+
+              <s-stack direction="block" gap="small">
+                <label htmlFor="generation_model">
+                  <strong>Model</strong>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    id="generation_model"
+                    value={generationModel}
+                    disabled
+                    style={{
+                      width: "100%",
+                      padding: "8px 32px 8px 12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
+                      fontFamily: "inherit",
+                      fontSize: "inherit",
+                      backgroundColor: "#f5f5f5",
+                      cursor: "not-allowed",
+                      appearance: "none",
+                    }}
+                  >
+                    <option value={MVP_GENERATION_MODEL_ID}>
+                      {MVP_GENERATION_MODEL_DISPLAY_NAME}
+                    </option>
+                  </select>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "#666",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </div>
+                <s-text color="subdued">
+                  MVP: Single model available. More options coming soon.
+                </s-text>
+              </s-stack>
+
+              <s-banner tone="info">
+                <s-stack direction="block" gap="small">
+                  <s-text>
+                    <strong>
+                      ${generationPrice.toFixed(2)} per generated image
+                    </strong>
+                  </s-text>
+                  <s-text color="subdued">
+                    Billable actions: generate, regenerate, remove background.
+                    Printify mockups are not billed.
+                  </s-text>
+                </s-stack>
+              </s-banner>
+
+              <s-divider />
 
               <s-stack direction="inline" gap="base">
                 <s-button type="submit" variant="primary" loading={isUpdating}>
