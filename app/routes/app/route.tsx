@@ -13,7 +13,6 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { authenticate } from "../../shopify.server";
 import { getShopIdFromSession } from "../../lib/tenancy";
 import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
-import { buildEmbeddedSearch } from "../../lib/embedded-search";
 import {
   buildReadinessChecklist,
   type ReadinessItem,
@@ -47,8 +46,6 @@ export type AppLoaderData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const requestId = crypto.randomUUID();
-  console.log(`[${requestId}] [TRACE] START App shell loader: ${request.url}`);
   const { admin, session, redirect } = await authenticate.admin(request);
   const pathname = new URL(request.url).pathname;
   const shopId = getShopIdFromSession(session);
@@ -134,7 +131,6 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
   };
 
-  console.log(`[${requestId}] [TRACE] END App shell loader: ${request.url}`);
   return data;
 };
 
@@ -152,19 +148,17 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({
 export default function App() {
   const { apiKey, isDev } = useLoaderData<typeof loader>();
   const { search } = useLocation();
-  const embeddedSearch = buildEmbeddedSearch(search);
+  const query = search ? `?${search}` : "";
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <Link to={`/app${embeddedSearch}`}>Setup</Link>
-        <Link to={`/app/templates${embeddedSearch}`}>Templates</Link>
+        <Link to={`/app${query}`}>Setup</Link>
+        <Link to={`/app/templates${query}`}>Templates</Link>
         {isDev ? (
-          <Link to={`/app/additional${embeddedSearch}`}>Sandbox (dev)</Link>
+          <Link to={`/app/additional${query}`}>Sandbox (dev)</Link>
         ) : null}
-        {isDev ? (
-          <Link to={`/app/dev${embeddedSearch}`}>Dev tools (dev)</Link>
-        ) : null}
+        {isDev ? <Link to={`/app/dev${query}`}>Dev tools (dev)</Link> : null}
       </s-app-nav>
       <Outlet />
     </AppProvider>

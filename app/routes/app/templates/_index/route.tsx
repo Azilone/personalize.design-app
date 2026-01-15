@@ -14,18 +14,11 @@ export type LoaderData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  const requestId = crypto.randomUUID();
-  console.log(
-    `[${requestId}] [TRACE] START Templates list loader: ${request.url}`,
-  );
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
 
   const templates = await listTemplates(shopId);
 
-  console.log(
-    `[${requestId}] [TRACE] END Templates list loader: ${request.url}`,
-  );
   return { templates };
 };
 

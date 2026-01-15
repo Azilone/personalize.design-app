@@ -174,18 +174,61 @@ console.log(`[${requestId}] [TRACE] END App shell loader: ${request.url}`);
 
 ---
 
+---
+
+### Test 5: Request Tracing Results & Fix
+
+**Date:** 2026-01-15
+**Finding:** User provided console logs showing two separate requests with different UUIDs:
+
+1. **Request #1** (`c0dd5bd8`): Basic embedded params only
+   - URL: `?host=...&embedded=1&shop=...&locale=fr`
+2. **Request #2** (`3a2c84fa`): Additional App Bridge session params
+   - URL: `?embedded=1&hmac=...&host=...&id_token=...&locale=fr&session=...&shop=...&timestamp=...`
+   - Extra params: `hmac`, `id_token`, `session`, `timestamp`
+
+**Root Cause Confirmed:** Navigation with only embedded params (`host`, `embedded`, `shop`, `locale`) loses Shopify App Bridge session params. App Bridge detects missing/stale session params and triggers a redirect to refresh them, causing:
+
+- Two HTTP requests per navigation
+- Two `authenticate.admin` calls
+- Perceived "double refresh" in UI
+
+**Fix Applied:** Updated app shell navigation to preserve ALL query params, not just embedded ones.
+
+**Files Modified:**
+
+- `app/routes/app/route.tsx` - Changed from `buildEmbeddedSearch()` to full `search` string in navigation
+- `app/routes/app/route.tsx` - Removed unused `buildEmbeddedSearch` import
+- `app/routes/app/route.tsx` - Removed diagnostic trace logs (START/END)
+- `app/routes/app/templates/_index/route.tsx` - Removed diagnostic trace logs (START/END)
+
+**Implementation:**
+
+```tsx
+// Before
+const embeddedSearch = buildEmbeddedSearch(search);
+<Link to={`/app${embeddedSearch}`}>Setup</Link>;
+
+// After
+const query = search ? `?${search}` : "";
+<Link to={`/app${query}`}>Setup</Link>;
+```
+
+**Expected Result:** Single HTTP request per navigation, no double refresh.
+
+**Next:** Test navigation between Setup/Templates to verify only one request hits server.
+
+---
+
 ## Next Steps
 
 - [x] Add detailed client-side timing logs to measure actual refresh duration
-- [ ] **TEST:** Navigate between Setup/Templates and capture console logs with request IDs
-- [ ] Analyze if double auth logs show same request ID (duplicate logging) or different IDs (two requests)
-- [ ] Based on trace results, implement appropriate fix (redirect handling, loader optimization, or App Bridge configuration)
+- [x] **TEST:** Navigate between Setup/Templates and capture console logs with request IDs
+- [x] Analyze if double auth logs show same request ID (duplicate logging) or different IDs (two requests)
+- [x] Based on trace results, implement appropriate fix (redirect handling, loader optimization, or App Bridge configuration)
+- [ ] **TEST:** Navigate between Setup/Templates to verify only one request hits server
 - [ ] Test navigation with different browser (ruling out extension interference)
 - [ ] Test in incognito/private mode
-- [ ] Check Shopify App Bridge version compatibility with React Router v7
-- [ ] Review Shopify React Router template issues for known navigation problems
-- [ ] Test without embedded query params (host, shop, etc.)
-- [ ] Compare behavior between dev mode and production build
 
 ---
 
@@ -209,12 +252,14 @@ npm run dev
 
 ## Notes
 
-- The app uses `buildEmbeddedSearch()` to preserve query params (host, embedded, shop, locale) across navigations. This is critical for embedded apps but may contribute to issue.
+- The app previously used `buildEmbeddedSearch()` to preserve only 4 query params (host, embedded, shop, locale) across navigations. This caused loss of App Bridge session params.
 - All routes correctly use React Router's `<Link>` component as of fix.
 - The `shouldRevalidate` change was committed but did not resolve the issue.
-- Request tracing implemented with unique IDs to distinguish duplicate logging from multiple requests.
-- Test 4 added diagnostic tracing to `app/routes/app/route.tsx` and `app/routes/app/templates/_index/route.tsx`.
+- Request tracing implemented with unique IDs to distinguish duplicate logging from multiple requests (Test 4).
+- Test 5 identified root cause: App Bridge redirect due to missing session params.
+- Fix applied: App shell navigation now preserves ALL query params instead of filtering.
+- Other routes continue to use `buildEmbeddedSearch()` where appropriate (server-side redirects, etc.).
 
 ---
 
-**Last Updated:** 2026-01-15 15:30 UTC
+**Last Updated:** 2026-01-15 17:00 UTC
