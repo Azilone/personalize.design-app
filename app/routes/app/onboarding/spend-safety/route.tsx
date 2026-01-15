@@ -1,5 +1,5 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { useLocation } from "react-router";
+import { Link, useLocation } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../../../../shopify.server";
 import { getShopIdFromSession } from "../../../../lib/tenancy";
@@ -69,10 +69,10 @@ export default function SpendSafetyOnboarding() {
               </s-unordered-list>
             </s-stack>
           </s-card>
-          <s-link href={billingHref}>
+          <Link to={billingHref}>
             <s-button variant="primary">Configure spend safety</s-button>
-          </s-link>
-          <s-link href={setupHref}>Back to setup</s-link>
+          </Link>
+          <Link to={setupHref}>Back to setup</Link>
         </s-stack>
       </s-section>
     </s-page>

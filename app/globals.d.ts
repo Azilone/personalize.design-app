@@ -7,6 +7,5 @@ declare namespace JSX {
     "s-choice": any;
     "s-badge": any;
     "s-card": any;
-    "s-link": any;
   }
 }

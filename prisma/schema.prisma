@@ -94,15 +94,17 @@ enum DesignTemplateStatus {
 }
 
 model DesignTemplate {
-  id                 String               @id @default(cuid())
-  shop_id            String
-  template_name      String
-  photo_required     Boolean              @default(true)
-  text_input_enabled Boolean              @default(false)
-  prompt             String?
-  status             DesignTemplateStatus @default(draft)
-  created_at         DateTime             @default(now())
-  updated_at         DateTime             @updatedAt
+  id                           String               @id @default(cuid())
+  shop_id                      String
+  template_name                String
+  photo_required               Boolean              @default(true)
+  text_input_enabled           Boolean              @default(false)
+  prompt                       String?
+  generation_model_identifier  String?
+  price_usd_per_generation     Decimal?
+  status                       DesignTemplateStatus @default(draft)
+  created_at                   DateTime             @default(now())
+  updated_at                   DateTime             @updatedAt
 
   variables DesignTemplateVariable[]
 

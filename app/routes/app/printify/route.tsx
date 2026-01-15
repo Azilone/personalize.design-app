@@ -6,6 +6,7 @@ import type {
 } from "react-router";
 import {
   Form,
+  Link,
   data,
   useActionData,
   useLoaderData,
@@ -401,7 +402,7 @@ export default function PrintifySetup() {
               </s-button>
             </s-stack>
           </Form>
-          <s-link href={setupHref}>Back to setup</s-link>
+          <Link to={setupHref}>Back to setup</Link>
         </s-stack>
       </s-section>
 

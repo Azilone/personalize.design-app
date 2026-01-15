@@ -1,4 +1,8 @@
 import { z } from "zod";
+import {
+  MVP_GENERATION_MODEL_ID,
+  MVP_PRICE_USD_PER_GENERATION,
+} from "../lib/generation-settings";
 
 const subscribeIntentSchema = z.object({
   intent: z.literal("subscribe"),
@@ -119,6 +123,18 @@ const templateCreateSchema = z.object({
     .optional(),
   // Variable names as JSON array string (FormData workaround)
   variable_names_json: z.string().default("[]"),
+  // Generation settings (MVP: single allowed model)
+  generation_model_identifier: z
+    .literal(MVP_GENERATION_MODEL_ID, {
+      message: `Model must be ${MVP_GENERATION_MODEL_ID}`,
+    })
+    .optional(),
+  price_usd_per_generation: z.coerce
+    .number()
+    .refine((val) => val === MVP_PRICE_USD_PER_GENERATION, {
+      message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
+    })
+    .optional(),
 });
 
 const templateUpdateSchema = z.object({
@@ -131,6 +147,18 @@ const templateUpdateSchema = z.object({
     .max(5000, "Prompt must be less than 5000 characters")
     .optional(),
   variable_names_json: z.string().default("[]"),
+  // Generation settings (MVP: single allowed model)
+  generation_model_identifier: z
+    .literal(MVP_GENERATION_MODEL_ID, {
+      message: `Model must be ${MVP_GENERATION_MODEL_ID}`,
+    })
+    .optional(),
+  price_usd_per_generation: z.coerce
+    .number()
+    .refine((val) => val === MVP_PRICE_USD_PER_GENERATION, {
+      message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
+    })
+    .optional(),
 });
 
 const templateDeleteSchema = z.object({

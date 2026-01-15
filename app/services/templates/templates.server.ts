@@ -7,6 +7,16 @@
 
 import prisma from "../../db.server";
 import type { DesignTemplateStatus } from "@prisma/client";
+import type { Decimal } from "@prisma/client/runtime/library";
+
+// --- Helpers ---
+
+/**
+ * Converts Prisma Decimal to number (DRY helper).
+ */
+function decimalToNumber(value: Decimal | null): number | null {
+  return value ? value.toNumber() : null;
+}
 
 // --- DTOs (camelCase for TS) ---
 
@@ -22,6 +32,8 @@ export type DesignTemplateDto = {
   photoRequired: boolean;
   textInputEnabled: boolean;
   prompt: string | null;
+  generationModelIdentifier: string | null;
+  priceUsdPerGeneration: number | null;
   status: DesignTemplateStatus;
   variables: TemplateVariable[];
   createdAt: Date;
@@ -45,6 +57,8 @@ export type CreateTemplateInput = {
   photoRequired?: boolean;
   textInputEnabled?: boolean;
   prompt?: string | null;
+  generationModelIdentifier?: string | null;
+  priceUsdPerGeneration?: number | null;
   variableNames: string[];
 };
 
@@ -55,6 +69,8 @@ export type UpdateTemplateInput = {
   photoRequired?: boolean;
   textInputEnabled?: boolean;
   prompt?: string | null;
+  generationModelIdentifier?: string | null;
+  priceUsdPerGeneration?: number | null;
   variableNames: string[];
 };
 
@@ -113,6 +129,8 @@ export const getTemplate = async (
     photoRequired: template.photo_required,
     textInputEnabled: template.text_input_enabled,
     prompt: template.prompt,
+    generationModelIdentifier: template.generation_model_identifier,
+    priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
     variables: template.variables.map((v) => ({
       id: v.id,
@@ -136,6 +154,8 @@ export const createTemplate = async (
       photo_required: input.photoRequired ?? true,
       text_input_enabled: input.textInputEnabled ?? false,
       prompt: input.prompt ?? null,
+      generation_model_identifier: input.generationModelIdentifier ?? null,
+      price_usd_per_generation: input.priceUsdPerGeneration ?? null,
       status: "draft",
       variables: {
         create: input.variableNames.map((name) => ({ name })),
@@ -151,6 +171,8 @@ export const createTemplate = async (
     photoRequired: template.photo_required,
     textInputEnabled: template.text_input_enabled,
     prompt: template.prompt,
+    generationModelIdentifier: template.generation_model_identifier,
+    priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
     variables: template.variables.map((v) => ({
       id: v.id,
@@ -192,6 +214,8 @@ export const updateTemplate = async (
         photo_required: input.photoRequired ?? true,
         text_input_enabled: input.textInputEnabled ?? false,
         prompt: input.prompt ?? null,
+        generation_model_identifier: input.generationModelIdentifier ?? null,
+        price_usd_per_generation: input.priceUsdPerGeneration ?? null,
         variables: {
           create: input.variableNames.map((name) => ({ name })),
         },
@@ -207,6 +231,8 @@ export const updateTemplate = async (
     photoRequired: template.photo_required,
     textInputEnabled: template.text_input_enabled,
     prompt: template.prompt,
+    generationModelIdentifier: template.generation_model_identifier,
+    priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
     variables: template.variables.map((v) => ({
       id: v.id,

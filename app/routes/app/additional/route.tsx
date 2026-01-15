@@ -1,20 +1,23 @@
+import { Link } from "react-router";
+
 export default function AdditionalPage() {
   return (
     <s-page heading="Sandbox (dev)">
       <s-section heading="Template sandbox">
         <s-paragraph>
-          This page is a sandbox used during development. It’s safe to delete
+          This page is a sandbox used during development. It's safe to delete
           once you replace it with real product pages.
         </s-paragraph>
         <s-paragraph>
           It demonstrates how to create multiple pages within app navigation
           using{" "}
-          <s-link
-            href="https://shopify.dev/docs/apps/tools/app-bridge"
+          <Link
+            to="https://shopify.dev/docs/apps/tools/app-bridge"
             target="_blank"
+            rel="noopener noreferrer"
           >
             App Bridge
-          </s-link>
+          </Link>
           .
         </s-paragraph>
         <s-paragraph>
@@ -25,12 +28,13 @@ export default function AdditionalPage() {
       <s-section slot="aside" heading="Resources">
         <s-unordered-list>
           <s-list-item>
-            <s-link
-              href="https://shopify.dev/docs/apps/design-guidelines/navigation#app-nav"
+            <Link
+              to="https://shopify.dev/docs/apps/design-guidelines/navigation#app-nav"
               target="_blank"
+              rel="noopener noreferrer"
             >
               App nav best practices
-            </s-link>
+            </Link>
           </s-list-item>
         </s-unordered-list>
       </s-section>

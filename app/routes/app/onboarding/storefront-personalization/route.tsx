@@ -5,6 +5,7 @@ import type {
 } from "react-router";
 import {
   Form,
+  Link,
   data,
   useActionData,
   useLoaderData,
@@ -131,7 +132,7 @@ export default function StorefrontPersonalizationOnboarding() {
               <s-stack direction="block" gap="small">
                 <s-text>{errorMessage}</s-text>
                 {requiresSpendSafety ? (
-                  <s-link href={billingHref}>Configure spend safety</s-link>
+                  <Link to={billingHref}>Configure spend safety</Link>
                 ) : null}
               </s-stack>
             </s-banner>
@@ -178,13 +179,21 @@ export default function StorefrontPersonalizationOnboarding() {
               </s-paragraph>
 
               <s-stack direction="inline" gap="base">
-                <s-link href={demoVideoUrl} target="_blank">
+                <Link
+                  to={demoVideoUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
                   Watch demo video
-                </s-link>
+                </Link>
                 {shopifyThemesUrl ? (
-                  <s-link href={shopifyThemesUrl} target="_blank">
+                  <Link
+                    to={shopifyThemesUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
                     Open Shopify themes
-                  </s-link>
+                  </Link>
                 ) : null}
               </s-stack>
             </s-stack>
@@ -224,7 +233,7 @@ export default function StorefrontPersonalizationOnboarding() {
             buyer previews available. Next, assign a published template to a
             product.
           </s-paragraph>
-          <s-link href={`/app${embeddedSearch}`}>Back to setup</s-link>
+          <Link to={`/app${embeddedSearch}`}>Back to setup</Link>
         </s-stack>
       </s-section>
     </s-page>

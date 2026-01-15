@@ -68,6 +68,25 @@ describe("Templates Service", () => {
       expect(template.photoRequired).toBe(true);
       expect(template.textInputEnabled).toBe(false);
       expect(template.prompt).toBeNull();
+      expect(template.generationModelIdentifier).toBeNull();
+      expect(template.priceUsdPerGeneration).toBeNull();
+    });
+
+    it("creates template with generation settings", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "AI Template",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      };
+
+      const template = await createTemplate(input);
+
+      expect(template.generationModelIdentifier).toBe(
+        "fal-ai/bytedance/seedream/v4/edit",
+      );
+      expect(template.priceUsdPerGeneration).toBe(0.05);
     });
   });
 
@@ -220,6 +239,40 @@ describe("Templates Service", () => {
       const updated = await updateTemplate(updateInput);
 
       expect(updated?.variables).toHaveLength(0);
+    });
+
+    it("updates template with generation settings", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "Template without settings",
+        variableNames: [],
+      };
+
+      const created = await createTemplate(input);
+      expect(created.generationModelIdentifier).toBeNull();
+
+      const updateInput: UpdateTemplateInput = {
+        templateId: created.id,
+        shopId,
+        templateName: "Template with settings",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      };
+
+      const updated = await updateTemplate(updateInput);
+
+      expect(updated?.generationModelIdentifier).toBe(
+        "fal-ai/bytedance/seedream/v4/edit",
+      );
+      expect(updated?.priceUsdPerGeneration).toBe(0.05);
+
+      // Verify persistence by fetching
+      const fetched = await getTemplate(created.id, shopId);
+      expect(fetched?.generationModelIdentifier).toBe(
+        "fal-ai/bytedance/seedream/v4/edit",
+      );
+      expect(fetched?.priceUsdPerGeneration).toBe(0.05);
     });
   });
 

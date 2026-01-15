@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, HeadersFunction } from "react-router";
 import {
   Form,
+  Link,
   data,
   useActionData,
   useLocation,
@@ -149,9 +150,7 @@ export default function Index() {
               : null}
           </s-paragraph>
           {planStatus === PlanStatus.none ? (
-            <s-link href={`/app/paywall${embeddedSearch}`}>
-              Go to paywall
-            </s-link>
+            <Link to={`/app/paywall${embeddedSearch}`}>Go to paywall</Link>
           ) : null}
         </s-stack>
       </s-section>
@@ -180,7 +179,7 @@ export default function Index() {
                   </s-stack>
                   <s-paragraph>{item.hint}</s-paragraph>
                   {actionHref && item.actionLabel ? (
-                    <s-link href={actionHref}>{item.actionLabel}</s-link>
+                    <Link to={actionHref}>{item.actionLabel}</Link>
                   ) : null}
                 </s-stack>
               </s-card>
@@ -206,9 +205,7 @@ export default function Index() {
             before finishing onboarding.
           </s-paragraph>
           {!readinessSignals?.printifyConnected ? (
-            <s-link href={`/app/printify${embeddedSearch}`}>
-              Connect Printify
-            </s-link>
+            <Link to={`/app/printify${embeddedSearch}`}>Connect Printify</Link>
           ) : null}
           <Form method="post">
             <input type="hidden" name="intent" value="finish_onboarding" />
