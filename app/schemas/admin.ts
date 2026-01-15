@@ -166,10 +166,26 @@ const templateDeleteSchema = z.object({
   template_id: z.string().min(1, "Template ID is required"),
 });
 
+const templateTestGenerateSchema = z.object({
+  intent: z.literal("template_test_generate"),
+  template_id: z.string().min(1, "Template ID is required"),
+  test_photo_url: z.string().url("Test photo must be a valid URL"),
+  test_text: z.string().optional(),
+  num_images: z.coerce
+    .number()
+    .int()
+    .min(1, "At least 1 image is required")
+    .max(4, "Maximum 4 images allowed"),
+});
+
 export const templateActionSchema = z.discriminatedUnion("intent", [
   templateCreateSchema,
   templateUpdateSchema,
   templateDeleteSchema,
+  templateTestGenerateSchema,
 ]);
 
 export type TemplateActionInput = z.infer<typeof templateActionSchema>;
+export type TemplateTestGenerateInput = z.infer<
+  typeof templateTestGenerateSchema
+>;

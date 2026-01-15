@@ -6,5 +6,12 @@
       "url": "https://mcp.exa.ai/mcp",
       "enabled": true
     }
+  },
+  "provider": {
+    "zai": {
+      "options": {
+        "baseURL": "https://api.z.ai/api/coding/paas/v4"
+      }
+    }
   }
 }

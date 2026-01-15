@@ -29,6 +29,7 @@ import {
   deleteTemplate,
   type DesignTemplateDto,
 } from "../../../../services/templates/templates.server";
+import { generateImages } from "../../../../services/fal/generate.server";
 import logger from "../../../../lib/logger";
 import {
   MVP_GENERATION_MODEL_ID,
@@ -101,6 +102,90 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       "Template deleted",
     );
     return data({ deleted: true });
+  }
+
+  // Handle test_generate intent
+  if (parsed.data.intent === "template_test_generate") {
+    const template = await getTemplate(templateId, shopId);
+
+    if (!template) {
+      return data(
+        { error: { code: "not_found", message: "Template not found." } },
+        { status: 404 },
+      );
+    }
+
+    // Only allow test generation for draft templates
+    if (template.status !== "draft") {
+      return data(
+        {
+          error: {
+            code: "invalid_request",
+            message: "Test generation is only available for draft templates.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const { test_photo_url, num_images } = parsed.data;
+
+    try {
+      // Call fal.ai generation service
+      const generationResult = await generateImages({
+        modelId: template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
+        imageUrls: [test_photo_url],
+        prompt: template.prompt ?? "Default prompt",
+        numImages: num_images,
+        shopId,
+      });
+
+      logger.info(
+        {
+          shop_id: shopId,
+          template_id: templateId,
+          generated_count: generationResult.images.length,
+        },
+        "Test generation completed",
+      );
+
+      // Map to response format with per-image metadata
+      const results = generationResult.images.map((img) => ({
+        url: img.url,
+        generation_time_seconds: img.generationTimeSeconds,
+        cost_usd: img.costUsd,
+        seed: img.seed,
+      }));
+
+      return data({
+        results,
+        total_time_seconds: generationResult.totalTimeSeconds,
+        total_cost_usd: generationResult.totalCostUsd,
+      });
+    } catch (error) {
+      logger.error(
+        { shop_id: shopId, template_id: templateId, err: error },
+        "Test generation failed",
+      );
+
+      // Handle GenerationError and other errors
+      if (error instanceof Error) {
+        return data(
+          { error: { code: "generation_failed", message: error.message } },
+          { status: 500 },
+        );
+      }
+
+      return data(
+        {
+          error: {
+            code: "generation_failed",
+            message: "An unexpected error occurred during generation.",
+          },
+        },
+        { status: 500 },
+      );
+    }
   }
 
   // Handle update intent
