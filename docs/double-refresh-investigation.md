@@ -216,7 +216,64 @@ const query = search ? `?${search}` : "";
 
 **Expected Result:** Single HTTP request per navigation, no double refresh.
 
-**Next:** Test navigation between Setup/Templates to verify only one request hits server.
+**Result:** ❌ FIX FAILED - Double refresh still occurring after applying this change.
+
+**Analysis:** Preserving all query params didn't resolve the issue. The problem may be deeper:
+
+1. `useLocation().search` may not include ALL params present in browser URL
+2. Shopify App Bridge may be forcing a full page reload regardless of params
+3. React Router navigation in embedded mode may be incompatible with Shopify's iframe behavior
+
+**Next:** Test 6 - Investigate if App Bridge is forcing full page reloads.
+
+---
+
+### Test 6: Programmatic Navigation with Dynamic Param Reading
+
+**Date:** 2026-01-15  
+**Approach:** Based on research findings, test these alternatives:
+
+1. **Read URL params dynamically at click time** instead of using stale `useLocation().search` from render time
+2. **Use `useNavigate()` with programmatic navigation** instead of declarative `<Link>` components
+3. **Add request deduplication** to prevent rapid duplicate navigations
+
+**Theory:**
+
+- `useLocation().search` captures URL params when component renders
+- App Bridge may add session params (`hmac`, `id_token`, `session`, `timestamp`) AFTER render
+- By reading `window.location.search` at click time, we get the most recent URL state
+- Using `useNavigate()` gives more control than declarative links
+
+**Files Modified:**
+
+- `app/routes/app/route.tsx` - Added `useNavigate` import
+- `app/routes/app/route.tsx` - Changed navigation from `<Link>` to click handlers
+- `app/routes/app/route.tsx` - Added request deduplication (200ms debounce)
+
+**Implementation:**
+
+```tsx
+// Before
+<Link to={`/app${query}`}>Setup</Link>
+
+// After
+<Link to="/app" onClick={(e) => {
+  e.preventDefault();
+  handleNavigate("/app");
+}}>Setup</Link>
+
+const handleNavigate = (to: string) => {
+  const now = Date.now();
+  if (now - lastNavTime < 200) return; // Dedup
+  lastNavTime = now;
+
+  const currentSearch = window.location.search;
+  const query = currentSearch ? `${to}${currentSearch}` : to;
+  navigate(query);
+};
+```
+
+**Next:** Test navigation between Setup/Templates to verify if this approach resolves double refresh.
 
 ---
 
@@ -257,9 +314,10 @@ npm run dev
 - The `shouldRevalidate` change was committed but did not resolve the issue.
 - Request tracing implemented with unique IDs to distinguish duplicate logging from multiple requests (Test 4).
 - Test 5 identified root cause: App Bridge redirect due to missing session params.
-- Fix applied: App shell navigation now preserves ALL query params instead of filtering.
-- Other routes continue to use `buildEmbeddedSearch()` where appropriate (server-side redirects, etc.).
+- Fix 5 (preserve all params) FAILED - double refresh still occurred.
+- Test 6: Using programmatic navigation with dynamic param reading to capture latest URL state at click time.
+- Added request deduplication (200ms debounce) to prevent rapid duplicate navigations.
 
 ---
 
-**Last Updated:** 2026-01-15 17:00 UTC
+**Last Updated:** 2026-01-15 17:30 UTC

@@ -4,6 +4,7 @@ import {
   Outlet,
   useLoaderData,
   useLocation,
+  useNavigate,
   useRouteError,
 } from "react-router";
 import type { ShouldRevalidateFunction } from "react-router";
@@ -147,18 +148,64 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({
 
 export default function App() {
   const { apiKey, isDev } = useLoaderData<typeof loader>();
-  const { search } = useLocation();
-  const query = search ? `?${search}` : "";
+  const navigate = useNavigate();
+  let lastNavTime = 0;
+
+  const handleNavigate = (to: string) => {
+    const now = Date.now();
+    if (now - lastNavTime < 200) {
+      return;
+    }
+    lastNavTime = now;
+
+    const currentSearch = window.location.search;
+    const query = currentSearch ? `${to}${currentSearch}` : to;
+    navigate(query);
+  };
 
   return (
     <AppProvider embedded apiKey={apiKey}>
       <s-app-nav>
-        <Link to={`/app${query}`}>Setup</Link>
-        <Link to={`/app/templates${query}`}>Templates</Link>
+        <Link
+          to="/app"
+          onClick={(e) => {
+            e.preventDefault();
+            handleNavigate("/app");
+          }}
+        >
+          Setup
+        </Link>
+        <Link
+          to="/app/templates"
+          onClick={(e) => {
+            e.preventDefault();
+            handleNavigate("/app/templates");
+          }}
+        >
+          Templates
+        </Link>
         {isDev ? (
-          <Link to={`/app/additional${query}`}>Sandbox (dev)</Link>
+          <Link
+            to="/app/additional"
+            onClick={(e) => {
+              e.preventDefault();
+              handleNavigate("/app/additional");
+            }}
+          >
+            Sandbox (dev)
+          </Link>
         ) : null}
-        {isDev ? <Link to={`/app/dev${query}`}>Dev tools (dev)</Link> : null}
+        {isDev ? (
+          <Link
+            to="/app/dev"
+            onClick={(e) => {
+              e.preventDefault();
+              handleNavigate("/app/dev");
+            }}
+          >
+            Dev tools (dev)
+          </Link>
+        ) : null}
       </s-app-nav>
       <Outlet />
     </AppProvider>
