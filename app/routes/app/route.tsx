@@ -47,6 +47,8 @@ export type AppLoaderData = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
+  const requestId = crypto.randomUUID();
+  console.log(`[${requestId}] [TRACE] START App shell loader: ${request.url}`);
   const { admin, session, redirect } = await authenticate.admin(request);
   const pathname = new URL(request.url).pathname;
   const shopId = getShopIdFromSession(session);
@@ -132,31 +134,16 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
   };
 
+  console.log(`[${requestId}] [TRACE] END App shell loader: ${request.url}`);
   return data;
 };
 
 export const shouldRevalidate: ShouldRevalidateFunction = ({
-  currentUrl,
-  nextUrl,
   formMethod,
   defaultShouldRevalidate,
 }) => {
   if (formMethod) {
     return defaultShouldRevalidate;
-  }
-
-  const navigatingWithinApp =
-    currentUrl.pathname.startsWith("/app") &&
-    nextUrl.pathname.startsWith("/app");
-  const paywallTransition =
-    isPaywallPath(currentUrl.pathname) || isPaywallPath(nextUrl.pathname);
-
-  if (
-    navigatingWithinApp &&
-    !paywallTransition &&
-    currentUrl.pathname !== nextUrl.pathname
-  ) {
-    return false;
   }
 
   return defaultShouldRevalidate;
