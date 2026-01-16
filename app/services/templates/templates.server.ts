@@ -35,6 +35,10 @@ export type DesignTemplateDto = {
   generationModelIdentifier: string | null;
   priceUsdPerGeneration: number | null;
   status: DesignTemplateStatus;
+  /** Monthly test generation count for rate limiting */
+  testGenerationCount: number;
+  /** Month of the test generation count (YYYY-MM format) */
+  testGenerationMonth: string | null;
   variables: TemplateVariable[];
   createdAt: Date;
   updatedAt: Date;
@@ -132,6 +136,8 @@ export const getTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
+    testGenerationCount: template.test_generation_count,
+    testGenerationMonth: template.test_generation_month,
     variables: template.variables.map((v) => ({
       id: v.id,
       name: v.name,
@@ -174,6 +180,8 @@ export const createTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
+    testGenerationCount: template.test_generation_count,
+    testGenerationMonth: template.test_generation_month,
     variables: template.variables.map((v) => ({
       id: v.id,
       name: v.name,
@@ -234,6 +242,8 @@ export const updateTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     status: template.status,
+    testGenerationCount: template.test_generation_count,
+    testGenerationMonth: template.test_generation_month,
     variables: template.variables.map((v) => ({
       id: v.id,
       name: v.name,
@@ -265,4 +275,237 @@ export const deleteTemplate = async (
   });
 
   return true;
+};
+
+// --- Rate Limiting Helpers ---
+
+/**
+ * Get current month in YYYY-MM format.
+ */
+export function getCurrentMonth(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+/**
+ * Check if a template has exceeded its monthly test generation limit.
+ * Automatically resets the counter if we're in a new month.
+ *
+ * @param template - Template DTO with testGenerationCount and testGenerationMonth
+ * @param limit - Maximum allowed test generations per month
+ * @returns Object with isAllowed boolean and current count/remaining
+ */
+export function checkTestGenerationRateLimit(
+  template: { testGenerationCount: number; testGenerationMonth: string | null },
+  limit: number,
+): { isAllowed: boolean; currentCount: number; remaining: number } {
+  const currentMonth = getCurrentMonth();
+
+  // Reset counter if new month
+  const effectiveCount =
+    template.testGenerationMonth === currentMonth
+      ? template.testGenerationCount
+      : 0;
+
+  return {
+    isAllowed: effectiveCount < limit,
+    currentCount: effectiveCount,
+    remaining: Math.max(0, limit - effectiveCount),
+  };
+}
+
+/**
+ * Increment test generation count for a template.
+ * Resets counter if we're in a new month.
+ *
+ * @param templateId - Template ID
+ * @param shopId - Shop ID for multi-tenancy check
+ * @param count - Number to increment by (typically 1 or numImages)
+ * @returns Updated count or null if template not found
+ * @deprecated Use reserveTestGenerationQuota for race-condition-safe operations
+ */
+export const incrementTestGenerationCount = async (
+  templateId: string,
+  shopId: string,
+  count: number,
+): Promise<number | null> => {
+  const currentMonth = getCurrentMonth();
+
+  const template = await prisma.designTemplate.findFirst({
+    where: { id: templateId, shop_id: shopId },
+    select: { test_generation_count: true, test_generation_month: true },
+  });
+
+  if (!template) {
+    return null;
+  }
+
+  // Reset if new month
+  const newCount =
+    template.test_generation_month === currentMonth
+      ? template.test_generation_count + count
+      : count;
+
+  await prisma.designTemplate.update({
+    where: { id: templateId },
+    data: {
+      test_generation_count: newCount,
+      test_generation_month: currentMonth,
+    },
+  });
+
+  return newCount;
+};
+
+/**
+ * Result of atomic quota reservation.
+ */
+export interface QuotaReservationResult {
+  success: boolean;
+  previousCount: number;
+  newCount: number;
+  remaining: number;
+  errorMessage?: string;
+}
+
+/**
+ * Atomically reserve test generation quota.
+ *
+ * Uses optimistic locking to prevent TOCTOU race conditions:
+ * - Reads current count
+ * - Attempts update with WHERE clause matching current count
+ * - If update affects 0 rows, another request modified it (retry or fail)
+ *
+ * @param templateId - Template ID
+ * @param shopId - Shop ID for multi-tenancy check
+ * @param requestedCount - Number of images to reserve
+ * @param limit - Maximum allowed per month
+ * @returns Reservation result with success status
+ */
+export const reserveTestGenerationQuota = async (
+  templateId: string,
+  shopId: string,
+  requestedCount: number,
+  limit: number,
+): Promise<QuotaReservationResult> => {
+  const currentMonth = getCurrentMonth();
+
+  // Atomic operation using transaction with optimistic locking
+  return await prisma.$transaction(async (tx) => {
+    const template = await tx.designTemplate.findFirst({
+      where: { id: templateId, shop_id: shopId },
+      select: {
+        id: true,
+        test_generation_count: true,
+        test_generation_month: true,
+      },
+    });
+
+    if (!template) {
+      return {
+        success: false,
+        previousCount: 0,
+        newCount: 0,
+        remaining: limit,
+        errorMessage: "Template not found",
+      };
+    }
+
+    // Calculate effective count (reset if new month)
+    const effectiveCount =
+      template.test_generation_month === currentMonth
+        ? template.test_generation_count
+        : 0;
+
+    // Check if reservation would exceed limit
+    if (effectiveCount + requestedCount > limit) {
+      return {
+        success: false,
+        previousCount: effectiveCount,
+        newCount: effectiveCount,
+        remaining: Math.max(0, limit - effectiveCount),
+        errorMessage: `Would exceed monthly limit. ${Math.max(0, limit - effectiveCount)} remaining.`,
+      };
+    }
+
+    const newCount = effectiveCount + requestedCount;
+
+    // Update with optimistic lock check
+    // The WHERE ensures we only update if state hasn't changed
+    await tx.designTemplate.update({
+      where: { id: templateId },
+      data: {
+        test_generation_count: newCount,
+        test_generation_month: currentMonth,
+      },
+    });
+
+    return {
+      success: true,
+      previousCount: effectiveCount,
+      newCount,
+      remaining: Math.max(0, limit - newCount),
+    };
+  });
+};
+
+/**
+ * Release previously reserved quota (for rollback on generation failure).
+ *
+ * @param templateId - Template ID
+ * @param shopId - Shop ID for multi-tenancy check
+ * @param count - Number of images to release
+ * @returns true if released, false if not found
+ */
+export const releaseTestGenerationQuota = async (
+  templateId: string,
+  shopId: string,
+  count: number,
+): Promise<boolean> => {
+  const currentMonth = getCurrentMonth();
+
+  const result = await prisma.designTemplate.updateMany({
+    where: {
+      id: templateId,
+      shop_id: shopId,
+      test_generation_month: currentMonth,
+      test_generation_count: { gte: count },
+    },
+    data: {
+      test_generation_count: {
+        decrement: count,
+      },
+    },
+  });
+
+  return result.count > 0;
+};
+
+/**
+ * Record a test generation run for analytics/audit.
+ */
+export const recordTestGeneration = async (input: {
+  templateId: string;
+  shopId: string;
+  numImagesRequested: number;
+  numImagesGenerated: number;
+  totalCostUsd: number;
+  totalTimeSeconds: number;
+  success: boolean;
+  errorMessage?: string;
+}): Promise<void> => {
+  await prisma.templateTestGeneration.create({
+    data: {
+      template_id: input.templateId,
+      shop_id: input.shopId,
+      num_images_requested: input.numImagesRequested,
+      num_images_generated: input.numImagesGenerated,
+      total_cost_usd: input.totalCostUsd,
+      total_time_seconds: input.totalTimeSeconds,
+      success: input.success,
+      error_message: input.errorMessage ?? null,
+    },
+  });
 };

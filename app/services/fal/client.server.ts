@@ -5,20 +5,26 @@
  * Must never be exposed to the client/storefront bundle.
  */
 
-import { fal } from "@fal-ai/client";
+import { ApiError, ValidationError, fal } from "@fal-ai/client";
 import logger from "../../lib/logger";
 import { GenerationError, type GenerationErrorCode } from "./types";
 
 // Configure fal.ai client with API key from environment
 const FAL_KEY = process.env.FAL_KEY;
+const FAL_KEY_ID = process.env.FAL_KEY_ID;
+const FAL_KEY_SECRET = process.env.FAL_KEY_SECRET;
 
-if (!FAL_KEY) {
-  logger.warn("FAL_KEY environment variable is not set");
+if (FAL_KEY) {
+  fal.config({ credentials: FAL_KEY });
+} else if (FAL_KEY_ID && FAL_KEY_SECRET) {
+  fal.config({ credentials: `${FAL_KEY_ID}:${FAL_KEY_SECRET}` });
+} else {
+  logger.warn("fal.ai credentials are not configured");
 }
 
 /**
  * Configured fal.ai client instance.
- * The client automatically uses FAL_KEY from environment.
+ * Uses credentials configured above.
  */
 export const falClient = fal;
 
@@ -35,8 +41,36 @@ export function mapFalError(error: unknown): GenerationError {
   const message =
     error instanceof Error ? error.message : "Unknown generation error";
 
+  const normalizedMessage = message.toLowerCase();
+
+  const status =
+    error instanceof ApiError || error instanceof ValidationError
+      ? error.status
+      : undefined;
+
+  const requestId =
+    error instanceof ApiError || error instanceof ValidationError
+      ? error.requestId
+      : undefined;
+
+  const detailMessage =
+    error instanceof ValidationError && Array.isArray(error.fieldErrors)
+      ? error.fieldErrors.map((err) => err.msg).join("; ")
+      : undefined;
+
+  if (status) {
+    logger.warn(
+      {
+        error_status: status,
+        request_id: requestId,
+        error_message: message,
+      },
+      "fal.ai provider error",
+    );
+  }
+
   // Check for timeout
-  if (message.toLowerCase().includes("timeout")) {
+  if (normalizedMessage.includes("timeout")) {
     return new GenerationError(
       "timeout",
       "Generation timed out. Please try again.",
@@ -45,10 +79,7 @@ export function mapFalError(error: unknown): GenerationError {
   }
 
   // Check for rate limiting
-  if (
-    message.toLowerCase().includes("rate limit") ||
-    message.toLowerCase().includes("429")
-  ) {
+  if (normalizedMessage.includes("rate limit") || status === 429) {
     return new GenerationError(
       "rate_limited",
       "Too many requests. Please try again in a moment.",
@@ -58,9 +89,9 @@ export function mapFalError(error: unknown): GenerationError {
 
   // Check for network errors
   if (
-    message.toLowerCase().includes("network") ||
-    message.toLowerCase().includes("fetch") ||
-    message.toLowerCase().includes("econnrefused")
+    normalizedMessage.includes("network") ||
+    normalizedMessage.includes("fetch") ||
+    normalizedMessage.includes("econnrefused")
   ) {
     return new GenerationError(
       "network_error",
@@ -71,19 +102,30 @@ export function mapFalError(error: unknown): GenerationError {
 
   // Check for validation errors (non-retryable)
   if (
-    message.toLowerCase().includes("invalid") ||
-    message.toLowerCase().includes("validation")
+    normalizedMessage.includes("invalid") ||
+    normalizedMessage.includes("validation") ||
+    status === 422
   ) {
     return new GenerationError(
       "invalid_input",
-      "Invalid input. Please check your settings and try again.",
+      detailMessage ??
+        "Invalid input. Please check your settings and try again.",
+      false,
+    );
+  }
+
+  // Check for auth errors
+  if (status === 401 || status === 403) {
+    return new GenerationError(
+      "provider_error",
+      "fal.ai credentials are invalid. Please check configuration.",
       false,
     );
   }
 
   // Default to provider error
   let code: GenerationErrorCode = "provider_error";
-  if (message.toLowerCase().includes("500")) {
+  if (normalizedMessage.includes("500") || (status && status >= 500)) {
     code = "provider_error";
   }
 

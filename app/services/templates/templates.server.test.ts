@@ -6,6 +6,10 @@ import {
   deleteTemplate,
   getTemplate,
   listTemplates,
+  checkTestGenerationRateLimit,
+  getCurrentMonth,
+  reserveTestGenerationQuota,
+  releaseTestGenerationQuota,
   type CreateTemplateInput,
   type UpdateTemplateInput,
 } from "./templates.server";
@@ -314,6 +318,149 @@ describe("Templates Service", () => {
     it("returns false for non-existent template", async () => {
       const deleted = await deleteTemplate("non-existent-id", shopId);
       expect(deleted).toBe(false);
+    });
+  });
+
+  describe("checkTestGenerationRateLimit", () => {
+    it("returns allowed when count is under limit", () => {
+      const result = checkTestGenerationRateLimit(
+        { testGenerationCount: 10, testGenerationMonth: getCurrentMonth() },
+        50,
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.currentCount).toBe(10);
+      expect(result.remaining).toBe(40);
+    });
+
+    it("returns not allowed when count equals limit", () => {
+      const result = checkTestGenerationRateLimit(
+        { testGenerationCount: 50, testGenerationMonth: getCurrentMonth() },
+        50,
+      );
+
+      expect(result.isAllowed).toBe(false);
+      expect(result.currentCount).toBe(50);
+      expect(result.remaining).toBe(0);
+    });
+
+    it("resets count for new month", () => {
+      const result = checkTestGenerationRateLimit(
+        { testGenerationCount: 50, testGenerationMonth: "2025-01" },
+        50,
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.currentCount).toBe(0);
+      expect(result.remaining).toBe(50);
+    });
+
+    it("handles null month as new month", () => {
+      const result = checkTestGenerationRateLimit(
+        { testGenerationCount: 0, testGenerationMonth: null },
+        50,
+      );
+
+      expect(result.isAllowed).toBe(true);
+      expect(result.currentCount).toBe(0);
+      expect(result.remaining).toBe(50);
+    });
+  });
+
+  describe("reserveTestGenerationQuota", () => {
+    it("reserves quota successfully when under limit", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Rate Limit Test",
+        variableNames: [],
+      });
+
+      const result = await reserveTestGenerationQuota(
+        template.id,
+        shopId,
+        5,
+        50,
+      );
+
+      expect(result.success).toBe(true);
+      expect(result.previousCount).toBe(0);
+      expect(result.newCount).toBe(5);
+      expect(result.remaining).toBe(45);
+
+      // Verify DB was updated
+      const updated = await getTemplate(template.id, shopId);
+      expect(updated?.testGenerationCount).toBe(5);
+    });
+
+    it("fails when reservation would exceed limit", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Rate Limit Exceed Test",
+        variableNames: [],
+      });
+
+      // Reserve 48 first
+      await reserveTestGenerationQuota(template.id, shopId, 48, 50);
+
+      // Try to reserve 5 more (would exceed 50)
+      const result = await reserveTestGenerationQuota(
+        template.id,
+        shopId,
+        5,
+        50,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.remaining).toBe(2);
+      expect(result.errorMessage).toContain("2 remaining");
+    });
+
+    it("returns not found for invalid template", async () => {
+      const result = await reserveTestGenerationQuota(
+        "non-existent-id",
+        shopId,
+        5,
+        50,
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.errorMessage).toBe("Template not found");
+    });
+  });
+
+  describe("releaseTestGenerationQuota", () => {
+    it("releases quota successfully", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Release Test",
+        variableNames: [],
+      });
+
+      // Reserve 10
+      await reserveTestGenerationQuota(template.id, shopId, 10, 50);
+
+      // Release 3
+      const released = await releaseTestGenerationQuota(
+        template.id,
+        shopId,
+        3,
+      );
+
+      expect(released).toBe(true);
+
+      // Verify DB was updated
+      const updated = await getTemplate(template.id, shopId);
+      expect(updated?.testGenerationCount).toBe(7);
+    });
+
+    it("returns false for invalid template", async () => {
+      const released = await releaseTestGenerationQuota(
+        "non-existent-id",
+        shopId,
+        5,
+      );
+
+      expect(released).toBe(false);
     });
   });
 });

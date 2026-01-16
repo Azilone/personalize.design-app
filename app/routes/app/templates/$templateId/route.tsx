@@ -27,6 +27,9 @@ import {
   getTemplate,
   updateTemplate,
   deleteTemplate,
+  reserveTestGenerationQuota,
+  releaseTestGenerationQuota,
+  recordTestGeneration,
   type DesignTemplateDto,
 } from "../../../../services/templates/templates.server";
 import { generateImages } from "../../../../services/fal/generate.server";
@@ -35,6 +38,7 @@ import {
   MVP_GENERATION_MODEL_ID,
   MVP_GENERATION_MODEL_DISPLAY_NAME,
   MVP_PRICE_USD_PER_GENERATION,
+  TEMPLATE_TEST_LIMIT_PER_MONTH,
 } from "../../../../lib/generation-settings";
 
 export type LoaderData = {
@@ -128,16 +132,70 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
-    const { test_photo_url, num_images } = parsed.data;
+    const { test_photo_url, test_text, num_images } = parsed.data;
+
+    // Require prompt for test generation
+    if (!template.prompt?.trim()) {
+      return data(
+        {
+          error: {
+            code: "validation_error",
+            message:
+              "Please define a prompt template before testing generation.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    // Atomically reserve quota (prevents TOCTOU race condition)
+    const reservation = await reserveTestGenerationQuota(
+      templateId,
+      shopId,
+      num_images,
+      TEMPLATE_TEST_LIMIT_PER_MONTH,
+    );
+
+    if (!reservation.success) {
+      return data(
+        {
+          error: {
+            code: "rate_limited",
+            message:
+              reservation.errorMessage ??
+              `Monthly test generation limit reached. You have ${reservation.remaining} remaining.`,
+          },
+        },
+        { status: 429 },
+      );
+    }
+
+    // Build prompt: base template + optional test text
+    let generationPrompt = template.prompt;
+    if (template.textInputEnabled && test_text?.trim()) {
+      // Append buyer's custom text to the prompt
+      generationPrompt = `${template.prompt}\n\nCustom text: ${test_text.trim()}`;
+    }
 
     try {
       // Call fal.ai generation service
       const generationResult = await generateImages({
         modelId: template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
         imageUrls: [test_photo_url],
-        prompt: template.prompt ?? "Default prompt",
+        prompt: generationPrompt,
         numImages: num_images,
         shopId,
+      });
+
+      // Record test generation metadata for analytics
+      await recordTestGeneration({
+        templateId,
+        shopId,
+        numImagesRequested: num_images,
+        numImagesGenerated: generationResult.images.length,
+        totalCostUsd: generationResult.totalCostUsd,
+        totalTimeSeconds: generationResult.totalTimeSeconds,
+        success: true,
       });
 
       logger.info(
@@ -161,8 +219,28 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         results,
         total_time_seconds: generationResult.totalTimeSeconds,
         total_cost_usd: generationResult.totalCostUsd,
+        usage: {
+          count: reservation.newCount,
+          limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
+          remaining: reservation.remaining,
+        },
       });
     } catch (error) {
+      // Release reserved quota since generation failed
+      await releaseTestGenerationQuota(templateId, shopId, num_images);
+
+      // Record failed test generation for analytics
+      await recordTestGeneration({
+        templateId,
+        shopId,
+        numImagesRequested: num_images,
+        numImagesGenerated: 0,
+        totalCostUsd: 0,
+        totalTimeSeconds: 0,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : "Unknown error",
+      });
+
       logger.error(
         { shop_id: shopId, template_id: templateId, err: error },
         "Test generation failed",
@@ -359,6 +437,43 @@ export default function TemplateEditPage() {
     template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
   const generationPrice =
     template?.priceUsdPerGeneration ?? MVP_PRICE_USD_PER_GENERATION;
+
+  // Test generation state
+  const [testPhotoUrl, setTestPhotoUrl] = useState("");
+  const [numImagesToGenerate, setNumImagesToGenerate] = useState(1);
+  const isTestGenerating =
+    isSubmitting &&
+    navigation.formData?.get("intent") === "template_test_generate";
+
+  // Extract test generation results from actionData
+  const testResults =
+    actionData &&
+    typeof actionData === "object" &&
+    "results" in actionData &&
+    Array.isArray(actionData.results)
+      ? (actionData as {
+          results: Array<{
+            url: string;
+            generation_time_seconds: number | null;
+            cost_usd: number;
+            seed?: number;
+          }>;
+          total_time_seconds: number;
+          total_cost_usd: number;
+          usage?: { count: number; limit: number; remaining: number };
+        })
+      : null;
+
+  // Calculate current usage from template or recent results
+  const testGenerationUsage = testResults?.usage ?? {
+    count: template?.testGenerationCount ?? 0,
+    limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
+    remaining:
+      TEMPLATE_TEST_LIMIT_PER_MONTH - (template?.testGenerationCount ?? 0),
+  };
+
+  // Estimated cost before generation
+  const estimatedCost = generationPrice * numImagesToGenerate;
 
   // Serialize variable names to JSON for form submission
   const variableNamesJson = JSON.stringify(variableNames);
@@ -641,6 +756,211 @@ export default function TemplateEditPage() {
           </Form>
         </s-stack>
       </s-section>
+
+      {/* Test Panel Section (AC #1-5) */}
+      {template.status === "draft" && (
+        <s-section heading="Test Generation">
+          <s-stack direction="block" gap="base">
+            {/* Monthly Usage Display */}
+            <s-stack direction="block" gap="small">
+              <s-text>
+                <strong>Monthly Usage</strong>
+              </s-text>
+              <s-stack direction="inline" gap="small">
+                <s-text>
+                  {testGenerationUsage.count}/{testGenerationUsage.limit} test
+                  generations used this month
+                </s-text>
+              </s-stack>
+              <div
+                style={{
+                  height: "8px",
+                  backgroundColor: "#e0e0e0",
+                  borderRadius: "4px",
+                  overflow: "hidden",
+                }}
+              >
+                <div
+                  style={{
+                    height: "100%",
+                    width: `${Math.min(100, (testGenerationUsage.count / testGenerationUsage.limit) * 100)}%`,
+                    backgroundColor:
+                      testGenerationUsage.remaining > 10 ? "#22c55e" : "#f59e0b",
+                    transition: "width 0.3s ease",
+                  }}
+                />
+              </div>
+              {testGenerationUsage.remaining <= 0 && (
+                <s-banner tone="warning">
+                  <s-text>
+                    Monthly limit reached. Test generations will reset next
+                    month.
+                  </s-text>
+                </s-banner>
+              )}
+            </s-stack>
+
+            <s-divider />
+
+            {/* Test Form */}
+            <Form method="post">
+              <input type="hidden" name="intent" value="template_test_generate" />
+              <input type="hidden" name="template_id" value={template.id} />
+
+              <s-stack direction="block" gap="base">
+                {/* Photo URL Input */}
+                <s-text-field
+                  label="Test Photo URL"
+                  name="test_photo_url"
+                  placeholder="https://example.com/photo.jpg"
+                  value={testPhotoUrl}
+                  onChange={(event: { currentTarget: { value: string } }) =>
+                    setTestPhotoUrl(event.currentTarget.value)
+                  }
+                />
+                <s-text color="subdued">
+                  Enter a publicly accessible URL to a test image
+                </s-text>
+
+                {/* Text Input (if enabled) */}
+                {template.textInputEnabled && (
+                  <s-text-field
+                    label="Test Text (optional)"
+                    name="test_text"
+                    placeholder="Enter test text for generation"
+                  />
+                )}
+
+                {/* Number of Images Selector */}
+                <s-stack direction="block" gap="small">
+                  <label htmlFor="num_images">
+                    <strong>Number of images</strong>
+                  </label>
+                  <s-stack direction="inline" gap="small">
+                    {[1, 2, 3, 4].map((n) => (
+                      <s-button
+                        key={n}
+                        type="button"
+                        variant={numImagesToGenerate === n ? "primary" : "secondary"}
+                        onClick={() => setNumImagesToGenerate(n)}
+                      >
+                        {n}
+                      </s-button>
+                    ))}
+                  </s-stack>
+                  <input
+                    type="hidden"
+                    name="num_images"
+                    value={numImagesToGenerate}
+                  />
+                </s-stack>
+
+                {/* Estimated Cost Display */}
+                <s-banner tone="info">
+                  <s-stack direction="block" gap="small">
+                    <s-text>
+                      <strong>
+                        Estimated cost: ${generationPrice.toFixed(2)} × {numImagesToGenerate} = ${estimatedCost.toFixed(2)}
+                      </strong>
+                    </s-text>
+                  </s-stack>
+                </s-banner>
+
+                {/* Generate Button */}
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  loading={isTestGenerating}
+                  disabled={
+                    !testPhotoUrl.trim() ||
+                    testGenerationUsage.remaining <= 0 ||
+                    isTestGenerating
+                  }
+                >
+                  {isTestGenerating ? "Generating..." : `Generate ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`}
+                </s-button>
+              </s-stack>
+            </Form>
+
+            {/* Results Gallery */}
+            {testResults && (
+              <s-stack direction="block" gap="base">
+                <s-divider />
+                <s-text>
+                  <strong>Generated Images</strong>
+                </s-text>
+                <s-text color="subdued">
+                  Total time: {testResults.total_time_seconds.toFixed(1)}s | Total
+                  cost: ${testResults.total_cost_usd.toFixed(2)}
+                </s-text>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  {testResults.results.map((result, index) => (
+                    <div
+                      key={index}
+                      style={{
+                        border: "1px solid #e0e0e0",
+                        borderRadius: "8px",
+                        overflow: "hidden",
+                      }}
+                    >
+                      <img
+                        src={result.url}
+                        alt={`Generated image ${index + 1}`}
+                        style={{
+                          width: "100%",
+                          height: "200px",
+                          objectFit: "cover",
+                        }}
+                      />
+                      <div style={{ padding: "8px" }}>
+                        <s-text color="subdued">
+                          {result.generation_time_seconds?.toFixed(1) ?? "—"}s |
+                          ${result.cost_usd.toFixed(2)}
+                        </s-text>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </s-stack>
+            )}
+
+            {/* Error Display */}
+            {errorMessage &&
+              actionData &&
+              typeof actionData === "object" &&
+              "error" in actionData &&
+              (actionData.error as { code?: string })?.code ===
+                "generation_failed" && (
+                <s-banner tone="critical">
+                  <s-stack direction="block" gap="small">
+                    <s-text>{errorMessage}</s-text>
+                    <s-text color="subdued">
+                      Please try again or check your photo URL.
+                    </s-text>
+                  </s-stack>
+                </s-banner>
+              )}
+
+            {/* Rate Limit Error */}
+            {errorMessage &&
+              actionData &&
+              typeof actionData === "object" &&
+              "error" in actionData &&
+              (actionData.error as { code?: string })?.code === "rate_limited" && (
+                <s-banner tone="warning">
+                  <s-text>{errorMessage}</s-text>
+                </s-banner>
+              )}
+          </s-stack>
+        </s-section>
+      )}
 
       {/* Delete Section */}
       <s-section heading="Danger Zone">

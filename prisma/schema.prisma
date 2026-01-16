@@ -103,13 +103,37 @@ model DesignTemplate {
   generation_model_identifier  String?
   price_usd_per_generation     Decimal?
   status                       DesignTemplateStatus @default(draft)
+  // Test generation rate limiting (per template, per month)
+  test_generation_count        Int                  @default(0)
+  test_generation_month        String?              // Format: "YYYY-MM"
   created_at                   DateTime             @default(now())
   updated_at                   DateTime             @updatedAt
 
-  variables DesignTemplateVariable[]
+  variables      DesignTemplateVariable[]
+  testGenerations TemplateTestGeneration[]
 
   @@index([shop_id])
   @@map("design_templates")
+}
+
+// Stores metadata for each test generation run
+model TemplateTestGeneration {
+  id                    String   @id @default(cuid())
+  template_id           String
+  shop_id               String
+  num_images_requested  Int
+  num_images_generated  Int
+  total_cost_usd        Decimal
+  total_time_seconds    Decimal
+  success               Boolean
+  error_message         String?
+  created_at            DateTime @default(now())
+
+  template DesignTemplate @relation(fields: [template_id], references: [id], onDelete: Cascade)
+
+  @@index([template_id])
+  @@index([shop_id])
+  @@map("template_test_generations")
 }
 
 model DesignTemplateVariable {

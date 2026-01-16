@@ -1,15 +1,4 @@
----
-project_name: 'personalize-design-app'
-user_name: 'Kevin'
-date: '2026-01-10T18:13:16Z'
-sections_completed: ['technology_stack', 'language_rules', 'framework_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'dont_miss_rules']
-existing_patterns_found: 12
-status: 'complete'
-rule_count: 31
-optimized_for_llm: true
----
-
-# Project Context for AI Agents
+# Project Context
 
 _This file contains critical rules and patterns that AI agents must follow when implementing code in this project. Focus on unobvious details that agents might otherwise miss._
 
@@ -19,7 +8,7 @@ _This file contains critical rules and patterns that AI agents must follow when 
 
 _Documented after discovery phase_
 
-- Runtime: Node.js (engines: >=20.19 <22 || >=22.12)
+- Runtime: Node.js (pnpm) (engines: >=20.19 <22 || >=22.12)
 - Language: TypeScript ^5.9.3
 - Admin app: Shopify React Router template
   - react-router ^7.12.0
@@ -122,13 +111,7 @@ _Documented after discovery phase_
 
 - Read this file before implementing any code.
 - Follow ALL rules exactly as documented.
-- When in doubt, prefer the more restrictive option.
+- When in doubt, ask questions.
 - Update this file if new patterns emerge.
-
-**For Humans:**
-
-- Keep this file lean and focused on agent needs.
-- Update when technology stack changes or when architecture decisions change.
-- Review quarterly; remove rules that become “obvious” over time.
 
 Last Updated: 2026-01-10T18:13:16Z

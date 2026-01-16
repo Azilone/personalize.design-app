@@ -41,3 +41,9 @@ export function isValidGenerationModelId(
 ): modelId is GenerationModelId {
   return ALLOWED_GENERATION_MODEL_IDS.includes(modelId as GenerationModelId);
 }
+
+/**
+ * Maximum number of test generations allowed per template per month.
+ */
+export const TEMPLATE_TEST_LIMIT_PER_MONTH = 50;
+
