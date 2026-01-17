@@ -5,7 +5,7 @@
  * to GenerationError codes with appropriate retry flags.
  */
 
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect } from "vitest";
 import { mapFalError, GENERATION_TIMEOUT_MS } from "./client.server";
 import { GenerationError } from "./types";
 

@@ -1,13 +1,15 @@
-import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import type {
+  HeadersFunction,
+  LoaderFunctionArgs,
+  ShouldRevalidateFunction,
+} from "react-router";
 import {
   Link,
   Outlet,
   useLoaderData,
-  useLocation,
   useNavigate,
   useRouteError,
 } from "react-router";
-import type { ShouldRevalidateFunction } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 
@@ -183,6 +185,15 @@ export default function App() {
           }}
         >
           Templates
+        </Link>
+        <Link
+          to="/app/products"
+          onClick={(e) => {
+            e.preventDefault();
+            handleNavigate("/app/products");
+          }}
+        >
+          Products
         </Link>
         {isDev ? (
           <Link

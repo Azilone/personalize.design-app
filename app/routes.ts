@@ -41,5 +41,7 @@ export default [
       "templates/:templateId",
       "./routes/app/templates/$templateId/route.tsx",
     ),
+    route("products", "./routes/app/products/_index/route.tsx"),
+    route("products/:productId", "./routes/app/products/$productId/route.tsx"),
   ]),
 ] satisfies RouteConfig;

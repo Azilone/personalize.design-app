@@ -9,7 +9,6 @@ import {
   data,
   Link,
   useActionData,
-  useLoaderData,
   useLocation,
   useNavigate,
   useNavigation,

@@ -136,3 +136,135 @@ export const validatePrintifyToken = async (
     shopCount: shops.length,
   };
 };
+
+// --- Product Listing ---
+
+/**
+ * Minimal product info needed for matching Printify products to Shopify products.
+ */
+export type PrintifyProductSummary = {
+  /** Printify's internal product ID */
+  printifyProductId: string;
+  /** Product title in Printify */
+  title: string;
+  /**
+   * External Shopify product GID (e.g. "gid://shopify/Product/12345").
+   * Null if the product hasn't been published to Shopify yet.
+   */
+  externalShopifyGid: string | null;
+};
+
+const printifyProductSchema = z.object({
+  id: z.string(),
+  title: z.string(),
+  external: z
+    .object({
+      id: z.string().nullish(),
+      handle: z.string().nullish(),
+      channel: z.string().nullish(),
+    })
+    .nullish(),
+});
+
+type PrintifyProductPayload = z.infer<typeof printifyProductSchema>;
+
+const printifyProductsResponseSchema = z.object({
+  current_page: z.number(),
+  last_page: z.number(),
+  data: z.array(printifyProductSchema),
+});
+
+type ListPrintifyProductsInput = {
+  token: string;
+  printifyShopId: string;
+};
+
+/**
+ * List all products from a Printify shop.
+ * Handles pagination to fetch all products.
+ * Returns products with their Shopify external IDs when published.
+ */
+export const listPrintifyProducts = async (
+  input: ListPrintifyProductsInput,
+): Promise<PrintifyProductSummary[]> => {
+  const { token, printifyShopId } = input;
+  const allProducts: PrintifyProductSummary[] = [];
+  let currentPage = 1;
+  let lastPage = 1;
+
+  do {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${PRINTIFY_BASE_URL}/shops/${printifyShopId}/products.json?page=${currentPage}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "User-Agent": getPrintifyUserAgent(),
+            Accept: "application/json",
+          },
+        },
+      );
+    } catch {
+      throw new PrintifyRequestError(
+        "unexpected_response",
+        "Unable to fetch Printify products right now.",
+      );
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      throw new PrintifyRequestError(
+        "invalid_token",
+        "Printify token is invalid or expired.",
+        response.status,
+      );
+    }
+
+    if (response.status === 429) {
+      throw new PrintifyRequestError(
+        "rate_limited",
+        "Printify is rate limiting requests. Please retry in a moment.",
+        response.status,
+      );
+    }
+
+    if (!response.ok) {
+      throw new PrintifyRequestError(
+        "unexpected_response",
+        "Unable to fetch Printify products right now.",
+        response.status,
+      );
+    }
+
+    const payload = (await response.json()) as unknown;
+    const parsed = printifyProductsResponseSchema.safeParse(payload);
+
+    if (!parsed.success) {
+      throw new PrintifyRequestError(
+        "unexpected_response",
+        "Invalid response format from Printify products API.",
+      );
+    }
+
+    lastPage = parsed.data.last_page;
+
+    for (const product of parsed.data.data) {
+      allProducts.push(mapPrintifyProduct(product));
+    }
+
+    currentPage++;
+  } while (currentPage <= lastPage);
+
+  return allProducts;
+};
+
+const mapPrintifyProduct = (
+  product: PrintifyProductPayload,
+): PrintifyProductSummary => {
+  return {
+    printifyProductId: product.id,
+    title: product.title,
+    externalShopifyGid: product.external?.id ?? null,
+  };
+};

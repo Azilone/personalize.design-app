@@ -5,8 +5,8 @@ export default function AdditionalPage() {
     <s-page heading="Sandbox (dev)">
       <s-section heading="Template sandbox">
         <s-paragraph>
-          This page is a sandbox used during development. It's safe to delete
-          once you replace it with real product pages.
+          This page is a sandbox used during development. It&apos;s safe to
+          delete once you replace it with real product pages.
         </s-paragraph>
         <s-paragraph>
           It demonstrates how to create multiple pages within app navigation

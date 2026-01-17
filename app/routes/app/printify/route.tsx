@@ -365,8 +365,8 @@ export default function PrintifySetup() {
             </s-stack>
           ) : null}
           <s-paragraph>
-            Paste a Printify API token to connect your account. We'll store it
-            securely and use it to validate your Printify shop connection.
+            Paste a Printify API token to connect your account. We&apos;ll store
+            it securely and use it to validate your Printify shop connection.
           </s-paragraph>
           <Form method="post">
             <input type="hidden" name="intent" value="printify_connect" />

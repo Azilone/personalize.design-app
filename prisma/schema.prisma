@@ -129,6 +129,25 @@ model DesignTemplateVariable {
   @@map("design_template_variables")
 }
 
+model ShopProduct {
+  id                 String   @id @default(cuid())
+  shop_id            String
+  product_id         String
+  title              String
+  handle             String
+  image_url          String?
+  image_alt          String?
+  printify_product_id String?
+  printify_shop_id   String?
+  synced_at          DateTime @default(now())
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@index([shop_id])
+  @@unique([shop_id, product_id])
+  @@map("shop_products")
+}
+
 enum PlanStatus {
   none
   standard

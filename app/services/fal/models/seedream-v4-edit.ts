@@ -109,15 +109,12 @@ export const seedreamV4EditAdapter: ModelAdapter = {
 
       // Map response to GenerationOutput
       const images = result.data.images.map(
-        (
-          img: {
-            url: string;
-            width?: number;
-            height?: number;
-            content_type?: string;
-          },
-          index: number,
-        ) => ({
+        (img: {
+          url: string;
+          width?: number;
+          height?: number;
+          content_type?: string;
+        }) => ({
           url: img.url,
           // Distribute total time equally if no per-image timing
           generationTimeSeconds: result.data.timings?.inference

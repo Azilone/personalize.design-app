@@ -115,7 +115,11 @@ export function getFileExtension(filename: string): string {
  * @throws StorageError if file type is not allowed
  */
 export function validateFileType(extension: string): void {
-  if (!ALLOWED_FILE_TYPES.includes(extension as any)) {
+  if (
+    !ALLOWED_FILE_TYPES.includes(
+      extension as (typeof ALLOWED_FILE_TYPES)[number],
+    )
+  ) {
     throw new StorageError(
       "invalid_file_type",
       `File type .${extension} is not allowed. Allowed types: ${ALLOWED_FILE_TYPES.join(

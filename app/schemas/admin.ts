@@ -95,6 +95,16 @@ export type StorefrontPersonalizationActionInput = z.infer<
   typeof storefrontPersonalizationActionSchema
 >;
 
+const productsSyncSchema = z.object({
+  intent: z.literal("products_sync"),
+});
+
+export const productsActionSchema = z.discriminatedUnion("intent", [
+  productsSyncSchema,
+]);
+
+export type ProductsActionInput = z.infer<typeof productsActionSchema>;
+
 const finishOnboardingSchema = z.object({
   intent: z.literal("finish_onboarding"),
 });
