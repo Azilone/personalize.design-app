@@ -154,6 +154,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       num_images,
       variable_values_json,
       fake_generation,
+      remove_background_enabled,
     } = parsed.data;
 
     // Require prompt for test generation
@@ -250,7 +251,10 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         num_images: num_images,
         generation_model_identifier:
           template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
-        remove_background_enabled: template.removeBackgroundEnabled,
+        remove_background_enabled:
+          remove_background_enabled === undefined
+            ? template.removeBackgroundEnabled
+            : remove_background_enabled === "true",
         fake_generation,
       });
 
@@ -1005,6 +1009,11 @@ export default function TemplateEditPage() {
                 value={fakeGeneration ? "true" : "false"}
               />
               <input type="hidden" name="test_photo_url" value={testPhotoUrl} />
+              <input
+                type="hidden"
+                name="remove_background_enabled"
+                value={removeBackgroundEnabled ? "true" : "false"}
+              />
 
               <s-stack direction="block" gap="base">
                 {/* Photo URL Input */}

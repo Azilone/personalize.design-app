@@ -62,7 +62,7 @@ development_status:
   epic-3-retrospective: optional
 
   epic-4: backlog
-  4-1-sync-shopify-products-select-product-to-configure: backlog
+  4-1-sync-shopify-products-select-product-to-configure: ready-for-dev
   4-2-assign-single-template-to-product-explicit-enable-mvp: backlog
   4-3-merchant-product-preview-simulator-only-when-configured: backlog
   epic-4-retrospective: optional

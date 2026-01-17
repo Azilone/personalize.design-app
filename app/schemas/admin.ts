@@ -182,6 +182,7 @@ const templateTestGenerateSchema = z
       .int()
       .min(1, "At least 1 image is required")
       .max(4, "Maximum 4 images allowed"),
+    remove_background_enabled: z.enum(["true", "false"]).optional(),
     fake_generation: z
       .enum(["true", "false"])
       .default("false")
