@@ -5,7 +5,7 @@
  * - Validates inputs
  * - Looks up and delegates to model adapters
  * - Handles errors appropriately
- * - Applies background removal preprocessing when enabled
+ * - Applies background removal post-processing when enabled
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -150,7 +150,7 @@ describe("generateImages", () => {
     ).rejects.toThrow("Number of images must be between 1 and 4.");
   });
 
-  it("should apply background removal preprocessing when enabled", async () => {
+  it("should apply background removal post-processing when enabled", async () => {
     const mockOutput = {
       images: [
         {
@@ -179,11 +179,20 @@ describe("generateImages", () => {
       removeBackgroundEnabled: true,
     });
 
-    // Verify removeBackground was called
+    // Verify removeBackground was called with generated image URL
     expect(removeBackground).toHaveBeenCalledWith(
-      "https://example.com/input.jpg",
+      "https://example.com/generated.jpg",
       "shop-123",
+      undefined,
     );
+
+    // Verify adapter used original input images
+    expect(mockAdapter.generate).toHaveBeenCalledWith({
+      imageUrls: ["https://example.com/input.jpg"],
+      prompt: "A beautiful landscape",
+      numImages: 1,
+      seed: undefined,
+    });
 
     // Verify total cost includes remove-bg cost
     expect(result.totalCostUsd).toBeCloseTo(0.075, 0.001);
@@ -194,13 +203,8 @@ describe("generateImages", () => {
     expect(result.images[0].generationCostUsd).toBe(0.05);
     expect(result.images[0].removeBgCostUsd).toBeCloseTo(0.025, 0.001);
 
-    // Verify preprocessed image was passed to adapter
-    expect(mockAdapter.generate).toHaveBeenCalledWith({
-      imageUrls: ["https://example.com/removed-bg.jpg"],
-      prompt: "A beautiful landscape",
-      numImages: 1,
-      seed: undefined,
-    });
+    // Verify background-removed image is returned
+    expect(result.images[0].url).toBe("https://example.com/removed-bg.jpg");
   });
 
   it("should distribute remove-bg cost across multiple images", async () => {
@@ -229,7 +233,7 @@ describe("generateImages", () => {
     vi.mocked(mockAdapter.generate).mockResolvedValue(mockOutput);
     vi.mocked(removeBackground).mockImplementation((url) =>
       Promise.resolve({
-        imageUrl: url,
+        imageUrl: `${url}?bg=removed`,
         timeSeconds: 2.0,
         costUsd: 0.025,
       }),
@@ -260,6 +264,17 @@ describe("generateImages", () => {
 
     // Verify all three removeBackground calls were made
     expect(removeBackground).toHaveBeenCalledTimes(3);
+
+    // Verify output URLs are replaced by remove-bg results
+    expect(result.images[0].url).toBe(
+      "https://example.com/generated1.jpg?bg=removed",
+    );
+    expect(result.images[1].url).toBe(
+      "https://example.com/generated2.jpg?bg=removed",
+    );
+    expect(result.images[2].url).toBe(
+      "https://example.com/generated3.jpg?bg=removed",
+    );
   });
 
   it("should not add remove-bg cost when disabled", async () => {

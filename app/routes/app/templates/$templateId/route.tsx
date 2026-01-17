@@ -902,9 +902,14 @@ export default function TemplateEditPage() {
                   name="test_photo_url"
                   placeholder="https://example.com/photo.jpg"
                   value={testPhotoUrl}
-                  onChange={(event: { currentTarget: { value: string } }) =>
-                    setTestPhotoUrl(event.currentTarget.value)
-                  }
+                  onChange={(event: {
+                    currentTarget?: { value?: string };
+                    detail?: { value?: string };
+                  }) => {
+                    const value =
+                      event.detail?.value ?? event.currentTarget?.value ?? "";
+                    setTestPhotoUrl(value);
+                  }}
                 />
                 <s-text color="subdued">
                   Enter a publicly accessible URL to a test image
@@ -926,13 +931,18 @@ export default function TemplateEditPage() {
                           placeholder={`Enter ${variable.name}`}
                           value={testVariableValues[variable.name] ?? ""}
                           onChange={(event: {
-                            currentTarget: { value: string };
-                          }) =>
+                            currentTarget?: { value?: string };
+                            detail?: { value?: string };
+                          }) => {
+                            const value =
+                              event.detail?.value ??
+                              event.currentTarget?.value ??
+                              "";
                             setTestVariableValues((prev) => ({
                               ...prev,
-                              [variable.name]: event.currentTarget.value,
-                            }))
-                          }
+                              [variable.name]: value,
+                            }));
+                          }}
                         />
                       ))}
                     </s-stack>

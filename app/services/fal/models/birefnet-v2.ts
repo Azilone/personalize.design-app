@@ -2,7 +2,7 @@
  * BiRefNet v2 background removal module.
  *
  * Implements background removal using fal-ai/birefnet/v2.
- * Used as a preprocessing step before image generation when enabled.
+ * Used as a post-processing step after image generation when enabled.
  *
  * API Reference: https://fal.ai/models/fal-ai/birefnet/v2/llms.txt
  */
