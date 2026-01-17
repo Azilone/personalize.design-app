@@ -6,6 +6,10 @@ export default [
   route("auth/exit-iframe", "./routes/auth/exit-iframe/route.tsx"),
   route("auth/session-token", "./routes/auth/session-token/route.tsx"),
   route("auth/*", "./routes/auth/$/route.tsx"),
+  route("inngest", "./routes/inngest/route.tsx"),
+  route("api/inngest", "./routes/inngest/route.tsx", {
+    id: "routes/inngest/api",
+  }),
   route(
     "webhooks/app/scopes_update",
     "./routes/webhooks/app/scopes_update/route.tsx",

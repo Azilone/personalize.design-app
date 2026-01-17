@@ -11,7 +11,11 @@ node_modules
 database.sqlite
 
 .env
-.env.*
+.env.local
+.env.*.local
+
+# Allow .env.example for documentation
+!.env.example
 
 # Shopify CLI multi-config files (keep base config tracked)
 shopify.app.*.toml

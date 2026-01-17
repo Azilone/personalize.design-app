@@ -8,6 +8,12 @@
 import prisma from "../../db.server";
 import type { DesignTemplateStatus } from "@prisma/client";
 import type { Decimal } from "@prisma/client/runtime/library";
+import logger from "../../lib/logger";
+
+// --- Constants ---
+
+const DRAFT_STATUS = "draft" as const;
+const PUBLISHED_STATUS = "published" as const;
 
 // --- Helpers ---
 
@@ -23,6 +29,25 @@ function decimalToNumber(value: Decimal | null): number | null {
 export type TemplateVariable = {
   id: string;
   name: string;
+};
+
+export type TestGenerationResult = {
+  url: string;
+  generation_time_seconds: number | null;
+  cost_usd: number;
+  generation_cost_usd?: number;
+  remove_bg_cost_usd?: number;
+  seed?: number;
+};
+
+export type TestGenerationOutput = {
+  id?: string;
+  createdAt?: string;
+  results: TestGenerationResult[];
+  total_time_seconds: number;
+  total_cost_usd: number;
+  generation_cost_usd: number;
+  remove_bg_cost_usd: number;
 };
 
 export type DesignTemplateDto = {
@@ -126,6 +151,7 @@ export const getTemplate = async (
   });
 
   if (!template) {
+    logger.debug({ templateId, shopId }, "Template not found in database");
     return null;
   }
 
@@ -283,6 +309,151 @@ export const deleteTemplate = async (
   });
 
   return true;
+};
+
+/**
+ * Publish a template (draft → published).
+ * Returns the updated template DTO or null if not found/not owned.
+ */
+export const publishTemplate = async (
+  templateId: string,
+  shopId: string,
+): Promise<DesignTemplateDto | null> => {
+  logger.info(
+    { shop_id: shopId, template_id: templateId },
+    "Publishing template",
+  );
+
+  const existing = await prisma.designTemplate.findFirst({
+    where: { id: templateId, shop_id: shopId },
+  });
+
+  if (!existing) {
+    logger.warn(
+      { shop_id: shopId, template_id: templateId },
+      "Template not found for publishing",
+    );
+    return null;
+  }
+
+  // Validate template completeness before publishing
+  if (!existing.prompt) {
+    logger.warn(
+      { shop_id: shopId, template_id: templateId },
+      "Cannot publish template without prompt",
+    );
+    throw new Error("Template must have a prompt defined to be published");
+  }
+
+  if (!existing.generation_model_identifier) {
+    logger.warn(
+      { shop_id: shopId, template_id: templateId },
+      "Cannot publish template without generation model",
+    );
+    throw new Error(
+      "Template must have a generation model configured to be published",
+    );
+  }
+
+  logger.info(
+    {
+      shop_id: shopId,
+      template_id: templateId,
+      from_status: existing.status,
+      to_status: PUBLISHED_STATUS,
+    },
+    "Template status updated",
+  );
+
+  const template = await prisma.designTemplate.update({
+    where: { id: templateId },
+    data: { status: PUBLISHED_STATUS },
+    include: { variables: true },
+  });
+
+  return {
+    id: template.id,
+    shopId: template.shop_id,
+    templateName: template.template_name,
+    photoRequired: template.photo_required,
+    textInputEnabled: template.text_input_enabled,
+    prompt: template.prompt,
+    generationModelIdentifier: template.generation_model_identifier,
+    priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
+    removeBackgroundEnabled: template.remove_background_enabled,
+    status: template.status,
+    testGenerationCount: template.test_generation_count,
+    testGenerationMonth: template.test_generation_month,
+    variables: template.variables.map((v) => ({
+      id: v.id,
+      name: v.name,
+    })),
+    createdAt: template.created_at,
+    updatedAt: template.updated_at,
+  };
+};
+
+/**
+ * Unpublish a template (published → draft).
+ * Returns the updated template DTO or null if not found/not owned.
+ */
+export const unpublishTemplate = async (
+  templateId: string,
+  shopId: string,
+): Promise<DesignTemplateDto | null> => {
+  logger.info(
+    { shop_id: shopId, template_id: templateId },
+    "Unpublishing template",
+  );
+
+  const existing = await prisma.designTemplate.findFirst({
+    where: { id: templateId, shop_id: shopId },
+  });
+
+  if (!existing) {
+    logger.warn(
+      { shop_id: shopId, template_id: templateId },
+      "Template not found for unpublishing",
+    );
+    return null;
+  }
+
+  logger.info(
+    {
+      shop_id: shopId,
+      template_id: templateId,
+      from_status: existing.status,
+      to_status: DRAFT_STATUS,
+    },
+    "Template status updated",
+  );
+
+  const template = await prisma.designTemplate.update({
+    where: { id: templateId },
+    data: { status: DRAFT_STATUS },
+    include: { variables: true },
+  });
+
+  return {
+    id: template.id,
+    shopId: template.shop_id,
+    templateName: template.template_name,
+    photoRequired: template.photo_required,
+    textInputEnabled: template.text_input_enabled,
+    prompt: template.prompt,
+    generationModelIdentifier: template.generation_model_identifier,
+    priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
+    removeBackgroundEnabled: template.remove_background_enabled,
+    status: template.status,
+    testGenerationCount: template.test_generation_count,
+    testGenerationMonth: template.test_generation_month,
+    variables: template.variables.map((v) => ({
+      id: v.id,
+      name: v.name,
+    })),
+    createdAt: template.created_at,
+    updatedAt: template.updated_at,
+  };
 };
 
 // --- Rate Limiting Helpers ---
@@ -505,6 +676,7 @@ export const recordTestGeneration = async (input: {
   removeBgCostUsd?: number;
   success: boolean;
   errorMessage?: string;
+  resultImages?: TestGenerationOutput;
 }): Promise<void> => {
   await prisma.templateTestGeneration.create({
     data: {
@@ -518,6 +690,47 @@ export const recordTestGeneration = async (input: {
       remove_bg_cost_usd: input.removeBgCostUsd ?? null,
       success: input.success,
       error_message: input.errorMessage ?? null,
+      result_images: input.resultImages
+        ? JSON.stringify(input.resultImages)
+        : null,
     },
   });
+};
+
+/**
+ * Get the latest successful test generation for a template.
+ */
+export const getLatestTestGeneration = async (
+  templateId: string,
+  shopId: string,
+): Promise<TestGenerationOutput | null> => {
+  const generation = await prisma.templateTestGeneration.findFirst({
+    where: {
+      template_id: templateId,
+      shop_id: shopId,
+      success: true,
+      result_images: { not: null },
+    },
+    orderBy: { created_at: "desc" },
+    select: {
+      id: true,
+      created_at: true,
+      result_images: true,
+    },
+  });
+
+  if (!generation?.result_images) {
+    return null;
+  }
+
+  try {
+    const output = JSON.parse(generation.result_images) as TestGenerationOutput;
+    return {
+      ...output,
+      id: generation.id,
+      createdAt: generation.created_at.toISOString(),
+    };
+  } catch {
+    return null;
+  }
 };

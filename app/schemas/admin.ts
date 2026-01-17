@@ -170,17 +170,46 @@ const templateDeleteSchema = z.object({
   template_id: z.string().min(1, "Template ID is required"),
 });
 
-const templateTestGenerateSchema = z.object({
-  intent: z.literal("template_test_generate"),
+const templateTestGenerateSchema = z
+  .object({
+    intent: z.literal("template_test_generate"),
+    template_id: z.string().min(1, "Template ID is required"),
+    test_photo_url: z.string().optional(),
+    test_text: z.string().optional(),
+    variable_values_json: z.string().default("{}"),
+    num_images: z.coerce
+      .number()
+      .int()
+      .min(1, "At least 1 image is required")
+      .max(4, "Maximum 4 images allowed"),
+    fake_generation: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
+  })
+  .refine(
+    (data) =>
+      data.fake_generation ||
+      (data.test_photo_url !== undefined && data.test_photo_url.trim() !== ""),
+    "Test photo URL is required for real generation",
+  )
+  .refine(
+    (data) =>
+      data.fake_generation ||
+      (data.test_photo_url !== undefined &&
+        data.test_photo_url.trim() !== "" &&
+        z.string().url().safeParse(data.test_photo_url).success),
+    "Test photo must be a valid URL for real generation",
+  );
+
+const templatePublishSchema = z.object({
+  intent: z.literal("template_publish"),
   template_id: z.string().min(1, "Template ID is required"),
-  test_photo_url: z.string().url("Test photo must be a valid URL"),
-  test_text: z.string().optional(),
-  variable_values_json: z.string().default("{}"),
-  num_images: z.coerce
-    .number()
-    .int()
-    .min(1, "At least 1 image is required")
-    .max(4, "Maximum 4 images allowed"),
+});
+
+const templateUnpublishSchema = z.object({
+  intent: z.literal("template_unpublish"),
+  template_id: z.string().min(1, "Template ID is required"),
 });
 
 export const templateActionSchema = z.discriminatedUnion("intent", [
@@ -188,6 +217,8 @@ export const templateActionSchema = z.discriminatedUnion("intent", [
   templateUpdateSchema,
   templateDeleteSchema,
   templateTestGenerateSchema,
+  templatePublishSchema,
+  templateUnpublishSchema,
 ]);
 
 export type TemplateActionInput = z.infer<typeof templateActionSchema>;

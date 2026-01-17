@@ -6,12 +6,16 @@ import {
   deleteTemplate,
   getTemplate,
   listTemplates,
+  publishTemplate,
+  unpublishTemplate,
   checkTestGenerationRateLimit,
   getCurrentMonth,
   reserveTestGenerationQuota,
   releaseTestGenerationQuota,
+  getLatestTestGeneration,
   type CreateTemplateInput,
   type UpdateTemplateInput,
+  type TestGenerationOutput,
 } from "./templates.server";
 
 describe("Templates Service", () => {
@@ -465,11 +469,7 @@ describe("Templates Service", () => {
       await reserveTestGenerationQuota(template.id, shopId, 10, 50);
 
       // Release 3
-      const released = await releaseTestGenerationQuota(
-        template.id,
-        shopId,
-        3,
-      );
+      const released = await releaseTestGenerationQuota(template.id, shopId, 3);
 
       expect(released).toBe(true);
 
@@ -486,6 +486,251 @@ describe("Templates Service", () => {
       );
 
       expect(released).toBe(false);
+    });
+  });
+
+  describe("publishTemplate", () => {
+    it("publishes a draft template", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Publish Test",
+        prompt: "Test {{color}} design",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: ["color"],
+      });
+
+      expect(template.status).toBe("draft");
+
+      const result = await publishTemplate(template.id, shopId);
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe("published");
+
+      // Verify persistence
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("published");
+    });
+
+    it("returns null for different shop (multi-tenancy)", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Multi-tenancy Test",
+        variableNames: [],
+      });
+
+      const result = await publishTemplate(template.id, "other-shop-456");
+
+      expect(result).toBeNull();
+
+      // Verify status unchanged
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("draft");
+    });
+
+    it("returns null for non-existent template", async () => {
+      const result = await publishTemplate("non-existent-id", shopId);
+      expect(result).toBeNull();
+    });
+
+    it("is idempotent (publishing already published template)", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Idempotent Test",
+        prompt: "Test design",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      });
+
+      await publishTemplate(template.id, shopId);
+      const result = await publishTemplate(template.id, shopId);
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe("published");
+    });
+
+    it("throws error when publishing template without prompt", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "No Prompt Test",
+        variableNames: [],
+      });
+
+      await expect(publishTemplate(template.id, shopId)).rejects.toThrow(
+        "Template must have a prompt defined to be published",
+      );
+
+      // Verify status unchanged
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("draft");
+    });
+
+    it("throws error when publishing template without generation model", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "No Model Test",
+        prompt: "Test prompt",
+        variableNames: [],
+      });
+
+      await expect(publishTemplate(template.id, shopId)).rejects.toThrow(
+        "Template must have a generation model configured to be published",
+      );
+
+      // Verify status unchanged
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("draft");
+    });
+  });
+
+  describe("unpublishTemplate", () => {
+    it("unpublishes a published template", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Unpublish Test",
+        prompt: "Test design",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      });
+
+      // First publish it
+      await publishTemplate(template.id, shopId);
+
+      const result = await unpublishTemplate(template.id, shopId);
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe("draft");
+
+      // Verify persistence
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("draft");
+    });
+
+    it("returns null for different shop (multi-tenancy)", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Unpublish Multi-tenancy Test",
+        prompt: "Test design",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      });
+
+      await publishTemplate(template.id, shopId);
+      const result = await unpublishTemplate(template.id, "other-shop-456");
+
+      expect(result).toBeNull();
+
+      // Verify status unchanged
+      const fetched = await getTemplate(template.id, shopId);
+      expect(fetched?.status).toBe("published");
+    });
+
+    it("returns null for non-existent template", async () => {
+      const result = await unpublishTemplate("non-existent-id", shopId);
+      expect(result).toBeNull();
+    });
+
+    it("is idempotent (unpublishing already draft template)", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Draft Idempotent Test",
+        prompt: "Test design",
+        generationModelIdentifier: "fal-ai/bytedance/seedream/v4/edit",
+        priceUsdPerGeneration: 0.05,
+        variableNames: [],
+      });
+
+      const result = await unpublishTemplate(template.id, shopId);
+
+      expect(result).not.toBeNull();
+      expect(result?.status).toBe("draft");
+    });
+  });
+
+  describe("getLatestTestGeneration", () => {
+    it("returns the latest generation with ID and createdAt", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Gen Test Template",
+        variableNames: [],
+      });
+
+      const output: TestGenerationOutput = {
+        results: [
+          {
+            url: "https://example.com/image.jpg",
+            generation_time_seconds: 2.5,
+            cost_usd: 0.05,
+          },
+        ],
+        total_time_seconds: 2.5,
+        total_cost_usd: 0.05,
+        generation_cost_usd: 0.025,
+        remove_bg_cost_usd: 0.025,
+      };
+
+      // Record a generation
+      await prisma.templateTestGeneration.create({
+        data: {
+          template_id: template.id,
+          shop_id: shopId,
+          num_images_requested: 1,
+          num_images_generated: 1,
+          total_cost_usd: 0.05,
+          total_time_seconds: 2.5,
+          success: true,
+          result_images: JSON.stringify(output),
+        },
+      });
+
+      const latest = await getLatestTestGeneration(template.id, shopId);
+
+      expect(latest).not.toBeNull();
+      expect(latest?.id).toBeDefined();
+      expect(latest?.createdAt).toBeDefined();
+      expect(typeof latest?.id).toBe("string");
+      expect(latest?.results).toHaveLength(1);
+      expect(latest?.results[0].url).toBe("https://example.com/image.jpg");
+    });
+
+    it("returns null if generation has no results", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "Empty Gen Template",
+        variableNames: [],
+      });
+      
+      await prisma.templateTestGeneration.create({
+        data: {
+          template_id: template.id,
+          shop_id: shopId,
+          num_images_requested: 1,
+          num_images_generated: 0,
+          total_cost_usd: 0,
+          total_time_seconds: 0,
+          success: true, 
+          result_images: null, // No results
+        },
+      });
+
+      const latest = await getLatestTestGeneration(template.id, shopId);
+
+      expect(latest).toBeNull();
+    });
+
+    it("returns null if no generation exists", async () => {
+      const template = await createTemplate({
+        shopId,
+        templateName: "No Gen Template",
+        variableNames: [],
+      });
+
+      const latest = await getLatestTestGeneration(template.id, shopId);
+
+      expect(latest).toBeNull();
     });
   });
 });

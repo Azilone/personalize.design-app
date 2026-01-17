@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -13,6 +13,7 @@ import {
   useLocation,
   useNavigate,
   useNavigation,
+  useRevalidator,
 } from "react-router";
 
 import { authenticate } from "../../../../shopify.server";
@@ -30,10 +31,12 @@ import {
   deleteTemplate,
   reserveTestGenerationQuota,
   releaseTestGenerationQuota,
-  recordTestGeneration,
+  getLatestTestGeneration,
   type DesignTemplateDto,
+  type TestGenerationOutput,
 } from "../../../../services/templates/templates.server";
-import { generateImages } from "../../../../services/fal/generate.server";
+import { inngest } from "../../../../services/inngest/client.server";
+import { templateTestGeneratePayloadSchema } from "../../../../services/inngest/types";
 import logger from "../../../../lib/logger";
 import {
   MVP_GENERATION_MODEL_ID,
@@ -45,6 +48,8 @@ import {
 
 export type LoaderData = {
   template: DesignTemplateDto | null;
+  testResults: TestGenerationOutput | null;
+  pollInterval: number;
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -59,10 +64,19 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const template = await getTemplate(templateId, shopId);
 
   if (!template) {
+    logger.warn({ templateId, shopId }, "Template not found in loader");
     throw new Response("Template not found", { status: 404 });
   }
 
-  return { template };
+  const testResults = await getLatestTestGeneration(templateId, shopId);
+
+  // Poll=1 check removed as we now use useRevalidator which goes through the normal loader flow
+
+  logger.info(
+    { templateId, shopId, hasResults: !!testResults },
+    "Template loaded",
+  );
+  return { template, testResults, pollInterval: 3000 };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
@@ -134,8 +148,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
-    const { test_photo_url, test_text, num_images, variable_values_json } =
-      parsed.data;
+    const {
+      test_photo_url,
+      test_text,
+      num_images,
+      variable_values_json,
+      fake_generation,
+    } = parsed.data;
 
     // Require prompt for test generation
     if (!template.prompt?.trim()) {
@@ -208,101 +227,74 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       generationPrompt = `${renderedPrompt}\n\nCustom text: ${test_text.trim()}`;
     }
 
+    if (!generationPrompt.trim()) {
+      return data(
+        {
+          error: {
+            code: "validation_error",
+            message:
+              "Please provide a prompt or template text before generating images.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
     try {
-      // Call fal.ai generation service
-      const generationResult = await generateImages({
-        modelId: template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
-        imageUrls: [test_photo_url],
+      const payload = templateTestGeneratePayloadSchema.parse({
+        shop_id: shopId,
+        template_id: templateId,
+        test_photo_url,
         prompt: generationPrompt,
-        numImages: num_images,
-        shopId,
-        removeBackgroundEnabled: template.removeBackgroundEnabled,
+        variable_values: safeVariableValues,
+        num_images: num_images,
+        generation_model_identifier:
+          template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
+        remove_background_enabled: template.removeBackgroundEnabled,
+        fake_generation,
       });
 
-      // Record test generation metadata for analytics
-      await recordTestGeneration({
-        templateId,
-        shopId,
-        numImagesRequested: num_images,
-        numImagesGenerated: generationResult.images.length,
-        totalCostUsd: generationResult.totalCostUsd,
-        totalTimeSeconds: generationResult.totalTimeSeconds,
-        generationCostUsd: generationResult.images[0]?.generationCostUsd,
-        removeBgCostUsd: generationResult.images[0]?.removeBgCostUsd,
-        success: true,
+      const { ids } = await inngest.send({
+        name: "templates/test.generate.requested",
+        data: payload,
       });
 
       logger.info(
         {
           shop_id: shopId,
           template_id: templateId,
-          generated_count: generationResult.images.length,
+          event_ids: ids,
         },
-        "Test generation completed",
+        "Queued test generation",
       );
 
-      // Map to response format with per-image metadata (including cost breakdown)
-      const results = generationResult.images.map((img) => ({
-        url: img.url,
-        generation_time_seconds: img.generationTimeSeconds,
-        cost_usd: img.costUsd,
-        generation_cost_usd: img.generationCostUsd,
-        remove_bg_cost_usd: img.removeBgCostUsd,
-        seed: img.seed,
-      }));
-
       return data({
-        results,
-        total_time_seconds: generationResult.totalTimeSeconds,
-        total_cost_usd: generationResult.totalCostUsd,
-        generation_cost_usd: generationResult.images.reduce(
-          (sum, img) => sum + (img.generationCostUsd || 0),
-          0,
-        ),
-        remove_bg_cost_usd: generationResult.images.reduce(
-          (sum, img) => sum + (img.removeBgCostUsd || 0),
-          0,
-        ),
+        queued: true,
+        event_ids: ids,
         usage: {
           count: reservation.newCount,
           limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
           remaining: reservation.remaining,
         },
+        message:
+          "Test generation queued. Results will appear in Inngest once complete.",
       });
     } catch (error) {
-      // Release reserved quota since generation failed
       await releaseTestGenerationQuota(templateId, shopId, num_images);
-
-      // Record failed test generation for analytics
-      await recordTestGeneration({
-        templateId,
-        shopId,
-        numImagesRequested: num_images,
-        numImagesGenerated: 0,
-        totalCostUsd: 0,
-        totalTimeSeconds: 0,
-        success: false,
-        errorMessage: error instanceof Error ? error.message : "Unknown error",
-      });
 
       logger.error(
         { shop_id: shopId, template_id: templateId, err: error },
-        "Test generation failed",
+        "Failed to queue test generation",
       );
-
-      // Handle GenerationError and other errors
-      if (error instanceof Error) {
-        return data(
-          { error: { code: "generation_failed", message: error.message } },
-          { status: 500 },
-        );
-      }
 
       return data(
         {
           error: {
             code: "generation_failed",
-            message: "An unexpected error occurred during generation.",
+            message:
+              error instanceof Error
+                ? error.message
+                : "An unexpected error occurred during generation.",
           },
         },
         { status: 500 },
@@ -429,7 +421,8 @@ export const headers: HeadersFunction = () => {
 };
 
 export default function TemplateEditPage() {
-  const { template } = useLoaderData<typeof loader>();
+  const { template, testResults, pollInterval } =
+    useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -448,6 +441,15 @@ export default function TemplateEditPage() {
       ? actionData.error.message
       : null;
 
+  const queuedMessage =
+    actionData &&
+    typeof actionData === "object" &&
+    "queued" in actionData &&
+    "message" in actionData &&
+    typeof actionData.message === "string"
+      ? actionData.message
+      : null;
+
   const errorDetails =
     actionData &&
     typeof actionData === "object" &&
@@ -463,6 +465,15 @@ export default function TemplateEditPage() {
 
   const deleted =
     actionData && typeof actionData === "object" && "deleted" in actionData;
+
+  const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
+
+  const [liveTestResults, setLiveTestResults] =
+    useState<TestGenerationOutput | null>(testResults);
+
+  const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const ignoredGenerationId = useRef<string | undefined>(undefined);
+  const revalidator = useRevalidator();
 
   // State for form fields (initialized from template)
   const [templateName, setTemplateName] = useState(
@@ -480,6 +491,8 @@ export default function TemplateEditPage() {
   const [removeBackgroundEnabled, setRemoveBackgroundEnabled] = useState(
     template?.removeBackgroundEnabled ?? false,
   );
+  const [fakeGeneration, setFakeGeneration] = useState(false);
+  const isDev = process.env.NODE_ENV === "development";
 
   // Generation settings (MVP: use constants, read persisted from template)
   const generationModel =
@@ -497,27 +510,8 @@ export default function TemplateEditPage() {
     isSubmitting &&
     navigation.formData?.get("intent") === "template_test_generate";
 
-  // Extract test generation results from actionData
-  const testResults =
-    actionData &&
-    typeof actionData === "object" &&
-    "results" in actionData &&
-    Array.isArray(actionData.results)
-      ? (actionData as {
-          results: Array<{
-            url: string;
-            generation_time_seconds: number | null;
-            cost_usd: number;
-            seed?: number;
-          }>;
-          total_time_seconds: number;
-          total_cost_usd: number;
-          usage?: { count: number; limit: number; remaining: number };
-        })
-      : null;
-
-  // Calculate current usage from template or recent results
-  const testGenerationUsage = testResults?.usage ?? {
+  // Calculate current usage from template
+  const testGenerationUsage = {
     count: template?.testGenerationCount ?? 0,
     limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
     remaining:
@@ -525,10 +519,13 @@ export default function TemplateEditPage() {
   };
 
   // Estimated cost before generation (includes remove-bg if enabled)
-  const estimatedGenerationCost = generationPrice * numImagesToGenerate;
-  const estimatedRemoveBgCost = removeBackgroundEnabled
-    ? REMOVE_BG_PRICE_USD * numImagesToGenerate
-    : 0;
+  const estimatedGenerationCost = fakeGeneration
+    ? 0
+    : generationPrice * numImagesToGenerate;
+  const estimatedRemoveBgCost =
+    fakeGeneration || !removeBackgroundEnabled
+      ? 0
+      : REMOVE_BG_PRICE_USD * numImagesToGenerate;
   const estimatedCost = estimatedGenerationCost + estimatedRemoveBgCost;
 
   // Serialize variable names to JSON for form submission
@@ -546,6 +543,62 @@ export default function TemplateEditPage() {
     setVariableNames((prev) => prev.filter((n) => n !== name));
   }, []);
 
+  console.log("RENDER", {
+    isGenerationInProgress,
+    hasLiveResults: !!liveTestResults,
+    testResultId: testResults?.id,
+    ignoredId: ignoredGenerationId.current,
+    navState: navigation.state,
+  });
+
+  // Track generation progress
+  useEffect(() => {
+    if (queuedMessage) {
+      console.log("Queued message received", queuedMessage);
+      setIsGenerationInProgress(true);
+
+      // Update the ignored ID if we somehow missed it (though onSubmit should catch it)
+      if (ignoredGenerationId.current === undefined) {
+        ignoredGenerationId.current = testResults?.id;
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [queuedMessage]);
+
+  useEffect(() => {
+    // 1. If we are currently generating, strict checks apply
+    if (isGenerationInProgress) {
+      // We only unlock if we have a GENUINELY NEW result
+      if (
+        testResults &&
+        testResults.id &&
+        testResults.id !== ignoredGenerationId.current
+      ) {
+        console.log("Strict Mode: New result ID detected. Unlocking loader.");
+        setLiveTestResults(testResults);
+        setIsGenerationInProgress(false);
+      } else {
+        console.log(
+          "Strict Mode: Ignoring server update (still generating or old data).",
+        );
+      }
+      return;
+    }
+
+    // 2. If we are NOT generating, simply allow the server to drive the UI
+    if (testResults) {
+      console.log("Strict Mode: Syncing server results (idle state).");
+      setLiveTestResults(testResults);
+    }
+  }, [testResults, isGenerationInProgress]);
+
+  // Handle error cases - stop loading if action returns an error
+  useEffect(() => {
+    if (errorMessage) {
+      setIsGenerationInProgress(false);
+    }
+  }, [errorMessage]);
+
   // Redirect after delete
   useEffect(() => {
     if (deleted) {
@@ -553,12 +606,39 @@ export default function TemplateEditPage() {
     }
   }, [deleted, templatesHref, navigate]);
 
+  // Poll for test generation results when queued using Remix revalidator
+  // This ensures proper Shopify session handling (raw fetch would receive HTML auth redirects)
+  useEffect(() => {
+    if (!isGenerationInProgress) {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+      return;
+    }
+
+    pollIntervalRef.current = setInterval(() => {
+      // Use Remix's revalidator to reload the loader data
+      // This properly handles authentication through Remix's data flow
+      if (revalidator.state === "idle") {
+        revalidator.revalidate();
+      }
+    }, pollInterval);
+
+    return () => {
+      if (pollIntervalRef.current) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
+    };
+  }, [isGenerationInProgress, pollInterval, revalidator]);
+
   if (!template) {
     return (
       <s-page heading="Template Not Found">
         <s-section>
           <s-banner tone="critical">
-            <s-text>Template not found or you don't have access.</s-text>
+            <s-text>Template not found or you don&apos;t have access.</s-text>
           </s-banner>
           <Link to={templatesHref}>Back to templates</Link>
         </s-section>
@@ -587,6 +667,12 @@ export default function TemplateEditPage() {
                   ))}
                 </ul>
               ) : null}
+            </s-banner>
+          ) : null}
+
+          {isGenerationInProgress ? (
+            <s-banner tone="info">
+              <s-text>Generating images... This may take a moment.</s-text>
             </s-banner>
           ) : null}
 
@@ -814,11 +900,17 @@ export default function TemplateEditPage() {
                   onChange={() =>
                     setRemoveBackgroundEnabled(!removeBackgroundEnabled)
                   }
+                  disabled={fakeGeneration}
                 />
                 <s-text color="subdued">
                   Automatically remove photo backgrounds before generation.{" "}
                   <strong>+ $0.025 per image</strong>
                 </s-text>
+                {fakeGeneration && (
+                  <s-text color="subdued">
+                    Disabled when fake generation is enabled.
+                  </s-text>
+                )}
               </s-stack>
 
               <s-divider />
@@ -882,7 +974,20 @@ export default function TemplateEditPage() {
             <s-divider />
 
             {/* Test Form */}
-            <Form method="post">
+            <Form
+              method="post"
+              onSubmit={() => {
+                // Immediate feedback: clear old results and show loader
+                // We use a timeout to ensure this runs after default behavior if needed,
+                // but usually direct state set is fine.
+                setLiveTestResults(null);
+
+                // Set ignored ID *before* state change to prevent race
+                ignoredGenerationId.current = testResults?.id;
+
+                setIsGenerationInProgress(true);
+              }}
+            >
               <input
                 type="hidden"
                 name="intent"
@@ -894,12 +999,17 @@ export default function TemplateEditPage() {
                 name="variable_values_json"
                 value={JSON.stringify(testVariableValues)}
               />
+              <input
+                type="hidden"
+                name="fake_generation"
+                value={fakeGeneration ? "true" : "false"}
+              />
+              <input type="hidden" name="test_photo_url" value={testPhotoUrl} />
 
               <s-stack direction="block" gap="base">
                 {/* Photo URL Input */}
                 <s-text-field
                   label="Test Photo URL"
-                  name="test_photo_url"
                   placeholder="https://example.com/photo.jpg"
                   value={testPhotoUrl}
                   onChange={(event: {
@@ -910,10 +1020,27 @@ export default function TemplateEditPage() {
                       event.detail?.value ?? event.currentTarget?.value ?? "";
                     setTestPhotoUrl(value);
                   }}
+                  disabled={fakeGeneration}
                 />
                 <s-text color="subdued">
                   Enter a publicly accessible URL to a test image
                 </s-text>
+
+                {/* Fake Generation Checkbox (dev-only) */}
+                {isDev && (
+                  <s-stack direction="block" gap="small">
+                    <s-checkbox
+                      label="Fake generation (dev only)"
+                      value="true"
+                      checked={fakeGeneration}
+                      onChange={() => setFakeGeneration(!fakeGeneration)}
+                    />
+                    <s-text color="subdued">
+                      Use placeholder images instead of fal.ai. No cost
+                      incurred.
+                    </s-text>
+                  </s-stack>
+                )}
 
                 {template.variables.length > 0 && (
                   <s-stack direction="block" gap="small">
@@ -985,27 +1112,32 @@ export default function TemplateEditPage() {
                 </s-stack>
 
                 {/* Estimated Cost Display */}
-                <s-banner tone="info">
+                <s-banner tone={fakeGeneration ? "success" : "info"}>
                   <s-stack direction="block" gap="small">
                     <s-text>
                       <strong>
-                        Estimated cost: ${estimatedCost.toFixed(2)}
+                        {fakeGeneration
+                          ? "Fake generation: No cost"
+                          : `Estimated cost: $${estimatedCost.toFixed(2)}`}
                       </strong>
                     </s-text>
-                    <s-text color="subdued">
-                      Generation: ${generationPrice.toFixed(2)} ×{" "}
-                      {numImagesToGenerate} = $
-                      {estimatedGenerationCost.toFixed(2)}
-                      {removeBackgroundEnabled && (
-                        <>
-                          <br />
-                          Remove Background: ${REMOVE_BG_PRICE_USD.toFixed(
-                            3,
-                          )} × {numImagesToGenerate} = $
-                          {estimatedRemoveBgCost.toFixed(2)}
-                        </>
-                      )}
-                    </s-text>
+                    {!fakeGeneration && (
+                      <s-text color="subdued">
+                        Generation: ${generationPrice.toFixed(2)} ×{" "}
+                        {numImagesToGenerate} = $
+                        {estimatedGenerationCost.toFixed(2)}
+                        {removeBackgroundEnabled && (
+                          <>
+                            <br />
+                            Remove Background: ${REMOVE_BG_PRICE_USD.toFixed(
+                              3,
+                            )}{" "}
+                            × {numImagesToGenerate} = $
+                            {estimatedRemoveBgCost.toFixed(2)}
+                          </>
+                        )}
+                      </s-text>
+                    )}
                   </s-stack>
                 </s-banner>
 
@@ -1013,30 +1145,89 @@ export default function TemplateEditPage() {
                 <s-button
                   type="submit"
                   variant="primary"
-                  loading={isTestGenerating}
+                  loading={isTestGenerating || isGenerationInProgress}
                   disabled={
-                    !testPhotoUrl.trim() ||
+                    (!fakeGeneration && !testPhotoUrl.trim()) ||
                     testGenerationUsage.remaining <= 0 ||
-                    isTestGenerating
+                    isTestGenerating ||
+                    isGenerationInProgress
                   }
                 >
-                  {isTestGenerating
+                  {isTestGenerating || isGenerationInProgress
                     ? "Generating..."
-                    : `Generate ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`}
+                    : fakeGeneration
+                      ? `Fake ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`
+                      : `Generate ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`}
                 </s-button>
               </s-stack>
             </Form>
 
+            {/* Loading Skeleton */}
+            {isGenerationInProgress && !liveTestResults && (
+              <s-stack direction="block" gap="base">
+                <s-divider />
+                <s-text>
+                  <strong>Generated Images</strong>
+                </s-text>
+                <s-text color="subdued">Generating your images...</s-text>
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(200px, 1fr))",
+                    gap: "16px",
+                  }}
+                >
+                  {Array.from({ length: numImagesToGenerate }).map(
+                    (_, index) => (
+                      <div
+                        key={index}
+                        style={{
+                          border: "1px solid #e0e0e0",
+                          borderRadius: "8px",
+                          overflow: "hidden",
+                          height: "248px",
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "200px",
+                            backgroundColor: "#f5f5f5",
+                            animation:
+                              "pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite",
+                          }}
+                        />
+                        <div
+                          style={{
+                            padding: "8px",
+                            height: "40px",
+                            backgroundColor: "#fafafa",
+                          }}
+                        />
+                      </div>
+                    ),
+                  )}
+                </div>
+                <style>{`
+                  @keyframes pulse {
+                    0%, 100% { opacity: 1; }
+                    50% { opacity: 0.5; }
+                  }
+                `}</style>
+              </s-stack>
+            )}
+
             {/* Results Gallery */}
-            {testResults && (
+            {liveTestResults && (
               <s-stack direction="block" gap="base">
                 <s-divider />
                 <s-text>
                   <strong>Generated Images</strong>
                 </s-text>
                 <s-text color="subdued">
-                  Total time: {testResults.total_time_seconds.toFixed(1)}s |
-                  Total cost: ${testResults.total_cost_usd.toFixed(2)}
+                  Total time: {liveTestResults.total_time_seconds.toFixed(1)}s |
+                  Total cost: ${liveTestResults.total_cost_usd.toFixed(2)}
                 </s-text>
 
                 <div
@@ -1047,7 +1238,7 @@ export default function TemplateEditPage() {
                     gap: "16px",
                   }}
                 >
-                  {testResults.results.map((result, index) => (
+                  {liveTestResults.results.map((result, index) => (
                     <div
                       key={index}
                       style={{
@@ -1058,7 +1249,7 @@ export default function TemplateEditPage() {
                     >
                       <img
                         src={result.url}
-                        alt={`Generated image ${index + 1}`}
+                        alt={`Generated ${index + 1}`}
                         style={{
                           width: "100%",
                           height: "200px",
