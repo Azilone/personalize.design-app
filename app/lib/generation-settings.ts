@@ -47,3 +47,9 @@ export function isValidGenerationModelId(
  */
 export const TEMPLATE_TEST_LIMIT_PER_MONTH = 50;
 
+/**
+ * Price per background removal in USD.
+ * BiRefNet v2 on fal.ai
+ */
+export const REMOVE_BG_PRICE_USD = 0.025;
+

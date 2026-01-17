@@ -26,12 +26,16 @@ export interface GenerationInput {
  * A single generated image result.
  */
 export interface GeneratedImage {
-  /** URL of the generated image */
+  /** URL of generated image */
   url: string;
   /** Generation time in seconds (if available) */
   generationTimeSeconds: number | null;
-  /** Cost in USD for this image */
+  /** Cost in USD for this image (total: generation + remove-bg if applicable) */
   costUsd: number;
+  /** Cost in USD for generation only (optional, used when remove-bg enabled) */
+  generationCostUsd?: number;
+  /** Cost in USD for remove-bg only (optional, used when remove-bg enabled) */
+  removeBgCostUsd?: number;
   /** Seed used for this generation */
   seed?: number;
 }
@@ -59,6 +63,7 @@ export type GenerationErrorCode =
   | "network_error"
   | "invalid_input"
   | "rate_limited"
+  | "remove_bg_failed"
   | "unknown";
 
 /**

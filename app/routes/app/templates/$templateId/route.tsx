@@ -20,6 +20,7 @@ import { getShopIdFromSession } from "../../../../lib/tenancy";
 import { buildEmbeddedSearch } from "../../../../lib/embedded-search";
 import { templateActionSchema } from "../../../../schemas/admin";
 import {
+  applyPromptVariableValues,
   validateVariableNames,
   validatePromptVariableReferences,
 } from "../../../../lib/prompt-variables";
@@ -39,6 +40,7 @@ import {
   MVP_GENERATION_MODEL_DISPLAY_NAME,
   MVP_PRICE_USD_PER_GENERATION,
   TEMPLATE_TEST_LIMIT_PER_MONTH,
+  REMOVE_BG_PRICE_USD,
 } from "../../../../lib/generation-settings";
 
 export type LoaderData = {
@@ -132,7 +134,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
-    const { test_photo_url, test_text, num_images } = parsed.data;
+    const { test_photo_url, test_text, num_images, variable_values_json } =
+      parsed.data;
 
     // Require prompt for test generation
     if (!template.prompt?.trim()) {
@@ -170,11 +173,39 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
+    let parsedVariableValues: Record<string, string> = {};
+    try {
+      const candidate = JSON.parse(variable_values_json);
+      if (candidate && typeof candidate === "object") {
+        parsedVariableValues = Object.fromEntries(
+          Object.entries(candidate).map(([key, value]) => [
+            String(key),
+            typeof value === "string" ? value : String(value ?? ""),
+          ]),
+        );
+      }
+    } catch {
+      parsedVariableValues = {};
+    }
+
+    const safeVariableValues: Record<string, string> = {};
+    for (const variable of template.variables) {
+      const rawValue = parsedVariableValues[variable.name];
+      if (rawValue !== undefined) {
+        safeVariableValues[variable.name] = rawValue;
+      }
+    }
+
+    const renderedPrompt = applyPromptVariableValues(
+      template.prompt,
+      safeVariableValues,
+    );
+
     // Build prompt: base template + optional test text
-    let generationPrompt = template.prompt;
+    let generationPrompt = renderedPrompt;
     if (template.textInputEnabled && test_text?.trim()) {
       // Append buyer's custom text to the prompt
-      generationPrompt = `${template.prompt}\n\nCustom text: ${test_text.trim()}`;
+      generationPrompt = `${renderedPrompt}\n\nCustom text: ${test_text.trim()}`;
     }
 
     try {
@@ -185,6 +216,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         prompt: generationPrompt,
         numImages: num_images,
         shopId,
+        removeBackgroundEnabled: template.removeBackgroundEnabled,
       });
 
       // Record test generation metadata for analytics
@@ -195,6 +227,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         numImagesGenerated: generationResult.images.length,
         totalCostUsd: generationResult.totalCostUsd,
         totalTimeSeconds: generationResult.totalTimeSeconds,
+        generationCostUsd: generationResult.images[0]?.generationCostUsd,
+        removeBgCostUsd: generationResult.images[0]?.removeBgCostUsd,
         success: true,
       });
 
@@ -207,11 +241,13 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         "Test generation completed",
       );
 
-      // Map to response format with per-image metadata
+      // Map to response format with per-image metadata (including cost breakdown)
       const results = generationResult.images.map((img) => ({
         url: img.url,
         generation_time_seconds: img.generationTimeSeconds,
         cost_usd: img.costUsd,
+        generation_cost_usd: img.generationCostUsd,
+        remove_bg_cost_usd: img.removeBgCostUsd,
         seed: img.seed,
       }));
 
@@ -219,6 +255,14 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         results,
         total_time_seconds: generationResult.totalTimeSeconds,
         total_cost_usd: generationResult.totalCostUsd,
+        generation_cost_usd: generationResult.images.reduce(
+          (sum, img) => sum + (img.generationCostUsd || 0),
+          0,
+        ),
+        remove_bg_cost_usd: generationResult.images.reduce(
+          (sum, img) => sum + (img.removeBgCostUsd || 0),
+          0,
+        ),
         usage: {
           count: reservation.newCount,
           limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
@@ -286,6 +330,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     variable_names_json,
     generation_model_identifier,
     price_usd_per_generation,
+    remove_background_enabled,
   } = parsed.data;
 
   // Parse variable names from JSON
@@ -345,6 +390,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       prompt: prompt || null,
       generationModelIdentifier: generation_model_identifier ?? null,
       priceUsdPerGeneration: price_usd_per_generation ?? null,
+      removeBackgroundEnabled: remove_background_enabled === "true",
       variableNames,
     });
 
@@ -431,6 +477,9 @@ export default function TemplateEditPage() {
   );
   const [variableInput, setVariableInput] = useState("");
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [removeBackgroundEnabled, setRemoveBackgroundEnabled] = useState(
+    template?.removeBackgroundEnabled ?? false,
+  );
 
   // Generation settings (MVP: use constants, read persisted from template)
   const generationModel =
@@ -440,6 +489,9 @@ export default function TemplateEditPage() {
 
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
+  const [testVariableValues, setTestVariableValues] = useState<
+    Record<string, string>
+  >({});
   const [numImagesToGenerate, setNumImagesToGenerate] = useState(1);
   const isTestGenerating =
     isSubmitting &&
@@ -472,8 +524,12 @@ export default function TemplateEditPage() {
       TEMPLATE_TEST_LIMIT_PER_MONTH - (template?.testGenerationCount ?? 0),
   };
 
-  // Estimated cost before generation
-  const estimatedCost = generationPrice * numImagesToGenerate;
+  // Estimated cost before generation (includes remove-bg if enabled)
+  const estimatedGenerationCost = generationPrice * numImagesToGenerate;
+  const estimatedRemoveBgCost = removeBackgroundEnabled
+    ? REMOVE_BG_PRICE_USD * numImagesToGenerate
+    : 0;
+  const estimatedCost = estimatedGenerationCost + estimatedRemoveBgCost;
 
   // Serialize variable names to JSON for form submission
   const variableNamesJson = JSON.stringify(variableNames);
@@ -565,6 +621,11 @@ export default function TemplateEditPage() {
               type="hidden"
               name="price_usd_per_generation"
               value={generationPrice}
+            />
+            <input
+              type="hidden"
+              name="remove_background_enabled"
+              value={removeBackgroundEnabled ? "true" : "false"}
             />
 
             <s-stack direction="block" gap="base">
@@ -744,6 +805,22 @@ export default function TemplateEditPage() {
                 </s-stack>
               </s-banner>
 
+              {/* Remove Background Setting */}
+              <s-stack direction="block" gap="small">
+                <s-checkbox
+                  label="Remove background from photos"
+                  value="true"
+                  checked={removeBackgroundEnabled}
+                  onChange={() =>
+                    setRemoveBackgroundEnabled(!removeBackgroundEnabled)
+                  }
+                />
+                <s-text color="subdued">
+                  Automatically remove photo backgrounds before generation.{" "}
+                  <strong>+ $0.025 per image</strong>
+                </s-text>
+              </s-stack>
+
               <s-divider />
 
               <s-stack direction="inline" gap="base">
@@ -785,7 +862,9 @@ export default function TemplateEditPage() {
                     height: "100%",
                     width: `${Math.min(100, (testGenerationUsage.count / testGenerationUsage.limit) * 100)}%`,
                     backgroundColor:
-                      testGenerationUsage.remaining > 10 ? "#22c55e" : "#f59e0b",
+                      testGenerationUsage.remaining > 10
+                        ? "#22c55e"
+                        : "#f59e0b",
                     transition: "width 0.3s ease",
                   }}
                 />
@@ -804,8 +883,17 @@ export default function TemplateEditPage() {
 
             {/* Test Form */}
             <Form method="post">
-              <input type="hidden" name="intent" value="template_test_generate" />
+              <input
+                type="hidden"
+                name="intent"
+                value="template_test_generate"
+              />
               <input type="hidden" name="template_id" value={template.id} />
+              <input
+                type="hidden"
+                name="variable_values_json"
+                value={JSON.stringify(testVariableValues)}
+              />
 
               <s-stack direction="block" gap="base">
                 {/* Photo URL Input */}
@@ -821,6 +909,35 @@ export default function TemplateEditPage() {
                 <s-text color="subdued">
                   Enter a publicly accessible URL to a test image
                 </s-text>
+
+                {template.variables.length > 0 && (
+                  <s-stack direction="block" gap="small">
+                    <s-text>
+                      <strong>Variable Values</strong>
+                    </s-text>
+                    <s-text color="subdued">
+                      Provide test values for each prompt variable.
+                    </s-text>
+                    <s-stack direction="block" gap="small">
+                      {template.variables.map((variable) => (
+                        <s-text-field
+                          key={variable.id}
+                          label={variable.name}
+                          placeholder={`Enter ${variable.name}`}
+                          value={testVariableValues[variable.name] ?? ""}
+                          onChange={(event: {
+                            currentTarget: { value: string };
+                          }) =>
+                            setTestVariableValues((prev) => ({
+                              ...prev,
+                              [variable.name]: event.currentTarget.value,
+                            }))
+                          }
+                        />
+                      ))}
+                    </s-stack>
+                  </s-stack>
+                )}
 
                 {/* Text Input (if enabled) */}
                 {template.textInputEnabled && (
@@ -841,7 +958,9 @@ export default function TemplateEditPage() {
                       <s-button
                         key={n}
                         type="button"
-                        variant={numImagesToGenerate === n ? "primary" : "secondary"}
+                        variant={
+                          numImagesToGenerate === n ? "primary" : "secondary"
+                        }
                         onClick={() => setNumImagesToGenerate(n)}
                       >
                         {n}
@@ -860,8 +979,22 @@ export default function TemplateEditPage() {
                   <s-stack direction="block" gap="small">
                     <s-text>
                       <strong>
-                        Estimated cost: ${generationPrice.toFixed(2)} × {numImagesToGenerate} = ${estimatedCost.toFixed(2)}
+                        Estimated cost: ${estimatedCost.toFixed(2)}
                       </strong>
+                    </s-text>
+                    <s-text color="subdued">
+                      Generation: ${generationPrice.toFixed(2)} ×{" "}
+                      {numImagesToGenerate} = $
+                      {estimatedGenerationCost.toFixed(2)}
+                      {removeBackgroundEnabled && (
+                        <>
+                          <br />
+                          Remove Background: ${REMOVE_BG_PRICE_USD.toFixed(
+                            3,
+                          )} × {numImagesToGenerate} = $
+                          {estimatedRemoveBgCost.toFixed(2)}
+                        </>
+                      )}
                     </s-text>
                   </s-stack>
                 </s-banner>
@@ -877,7 +1010,9 @@ export default function TemplateEditPage() {
                     isTestGenerating
                   }
                 >
-                  {isTestGenerating ? "Generating..." : `Generate ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`}
+                  {isTestGenerating
+                    ? "Generating..."
+                    : `Generate ${numImagesToGenerate} Image${numImagesToGenerate > 1 ? "s" : ""}`}
                 </s-button>
               </s-stack>
             </Form>
@@ -890,14 +1025,15 @@ export default function TemplateEditPage() {
                   <strong>Generated Images</strong>
                 </s-text>
                 <s-text color="subdued">
-                  Total time: {testResults.total_time_seconds.toFixed(1)}s | Total
-                  cost: ${testResults.total_cost_usd.toFixed(2)}
+                  Total time: {testResults.total_time_seconds.toFixed(1)}s |
+                  Total cost: ${testResults.total_cost_usd.toFixed(2)}
                 </s-text>
 
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
+                    gridTemplateColumns:
+                      "repeat(auto-fill, minmax(200px, 1fr))",
                     gap: "16px",
                   }}
                 >
@@ -948,12 +1084,32 @@ export default function TemplateEditPage() {
                 </s-banner>
               )}
 
+            {/* Remove Background Error */}
+            {errorMessage &&
+              actionData &&
+              typeof actionData === "object" &&
+              "error" in actionData &&
+              (actionData.error as { code?: string })?.code ===
+                "remove_bg_failed" && (
+                <s-banner tone="critical">
+                  <s-stack direction="block" gap="small">
+                    <s-text>{errorMessage}</s-text>
+                    <s-text color="subdued">
+                      Background removal failed. This usually happens with
+                      certain image formats or transparent images. Try a
+                      different photo.
+                    </s-text>
+                  </s-stack>
+                </s-banner>
+              )}
+
             {/* Rate Limit Error */}
             {errorMessage &&
               actionData &&
               typeof actionData === "object" &&
               "error" in actionData &&
-              (actionData.error as { code?: string })?.code === "rate_limited" && (
+              (actionData.error as { code?: string })?.code ===
+                "rate_limited" && (
                 <s-banner tone="warning">
                   <s-text>{errorMessage}</s-text>
                 </s-banner>

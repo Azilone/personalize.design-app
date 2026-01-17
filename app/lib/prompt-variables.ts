@@ -2,8 +2,8 @@
  * Prompt variable parsing and validation utilities.
  *
  * Prompt variables use the format {{variable_name}} within template prompts.
- * This module provides utilities to extract references and validate them
- * against a set of defined variable names.
+ * This module provides utilities to extract references, validate them,
+ * and apply variable values to a prompt template.
  */
 
 export type PromptVariableValidationResult =
@@ -58,6 +58,26 @@ export const validatePromptVariableReferences = (
   }
 
   return { valid: true };
+};
+
+export type PromptVariableValues = Record<string, string>;
+
+export const applyPromptVariableValues = (
+  prompt: string,
+  values: PromptVariableValues,
+): string => {
+  return prompt.replace(
+    /\{\{\s*([^}\s]+)\s*\}\}/g,
+    (match, rawName: string) => {
+      const key = rawName.trim();
+      const value = values[key];
+      if (value === undefined) {
+        return match;
+      }
+
+      return value;
+    },
+  );
 };
 
 export type VariableNameValidationResult =

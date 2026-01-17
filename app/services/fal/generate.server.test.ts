@@ -5,13 +5,14 @@
  * - Validates inputs
  * - Looks up and delegates to model adapters
  * - Handles errors appropriately
+ * - Applies background removal preprocessing when enabled
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { generateImages } from "./generate.server";
 import { GenerationError } from "./types";
 
-// Mock the registry and adapter
+// Mock registry and adapter
 vi.mock("./registry", () => ({
   getModelAdapter: vi.fn(),
 }));
@@ -24,8 +25,14 @@ vi.mock("../../lib/logger", () => ({
   },
 }));
 
+vi.mock("./models/birefnet-v2", () => ({
+  removeBackground: vi.fn(),
+  BIREFNET_V2_MODEL_ID: "fal-ai/birefnet/v2",
+}));
+
 import { getModelAdapter } from "./registry";
 import type { ModelAdapter } from "./types";
+import { removeBackground } from "./models/birefnet-v2";
 
 const mockAdapter: ModelAdapter = {
   config: {
@@ -141,6 +148,159 @@ describe("generateImages", () => {
         numImages: 5,
       }),
     ).rejects.toThrow("Number of images must be between 1 and 4.");
+  });
+
+  it("should apply background removal preprocessing when enabled", async () => {
+    const mockOutput = {
+      images: [
+        {
+          url: "https://example.com/generated.jpg",
+          generationTimeSeconds: 4.5,
+          costUsd: 0.05,
+        },
+      ],
+      totalTimeSeconds: 4.5,
+      totalCostUsd: 0.05,
+    };
+
+    vi.mocked(mockAdapter.generate).mockResolvedValue(mockOutput);
+    vi.mocked(removeBackground).mockResolvedValue({
+      imageUrl: "https://example.com/removed-bg.jpg",
+      timeSeconds: 2.5,
+      costUsd: 0.025,
+    });
+
+    const result = await generateImages({
+      modelId: "test-model",
+      imageUrls: ["https://example.com/input.jpg"],
+      prompt: "A beautiful landscape",
+      numImages: 1,
+      shopId: "shop-123",
+      removeBackgroundEnabled: true,
+    });
+
+    // Verify removeBackground was called
+    expect(removeBackground).toHaveBeenCalledWith(
+      "https://example.com/input.jpg",
+      "shop-123",
+    );
+
+    // Verify total cost includes remove-bg cost
+    expect(result.totalCostUsd).toBeCloseTo(0.075, 0.001);
+    expect(result.totalTimeSeconds).toBeGreaterThan(4.5);
+
+    // Verify per-image cost breakdown
+    expect(result.images[0].costUsd).toBeCloseTo(0.075, 0.001);
+    expect(result.images[0].generationCostUsd).toBe(0.05);
+    expect(result.images[0].removeBgCostUsd).toBeCloseTo(0.025, 0.001);
+
+    // Verify preprocessed image was passed to adapter
+    expect(mockAdapter.generate).toHaveBeenCalledWith({
+      imageUrls: ["https://example.com/removed-bg.jpg"],
+      prompt: "A beautiful landscape",
+      numImages: 1,
+      seed: undefined,
+    });
+  });
+
+  it("should distribute remove-bg cost across multiple images", async () => {
+    const mockOutput = {
+      images: [
+        {
+          url: "https://example.com/generated1.jpg",
+          generationTimeSeconds: 3.2,
+          costUsd: 0.05,
+        },
+        {
+          url: "https://example.com/generated2.jpg",
+          generationTimeSeconds: 3.1,
+          costUsd: 0.05,
+        },
+        {
+          url: "https://example.com/generated3.jpg",
+          generationTimeSeconds: 3.3,
+          costUsd: 0.05,
+        },
+      ],
+      totalTimeSeconds: 9.6,
+      totalCostUsd: 0.15,
+    };
+
+    vi.mocked(mockAdapter.generate).mockResolvedValue(mockOutput);
+    vi.mocked(removeBackground).mockImplementation((url) =>
+      Promise.resolve({
+        imageUrl: url,
+        timeSeconds: 2.0,
+        costUsd: 0.025,
+      }),
+    );
+
+    const result = await generateImages({
+      modelId: "test-model",
+      imageUrls: [
+        "https://example.com/input1.jpg",
+        "https://example.com/input2.jpg",
+        "https://example.com/input3.jpg",
+      ],
+      prompt: "Beautiful landscapes",
+      numImages: 3,
+      shopId: "shop-123",
+      removeBackgroundEnabled: true,
+    });
+
+    // Verify total remove-bg cost is 3 x $0.025
+    expect(result.totalCostUsd).toBeCloseTo(0.225, 0.001);
+
+    // Verify each image has $0.05 generation + $0.025 remove-bg
+    result.images.forEach((img) => {
+      expect(img.costUsd).toBeCloseTo(0.075, 0.001);
+      expect(img.generationCostUsd).toBe(0.05);
+      expect(img.removeBgCostUsd).toBeCloseTo(0.025, 0.001);
+    });
+
+    // Verify all three removeBackground calls were made
+    expect(removeBackground).toHaveBeenCalledTimes(3);
+  });
+
+  it("should not add remove-bg cost when disabled", async () => {
+    const mockOutput = {
+      images: [
+        {
+          url: "https://example.com/generated.jpg",
+          generationTimeSeconds: 4.5,
+          costUsd: 0.05,
+        },
+      ],
+      totalTimeSeconds: 4.5,
+      totalCostUsd: 0.05,
+    };
+
+    vi.mocked(mockAdapter.generate).mockResolvedValue(mockOutput);
+
+    const result = await generateImages({
+      modelId: "test-model",
+      imageUrls: ["https://example.com/input.jpg"],
+      prompt: "A beautiful landscape",
+      numImages: 1,
+      shopId: "shop-123",
+      removeBackgroundEnabled: false,
+    });
+
+    // Verify removeBackground was NOT called
+    expect(removeBackground).not.toHaveBeenCalled();
+
+    // Verify original input images were passed to adapter
+    expect(mockAdapter.generate).toHaveBeenCalledWith({
+      imageUrls: ["https://example.com/input.jpg"],
+      prompt: "A beautiful landscape",
+      numImages: 1,
+      seed: undefined,
+    });
+
+    // Verify cost breakdown is not present
+    expect(result.images[0].costUsd).toBe(0.05);
+    expect(result.images[0].generationCostUsd).toBeUndefined();
+    expect(result.images[0].removeBgCostUsd).toBeUndefined();
   });
 
   it("should re-throw GenerationError from adapter", async () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  applyPromptVariableValues,
   extractPromptVariableReferences,
   validatePromptVariableReferences,
   validateVariableNames,
@@ -80,6 +81,26 @@ describe("validatePromptVariableReferences", () => {
     if (!result.valid) {
       expect(result.errors).toHaveLength(2);
     }
+  });
+});
+
+describe("applyPromptVariableValues", () => {
+  it("replaces known variables with values", () => {
+    const result = applyPromptVariableValues("A {{animal}} named {{name}}", {
+      animal: "cat",
+      name: "Mochi",
+    });
+    expect(result).toBe("A cat named Mochi");
+  });
+
+  it("preserves unknown variables", () => {
+    const result = applyPromptVariableValues("A {{animal}}", {});
+    expect(result).toBe("A {{animal}}");
+  });
+
+  it("handles whitespace inside braces", () => {
+    const result = applyPromptVariableValues("{{ animal }}", { animal: "dog" });
+    expect(result).toBe("dog");
   });
 });
 

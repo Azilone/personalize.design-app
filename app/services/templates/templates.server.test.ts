@@ -92,6 +92,31 @@ describe("Templates Service", () => {
       );
       expect(template.priceUsdPerGeneration).toBe(0.05);
     });
+
+    it("creates template with removeBackgroundEnabled", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "Remove BG Template",
+        removeBackgroundEnabled: true,
+        variableNames: [],
+      };
+
+      const template = await createTemplate(input);
+
+      expect(template.removeBackgroundEnabled).toBe(true);
+    });
+
+    it("creates template with removeBackgroundEnabled default false", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "Default BG Template",
+        variableNames: [],
+      };
+
+      const template = await createTemplate(input);
+
+      expect(template.removeBackgroundEnabled).toBe(false);
+    });
   });
 
   describe("getTemplate", () => {

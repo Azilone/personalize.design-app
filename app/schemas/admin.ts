@@ -135,6 +135,8 @@ const templateCreateSchema = z.object({
       message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
     })
     .optional(),
+  // Remove background setting
+  remove_background_enabled: z.enum(["true", "false"]).default("false"),
 });
 
 const templateUpdateSchema = z.object({
@@ -159,6 +161,8 @@ const templateUpdateSchema = z.object({
       message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
     })
     .optional(),
+  // Remove background setting
+  remove_background_enabled: z.enum(["true", "false"]).default("false"),
 });
 
 const templateDeleteSchema = z.object({
@@ -171,6 +175,7 @@ const templateTestGenerateSchema = z.object({
   template_id: z.string().min(1, "Template ID is required"),
   test_photo_url: z.string().url("Test photo must be a valid URL"),
   test_text: z.string().optional(),
+  variable_values_json: z.string().default("{}"),
   num_images: z.coerce
     .number()
     .int()

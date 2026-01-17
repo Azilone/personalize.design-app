@@ -34,6 +34,7 @@ export type DesignTemplateDto = {
   prompt: string | null;
   generationModelIdentifier: string | null;
   priceUsdPerGeneration: number | null;
+  removeBackgroundEnabled: boolean;
   status: DesignTemplateStatus;
   /** Monthly test generation count for rate limiting */
   testGenerationCount: number;
@@ -63,6 +64,7 @@ export type CreateTemplateInput = {
   prompt?: string | null;
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
+  removeBackgroundEnabled?: boolean;
   variableNames: string[];
 };
 
@@ -75,6 +77,7 @@ export type UpdateTemplateInput = {
   prompt?: string | null;
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
+  removeBackgroundEnabled?: boolean;
   variableNames: string[];
 };
 
@@ -135,6 +138,7 @@ export const getTemplate = async (
     prompt: template.prompt,
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
+    removeBackgroundEnabled: template.remove_background_enabled,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -162,6 +166,7 @@ export const createTemplate = async (
       prompt: input.prompt ?? null,
       generation_model_identifier: input.generationModelIdentifier ?? null,
       price_usd_per_generation: input.priceUsdPerGeneration ?? null,
+      remove_background_enabled: input.removeBackgroundEnabled ?? false,
       status: "draft",
       variables: {
         create: input.variableNames.map((name) => ({ name })),
@@ -179,6 +184,7 @@ export const createTemplate = async (
     prompt: template.prompt,
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
+    removeBackgroundEnabled: template.remove_background_enabled,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -224,6 +230,7 @@ export const updateTemplate = async (
         prompt: input.prompt ?? null,
         generation_model_identifier: input.generationModelIdentifier ?? null,
         price_usd_per_generation: input.priceUsdPerGeneration ?? null,
+        remove_background_enabled: input.removeBackgroundEnabled ?? false,
         variables: {
           create: input.variableNames.map((name) => ({ name })),
         },
@@ -241,6 +248,7 @@ export const updateTemplate = async (
     prompt: template.prompt,
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
+    removeBackgroundEnabled: template.remove_background_enabled,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -493,6 +501,8 @@ export const recordTestGeneration = async (input: {
   numImagesGenerated: number;
   totalCostUsd: number;
   totalTimeSeconds: number;
+  generationCostUsd?: number;
+  removeBgCostUsd?: number;
   success: boolean;
   errorMessage?: string;
 }): Promise<void> => {
@@ -504,6 +514,8 @@ export const recordTestGeneration = async (input: {
       num_images_generated: input.numImagesGenerated,
       total_cost_usd: input.totalCostUsd,
       total_time_seconds: input.totalTimeSeconds,
+      generation_cost_usd: input.generationCostUsd ?? null,
+      remove_bg_cost_usd: input.removeBgCostUsd ?? null,
       success: input.success,
       error_message: input.errorMessage ?? null,
     },
