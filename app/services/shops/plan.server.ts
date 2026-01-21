@@ -137,6 +137,40 @@ export const resetPlanForDev = async (shopId: string) => {
   });
 };
 
+export const activateDevBypassPlan = async (shopId: string) => {
+  const existing = await prisma.shopPlan.findUnique({
+    where: { shop_id: shopId },
+    select: {
+      free_usage_gift_cents: true,
+      free_usage_gift_remaining_cents: true,
+    },
+  });
+
+  const giftCents = existing?.free_usage_gift_cents ?? 0;
+  const giftRemaining = existing?.free_usage_gift_remaining_cents ?? 0;
+
+  return prisma.shopPlan.upsert({
+    where: { shop_id: shopId },
+    update: {
+      plan_status: PlanStatus.early_access,
+      shopify_subscription_id: null,
+      shopify_subscription_status: null,
+      shopify_confirmation_url: null,
+      free_usage_gift_cents: giftCents || FREE_GIFT_CENTS,
+      free_usage_gift_remaining_cents: giftRemaining || FREE_GIFT_CENTS,
+    },
+    create: {
+      shop_id: shopId,
+      plan_status: PlanStatus.early_access,
+      shopify_subscription_id: null,
+      shopify_subscription_status: null,
+      shopify_confirmation_url: null,
+      free_usage_gift_cents: FREE_GIFT_CENTS,
+      free_usage_gift_remaining_cents: FREE_GIFT_CENTS,
+    },
+  });
+};
+
 type PendingStandardPlanInput = {
   shopId: string;
   subscriptionId: string;

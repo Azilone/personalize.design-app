@@ -32,6 +32,7 @@ import {
 import {
   activateEarlyAccessPlan,
   activateStandardPlan,
+  activateDevBypassPlan,
   clearPendingPlan,
   clearPlanToNone,
   getShopPlanStatus,
@@ -120,6 +121,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     await resetPlanForDev(shopId);
     return redirect(buildEmbeddedRedirectPath(request, "/app/paywall"));
+  }
+
+  if (parsed.data.intent === "dev_bypass_access") {
+    if (process.env.NODE_ENV !== "development") {
+      return data(
+        { error: { code: "not_found", message: "Not found." } },
+        { status: 404 },
+      );
+    }
+
+    await activateDevBypassPlan(shopId);
+    captureEvent("paywall.dev_bypass_used", { shop_id: shopId });
+    logger.info({ shop_id: shopId }, "Paywall dev bypass used");
+    return redirect(buildEmbeddedRedirectPath(request, "/app"));
   }
 
   const resolveBillingErrorMessage = (
@@ -671,6 +686,20 @@ export default function Paywall() {
               </s-stack>
             </Form>
           </s-box>
+          {isDev ? (
+            <s-box padding="base" borderWidth="base" borderRadius="base">
+              <s-heading>Dev bypass</s-heading>
+              <s-paragraph>
+                Development only. Unlock app access without billing.
+              </s-paragraph>
+              <Form method="post">
+                <input type="hidden" name="intent" value="dev_bypass_access" />
+                <s-button type="submit" variant="tertiary">
+                  Bypass paywall (dev)
+                </s-button>
+              </Form>
+            </s-box>
+          ) : null}
         </s-stack>
       </s-section>
     </s-page>
