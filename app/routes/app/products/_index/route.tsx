@@ -1,3 +1,5 @@
+import { randomUUID } from "crypto";
+import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -10,187 +12,55 @@ import { authenticate } from "../../../../shopify.server";
 import { getShopIdFromSession } from "../../../../lib/tenancy";
 import { buildEmbeddedSearch } from "../../../../lib/embedded-search";
 import logger from "../../../../lib/logger";
-import { captureEvent } from "../../../../lib/posthog.server";
 import { productsActionSchema } from "../../../../schemas/admin";
 import {
-  listShopifyProducts,
-  type ShopifyProduct,
-} from "../../../../services/shopify/products.server";
-import {
+  countShopProducts,
   getLatestProductSync,
   listShopProducts,
-  upsertShopProducts,
   type ShopProductListItem,
 } from "../../../../services/products/product-sync.server";
-import { getPrintifyIntegrationWithToken } from "../../../../services/printify/integration.server";
-import { listPrintifyProducts } from "../../../../services/printify/client.server";
-import { decryptPrintifyToken } from "../../../../services/printify/token-encryption.server";
+import { inngest } from "../../../../services/inngest/client.server";
+import { getPrintifyIntegration } from "../../../../services/printify/integration.server";
 
-/**
- * Builds a lookup map from Shopify GID -> Printify product info.
- * This matches products published from Printify to Shopify.
- *
- * Printify's external.id can be:
- * - A full GID: "gid://shopify/Product/12345"
- * - Just the numeric ID: "12345"
- *
- * We normalize all IDs to full GID format for consistent matching.
- */
-type PrintifyProductMapping = Map<
-  string,
-  { printifyProductId: string; printifyShopId: string }
->;
+const SYNC_POLL_INTERVAL_MS = 1000;
+const SYNC_MAX_WAIT_MS = 120000;
 
-/**
- * Normalizes a Shopify product ID to full GID format.
- * Handles both "12345" and "gid://shopify/Product/12345" formats.
- */
-const normalizeToGid = (externalId: string): string => {
-  if (externalId.startsWith("gid://")) {
-    return externalId;
-  }
-  // Numeric ID - convert to GID format
-  return `gid://shopify/Product/${externalId}`;
-};
-
-/**
- * Extracts the numeric ID from a Shopify GID.
- * "gid://shopify/Product/12345" -> "12345"
- */
-const extractNumericId = (gid: string): string => {
-  const match = gid.match(/\/(\d+)$/);
-  return match ? match[1] : gid;
-};
-
-const buildPrintifyProductMap = async (
-  shopId: string,
-): Promise<PrintifyProductMapping> => {
-  const map: PrintifyProductMapping = new Map();
-
-  // Try to get Printify integration for this shop
-  const integration = await getPrintifyIntegrationWithToken(shopId);
-  if (!integration) {
-    logger.info({ shop_id: shopId }, "No Printify integration, skipping match");
-    return map;
-  }
-
-  try {
-    const token = decryptPrintifyToken(integration.encryptedToken);
-    const printifyProducts = await listPrintifyProducts({
-      token,
-      printifyShopId: integration.printifyShopId,
-    });
-
-    for (const product of printifyProducts) {
-      if (product.externalShopifyGid) {
-        // Store with normalized GID as key
-        const normalizedGid = normalizeToGid(product.externalShopifyGid);
-        map.set(normalizedGid, {
-          printifyProductId: product.printifyProductId,
-          printifyShopId: integration.printifyShopId,
-        });
-      }
-    }
-
-    logger.info(
-      {
-        shop_id: shopId,
-        printify_product_count: printifyProducts.length,
-        matched_count: map.size,
-      },
-      "Built Printify product mapping",
-    );
-  } catch (error) {
-    // Log but don't fail sync - Printify matching is best-effort
-    logger.warn(
-      { shop_id: shopId, err: error },
-      "Failed to fetch Printify products for matching",
-    );
-  }
-
-  return map;
-};
-
-/**
- * Enriches Shopify products with Printify IDs by matching external.id.
- * Tries both GID and numeric ID matching for robustness.
- */
-const enrichWithPrintifyData = (
-  products: ShopifyProduct[],
-  printifyMap: PrintifyProductMapping,
-): ShopifyProduct[] => {
-  return products.map((product) => {
-    // Try exact match first (GID to GID)
-    let printifyInfo = printifyMap.get(product.id);
-
-    // If no match, try matching by numeric ID (Printify may store just "12345")
-    if (!printifyInfo) {
-      const numericId = extractNumericId(product.id);
-      const numericGid = `gid://shopify/Product/${numericId}`;
-      printifyInfo = printifyMap.get(numericGid);
-    }
-
-    if (printifyInfo) {
-      return {
-        ...product,
-        printifyProductId: printifyInfo.printifyProductId,
-        printifyShopId: printifyInfo.printifyShopId,
-      };
-    }
-    return product;
-  });
-};
-
-const syncAllShopifyProducts = async (input: {
-  admin: Awaited<ReturnType<typeof authenticate.admin>>["admin"];
+const waitForProductSync = async (input: {
   shopId: string;
-}): Promise<{ count: number; syncedAt: Date }> => {
-  let cursor: string | null = null;
-  let hasNextPage = true;
-  const allProducts: ShopifyProduct[] = [];
-  const syncedAt = new Date();
+  syncedAt: Date;
+}): Promise<boolean> => {
+  const startedAt = Date.now();
 
-  // Fetch all Shopify products
-  while (hasNextPage) {
-    const page = await listShopifyProducts({
-      admin: input.admin,
-      after: cursor,
-    });
+  while (Date.now() - startedAt < SYNC_MAX_WAIT_MS) {
+    const latest = await getLatestProductSync(input.shopId);
+    if (latest && latest >= input.syncedAt) {
+      return true;
+    }
 
-    allProducts.push(...page.products);
-    hasNextPage = page.hasNextPage;
-    cursor = page.nextCursor;
+    await new Promise((resolve) => setTimeout(resolve, SYNC_POLL_INTERVAL_MS));
   }
 
-  // Build Printify mapping and enrich Shopify products
-  const printifyMap = await buildPrintifyProductMap(input.shopId);
-  const enrichedProducts = enrichWithPrintifyData(allProducts, printifyMap);
-
-  const result = await upsertShopProducts({
-    shopId: input.shopId,
-    products: enrichedProducts,
-    syncedAt,
-  });
-
-  return result;
+  return false;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
-  const [products, lastSyncedAt] = await Promise.all([
+  const [products, lastSyncedAt, printifyIntegration] = await Promise.all([
     listShopProducts(shopId),
     getLatestProductSync(shopId),
+    getPrintifyIntegration(shopId),
   ]);
 
   return {
     products,
     lastSyncedAt: lastSyncedAt ? lastSyncedAt.toISOString() : null,
+    printifyConnected: Boolean(printifyIntegration),
   };
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { admin, session } = await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
   const formData = Object.fromEntries(await request.formData());
   const parsed = productsActionSchema.safeParse(formData);
@@ -209,19 +79,40 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   try {
-    const result = await syncAllShopifyProducts({ admin, shopId });
+    const syncId = randomUUID();
+    const syncedAt = new Date();
 
-    logger.info(
-      { shop_id: shopId, product_count: result.count },
-      "Shopify products synced",
-    );
-    // LOW-1 FIX: Use domain.action format per architecture conventions
-    captureEvent("products.sync_completed", {
-      shop_id: shopId,
-      product_count: result.count,
+    await inngest.send({
+      name: "products.sync.requested",
+      data: {
+        shop_id: shopId,
+        sync_id: syncId,
+        synced_at: syncedAt.toISOString(),
+      },
     });
 
-    return data({ success: true, count: result.count });
+    const syncCompleted = await waitForProductSync({ shopId, syncedAt });
+
+    if (!syncCompleted) {
+      logger.warn(
+        { shop_id: shopId, sync_id: syncId },
+        "Product sync timed out",
+      );
+
+      return data(
+        {
+          error: {
+            code: "sync_timeout",
+            message: "Sync is taking longer than expected. Refresh in a moment.",
+          },
+        },
+        { status: 504 },
+      );
+    }
+
+    const productCount = await countShopProducts(shopId);
+
+    return data({ success: true, count: productCount });
   } catch (error) {
     logger.error({ shop_id: shopId, err: error }, "Product sync failed");
 
@@ -244,6 +135,7 @@ export const headers: HeadersFunction = (headersArgs) => {
 type LoaderData = {
   products: ShopProductListItem[];
   lastSyncedAt: string | null;
+  printifyConnected: boolean;
 };
 
 type ActionData = {
@@ -263,14 +155,26 @@ const formatSyncedAt = (value: string | null) => {
 };
 
 export default function ProductsListPage() {
-  const { products, lastSyncedAt } = useLoaderData<
+  const { products, lastSyncedAt, printifyConnected } = useLoaderData<
     typeof loader
   >() as LoaderData;
   const fetcher = useFetcher<ActionData>();
   const app = useAppBridge();
-  const embeddedSearch = app?.config
-    ? buildEmbeddedSearch(`?shop=${app.config.shop}&host=${app.config.host}`)
-    : "";
+  const [embeddedSearch, setEmbeddedSearch] = useState("");
+  useEffect(() => {
+    if (!app) {
+      return;
+    }
+
+    const config = app.config;
+    if (!config?.shop || !config?.host) {
+      return;
+    }
+
+    setEmbeddedSearch(
+      buildEmbeddedSearch(`?shop=${config.shop}&host=${config.host}`),
+    );
+  }, [app]);
   const isSubmitting = fetcher.state === "submitting";
   const hasProducts = products.length > 0;
   const syncedAtLabel = formatSyncedAt(lastSyncedAt);
@@ -299,6 +203,16 @@ export default function ProductsListPage() {
           {successMessage ? (
             <s-banner tone="success">
               <s-text>{successMessage}</s-text>
+            </s-banner>
+          ) : null}
+
+          {!printifyConnected ? (
+            <s-banner tone="warning">
+              <s-text>
+                Printify isn&apos;t connected yet. Sync will still pull Shopify
+                products, but Printify matching is disabled until you connect
+                your Printify API token in setup.
+              </s-text>
             </s-banner>
           ) : null}
 
@@ -339,7 +253,7 @@ export default function ProductsListPage() {
           {!hasProducts ? (
             <s-banner tone="info">
               <s-text>
-                No products synced yet. Click "Sync products" to pull your
+                No products synced yet. Click &quot;Sync products&quot; to pull your
                 Shopify catalog.
               </s-text>
             </s-banner>

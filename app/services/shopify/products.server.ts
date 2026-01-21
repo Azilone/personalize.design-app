@@ -1,4 +1,4 @@
-import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import type { ShopifyAdminGraphql } from "./admin.server";
 
 export type ShopifyProduct = {
   id: string;
@@ -17,7 +17,7 @@ export type ShopifyProductPage = {
 };
 
 type ListProductsInput = {
-  admin: AdminApiContext;
+  admin: ShopifyAdminGraphql;
   after?: string | null;
 };
 

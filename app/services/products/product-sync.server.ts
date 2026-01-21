@@ -128,6 +128,10 @@ export const listShopProducts = async (
   }));
 };
 
+export const countShopProducts = async (shopId: string): Promise<number> => {
+  return prisma.shopProduct.count({ where: { shop_id: shopId } });
+};
+
 export const getLatestProductSync = async (
   shopId: string,
 ): Promise<Date | null> => {

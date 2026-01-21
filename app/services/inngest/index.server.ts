@@ -1,3 +1,4 @@
-import { inngestFunctions } from "./functions/template-test-generate.server";
+import { inngestFunctions as templateTestFunctions } from "./functions/template-test-generate.server";
+import { productsSync } from "./functions/products-sync.server";
 
-export { inngestFunctions };
+export const inngestFunctions = [...templateTestFunctions, productsSync];

@@ -51,3 +51,11 @@ export type TemplateTestGeneratePayload = z.infer<
 export type TemplateTestRemoveBackgroundPayload = z.infer<
   typeof templateTestRemoveBackgroundPayloadSchema
 >;
+
+export const productsSyncPayloadSchema = z.object({
+  shop_id: z.string().min(1),
+  sync_id: z.string().min(1),
+  synced_at: z.string().datetime(),
+});
+
+export type ProductsSyncPayload = z.infer<typeof productsSyncPayloadSchema>;
