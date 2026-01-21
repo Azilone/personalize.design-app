@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`mapProductTemplateAssignmentRecord > preserves all required fields in correct format 1`] = `
+{
+  "createdAt": 2026-01-21T08:00:00.000Z,
+  "id": "test-assignment",
+  "personalizationEnabled": false,
+  "productId": "test-product",
+  "shopId": "test-shop",
+  "templateId": "test-template",
+  "updatedAt": 2026-01-21T09:00:00.000Z,
+}
+`;
