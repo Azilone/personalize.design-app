@@ -18,6 +18,13 @@ export type SaveProductTemplateAssignmentInput = {
   personalizationEnabled: boolean;
 };
 
+export type ProductTemplateAssignmentSummary = {
+  productId: string;
+  templateId: string;
+  templateName: string;
+  personalizationEnabled: boolean;
+};
+
 export const mapProductTemplateAssignmentRecord = (
   record: ProductTemplateAssignment,
 ): ProductTemplateAssignmentDto => {
@@ -62,11 +69,11 @@ export const saveProductTemplateAssignment = async (
       shop_id: input.shopId,
       product_id: input.productId,
       template_id: input.templateId,
-      personalization_enabled: false,
+      personalization_enabled: input.personalizationEnabled,
     },
     update: {
       template_id: input.templateId,
-      personalization_enabled: false,
+      personalization_enabled: input.personalizationEnabled,
     },
   });
 
@@ -85,4 +92,48 @@ export const clearProductTemplateAssignment = async (input: {
   });
 
   return result.count > 0;
+};
+
+export const listProductTemplateAssignments = async (
+  shopId: string,
+): Promise<ProductTemplateAssignmentSummary[]> => {
+  const assignments = await prisma.productTemplateAssignment.findMany({
+    where: { shop_id: shopId },
+    select: {
+      product_id: true,
+      template_id: true,
+      personalization_enabled: true,
+    },
+  });
+
+  if (assignments.length === 0) {
+    return [];
+  }
+
+  const templateIds = Array.from(
+    new Set(assignments.map((assignment) => assignment.template_id)),
+  );
+
+  const templates = await prisma.designTemplate.findMany({
+    where: {
+      id: { in: templateIds },
+      shop_id: shopId,
+    },
+    select: {
+      id: true,
+      template_name: true,
+    },
+  });
+
+  const templateNameById = new Map(
+    templates.map((template) => [template.id, template.template_name]),
+  );
+
+  return assignments.map((assignment) => ({
+    productId: assignment.product_id,
+    templateId: assignment.template_id,
+    templateName:
+      templateNameById.get(assignment.template_id) ?? "Unknown template",
+    personalizationEnabled: assignment.personalization_enabled,
+  }));
 };

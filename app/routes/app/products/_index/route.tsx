@@ -1,12 +1,16 @@
 import { randomUUID } from "crypto";
-import { useEffect, useState } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
-import { data, useFetcher, useLoaderData } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
+import {
+  data,
+  useFetcher,
+  useLoaderData,
+  useLocation,
+  useNavigate,
+} from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../../../../shopify.server";
 import { getShopIdFromSession } from "../../../../lib/tenancy";
@@ -19,6 +23,10 @@ import {
   listShopProducts,
   type ShopProductListItem,
 } from "../../../../services/products/product-sync.server";
+import {
+  listProductTemplateAssignments,
+  type ProductTemplateAssignmentSummary,
+} from "../../../../services/products/product-template-assignment.server";
 import { inngest } from "../../../../services/inngest/client.server";
 import { getPrintifyIntegration } from "../../../../services/printify/integration.server";
 
@@ -46,16 +54,27 @@ const waitForProductSync = async (input: {
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
-  const [products, lastSyncedAt, printifyIntegration] = await Promise.all([
-    listShopProducts(shopId),
-    getLatestProductSync(shopId),
-    getPrintifyIntegration(shopId),
-  ]);
+  const [products, lastSyncedAt, printifyIntegration, assignments] =
+    await Promise.all([
+      listShopProducts(shopId),
+      getLatestProductSync(shopId),
+      getPrintifyIntegration(shopId),
+      listProductTemplateAssignments(shopId),
+    ]);
+
+  const assignmentsByProductId = assignments.reduce(
+    (acc, assignment) => {
+      acc[assignment.productId] = assignment;
+      return acc;
+    },
+    {} as Record<string, ProductTemplateAssignmentSummary>,
+  );
 
   return {
     products,
     lastSyncedAt: lastSyncedAt ? lastSyncedAt.toISOString() : null,
     printifyConnected: Boolean(printifyIntegration),
+    assignmentsByProductId,
   };
 };
 
@@ -136,6 +155,7 @@ type LoaderData = {
   products: ShopProductListItem[];
   lastSyncedAt: string | null;
   printifyConnected: boolean;
+  assignmentsByProductId: Record<string, ProductTemplateAssignmentSummary>;
 };
 
 type ActionData = {
@@ -155,26 +175,12 @@ const formatSyncedAt = (value: string | null) => {
 };
 
 export default function ProductsListPage() {
-  const { products, lastSyncedAt, printifyConnected } = useLoaderData<
-    typeof loader
-  >() as LoaderData;
+  const { products, lastSyncedAt, printifyConnected, assignmentsByProductId } =
+    useLoaderData<typeof loader>() as LoaderData;
   const fetcher = useFetcher<ActionData>();
-  const app = useAppBridge();
-  const [embeddedSearch, setEmbeddedSearch] = useState("");
-  useEffect(() => {
-    if (!app) {
-      return;
-    }
-
-    const config = app.config;
-    if (!config?.shop || !config?.host) {
-      return;
-    }
-
-    setEmbeddedSearch(
-      buildEmbeddedSearch(`?shop=${config.shop}&host=${config.host}`),
-    );
-  }, [app]);
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const embeddedSearch = buildEmbeddedSearch(search);
   const isSubmitting = fetcher.state === "submitting";
   const hasProducts = products.length > 0;
   const syncedAtLabel = formatSyncedAt(lastSyncedAt);
@@ -239,7 +245,7 @@ export default function ProductsListPage() {
             <s-button
               variant="secondary"
               onClick={() => {
-                window.open(`/app${embeddedSearch}`, "_top");
+                navigate(`/app${embeddedSearch}`);
               }}
             >
               Back to setup
@@ -259,63 +265,76 @@ export default function ProductsListPage() {
             </s-banner>
           ) : (
             <s-stack direction="block" gap="small">
-              <s-table variant="list">
-                <s-table-header-row>
-                  <s-table-header listSlot="primary">Product</s-table-header>
-                  <s-table-header listSlot="secondary">Status</s-table-header>
-                  <s-table-header listSlot="inline">Action</s-table-header>
-                </s-table-header-row>
-                <s-table-body>
-                  {products.map((product, index) => (
-                    <s-table-row
-                      key={product.productId}
-                      clickDelegate={`product-${index}`}
+              {products.map((product, index) => (
+                <s-card key={product.productId}>
+                  <s-stack direction="block" gap="small">
+                    <s-stack direction="inline" gap="small">
+                      {product.imageUrl ? (
+                        <s-thumbnail
+                          src={product.imageUrl}
+                          alt={product.imageAlt ?? product.title}
+                          size="base"
+                        />
+                      ) : null}
+                      <s-stack direction="block" gap="small">
+                        <s-text type="strong">{product.title}</s-text>
+                        <s-text color="subdued">{product.handle}</s-text>
+                      </s-stack>
+                    </s-stack>
+                    <s-stack direction="inline" gap="small">
+                      <s-badge tone="info">Shopify</s-badge>
+                      {product.printifyProductId ? (
+                        <s-badge tone="success">Printify</s-badge>
+                      ) : (
+                        <s-badge tone="warning">Not in Printify</s-badge>
+                      )}
+                    </s-stack>
+                    <s-stack direction="block" gap="small">
+                      {assignmentsByProductId[product.productId] ? (
+                        <>
+                          <s-stack direction="inline" gap="small">
+                            <s-badge
+                              tone={
+                                assignmentsByProductId[product.productId]
+                                  .personalizationEnabled
+                                  ? "success"
+                                  : "info"
+                              }
+                            >
+                              {assignmentsByProductId[product.productId]
+                                .personalizationEnabled
+                                ? "Personalization enabled"
+                                : "Template assigned"}
+                            </s-badge>
+                          </s-stack>
+                          <s-text color="subdued">
+                            Template: {" "}
+                            {
+                              assignmentsByProductId[product.productId]
+                                .templateName
+                            }
+                          </s-text>
+                        </>
+                      ) : (
+                        <s-text color="subdued">
+                          No template assigned yet.
+                        </s-text>
+                      )}
+                    </s-stack>
+                    <s-button
+                      id={`product-${index}`}
+                      variant="primary"
+                      onClick={() => {
+                        // URL-encode the GID to handle slashes (gid://shopify/Product/...)
+                        const encodedId = encodeURIComponent(product.productId);
+                        navigate(`/app/products/${encodedId}${embeddedSearch}`);
+                      }}
                     >
-                      <s-table-cell>
-                        <s-stack direction="block" gap="small">
-                          {product.imageUrl ? (
-                            <s-thumbnail
-                              src={product.imageUrl}
-                              alt={product.imageAlt ?? product.title}
-                              size="base"
-                            />
-                          ) : null}
-                          <s-text type="strong">{product.title}</s-text>
-                          <s-text color="subdued">{product.handle}</s-text>
-                        </s-stack>
-                      </s-table-cell>
-                      <s-table-cell>
-                        <s-stack direction="inline" gap="small">
-                          <s-badge tone="info">Shopify</s-badge>
-                          {product.printifyProductId ? (
-                            <s-badge tone="success">Printify</s-badge>
-                          ) : (
-                            <s-badge tone="warning">Not in Printify</s-badge>
-                          )}
-                        </s-stack>
-                      </s-table-cell>
-                      <s-table-cell>
-                        <s-button
-                          id={`product-${index}`}
-                          variant="primary"
-                          onClick={() => {
-                            // URL-encode the GID to handle slashes (gid://shopify/Product/...)
-                            const encodedId = encodeURIComponent(
-                              product.productId,
-                            );
-                            window.open(
-                              `/app/products/${encodedId}${embeddedSearch}`,
-                              "_top",
-                            );
-                          }}
-                        >
-                          Configure
-                        </s-button>
-                      </s-table-cell>
-                    </s-table-row>
-                  ))}
-                </s-table-body>
-              </s-table>
+                      Configure
+                    </s-button>
+                  </s-stack>
+                </s-card>
+              ))}
             </s-stack>
           )}
         </s-stack>

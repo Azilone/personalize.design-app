@@ -148,6 +148,11 @@ export const listTemplates = async (
 export const listPublishedTemplates = async (
   shopId: string,
 ): Promise<PublishedTemplateListItem[]> => {
+  logger.info(
+    { shop_id: shopId, status_filter: PUBLISHED_STATUS },
+    "Fetching published templates",
+  );
+
   const templates = await prisma.designTemplate.findMany({
     where: { shop_id: shopId, status: PUBLISHED_STATUS },
     select: {
@@ -157,6 +162,11 @@ export const listPublishedTemplates = async (
     },
     orderBy: { created_at: "desc" },
   });
+
+  logger.info(
+    { shop_id: shopId, template_count: templates.length },
+    "Fetched published templates",
+  );
 
   return templates.map((template) => ({
     id: template.id,

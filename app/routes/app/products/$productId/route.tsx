@@ -9,9 +9,10 @@ import {
   data,
   useActionData,
   useLoaderData,
+  useLocation,
+  useNavigate,
   useNavigation,
 } from "react-router";
-import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../../../../shopify.server";
 import { getShopIdFromSession } from "../../../../lib/tenancy";
@@ -176,18 +177,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
   }
 
-  if (!templateId && personalizationRequested) {
-    return data(
-      {
-        error: {
-          code: "template_required",
-          message: "Assign a template before enabling personalization.",
-        },
-      },
-      { status: 400 },
-    );
-  }
-
   if (!templateId) {
     await clearProductTemplateAssignment({ shopId, productId });
 
@@ -220,7 +209,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     shopId,
     productId,
     templateId,
-    personalizationEnabled: false,
+    personalizationEnabled: personalizationRequested,
   });
 
   logger.info(
@@ -288,23 +277,10 @@ export default function ProductConfigurationPage() {
   const loaderData = useLoaderData<typeof loader>() as LoaderData;
   const actionData = useActionData<typeof action>() as ActionData | undefined;
   const navigation = useNavigation();
-  const app = useAppBridge();
-  const [embeddedSearch, setEmbeddedSearch] = useState("");
-
-  useEffect(() => {
-    if (!app) {
-      return;
-    }
-
-    const config = app.config;
-    if (!config?.shop || !config?.host) {
-      return;
-    }
-
-    setEmbeddedSearch(
-      buildEmbeddedSearch(`?shop=${config.shop}&host=${config.host}`),
-    );
-  }, [app]);
+  const navigate = useNavigate();
+  const { search } = useLocation();
+  const embeddedSearch = buildEmbeddedSearch(search);
+  const noTemplateValue = "__none__";
 
   const isSubmitting = navigation.state === "submitting";
   const isError = "error" in loaderData;
@@ -313,7 +289,7 @@ export default function ProductConfigurationPage() {
   const templates = isError ? [] : loaderData.templates;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(
-    assignment?.templateId ?? "",
+    assignment?.templateId ?? noTemplateValue,
   );
   const [personalizationEnabled, setPersonalizationEnabled] = useState(
     assignment?.personalizationEnabled ?? false,
@@ -326,9 +302,9 @@ export default function ProductConfigurationPage() {
       return;
     }
 
-    setSelectedTemplateId(assignment?.templateId ?? "");
+    setSelectedTemplateId(assignment?.templateId ?? noTemplateValue);
     setPersonalizationEnabled(assignment?.personalizationEnabled ?? false);
-  }, [assignment?.templateId, assignment?.personalizationEnabled, isError]);
+  }, [assignment?.templateId, assignment?.personalizationEnabled, isError, noTemplateValue]);
 
   if (isError || !product) {
     return (
@@ -342,14 +318,14 @@ export default function ProductConfigurationPage() {
                   : "Product configuration could not be loaded."}
               </s-text>
             </s-banner>
-            <s-button
-              variant="secondary"
-              onClick={() => {
-                window.open(`/app/products${embeddedSearch}`, "_top");
-              }}
-            >
-              Back to products
-            </s-button>
+              <s-button
+                variant="secondary"
+                onClick={() => {
+                  navigate(`/app/products${embeddedSearch}`);
+                }}
+              >
+                Back to products
+              </s-button>
           </s-stack>
         </s-section>
       </s-page>
@@ -426,7 +402,11 @@ export default function ProductConfigurationPage() {
             <input
               type="hidden"
               name="template_id"
-              value={selectedTemplateId}
+              value={
+                selectedTemplateId === noTemplateValue
+                  ? ""
+                  : selectedTemplateId
+              }
             />
             <input
               type="hidden"
@@ -448,19 +428,28 @@ export default function ProductConfigurationPage() {
               <s-select
                 label="Assigned template"
                 value={selectedTemplateId}
-                onChange={(event: { currentTarget: { value: string } }) => {
-                  const nextValue = event.currentTarget.value;
-                  setSelectedTemplateId(nextValue);
-                  if (!nextValue) {
+                onChange={(event: {
+                  currentTarget: { value?: string };
+                  detail?: { value?: string };
+                }) => {
+                  const nextValue =
+                    typeof event.detail?.value === "string"
+                      ? event.detail.value
+                      : event.currentTarget.value ?? "";
+                  const normalizedValue = nextValue || noTemplateValue;
+                  setSelectedTemplateId(normalizedValue);
+                  if (normalizedValue === noTemplateValue) {
                     setPersonalizationEnabled(false);
                   }
                 }}
               >
-                <option value="">No template assigned</option>
+                <s-option value={noTemplateValue}>
+                  No template assigned
+                </s-option>
                 {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
+                  <s-option key={template.id} value={template.id}>
                     {template.templateName}
-                  </option>
+                  </s-option>
                 ))}
               </s-select>
 
@@ -489,7 +478,7 @@ export default function ProductConfigurationPage() {
                   <s-badge tone={statusTone}>{statusLabel}</s-badge>
                 </s-stack>
                 <s-text color="subdued">
-                  {selectedTemplateId
+                  {selectedTemplateId !== noTemplateValue
                     ? "Personalization can be enabled after assignment."
                     : "Assign a template before enabling personalization."}
                 </s-text>
@@ -498,7 +487,7 @@ export default function ProductConfigurationPage() {
               <s-checkbox
                 label="Enable personalization for this product"
                 checked={personalizationEnabled}
-                disabled={!selectedTemplateId}
+                disabled={selectedTemplateId === noTemplateValue}
                 onChange={() =>
                   setPersonalizationEnabled(!personalizationEnabled)
                 }
@@ -513,14 +502,14 @@ export default function ProductConfigurationPage() {
                 >
                   Save
                 </s-button>
-                <s-button
-                  variant="secondary"
-                  onClick={() => {
-                    window.open(`/app/products${embeddedSearch}`, "_top");
-                  }}
-                >
-                  Back to products
-                </s-button>
+                    <s-button
+                      variant="secondary"
+                      onClick={() => {
+                        navigate(`/app/products${embeddedSearch}`);
+                      }}
+                    >
+                      Back to products
+                    </s-button>
               </s-stack>
             </s-stack>
           </Form>

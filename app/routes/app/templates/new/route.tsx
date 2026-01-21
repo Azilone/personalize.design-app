@@ -23,6 +23,10 @@ import {
   validatePromptVariableReferences,
 } from "../../../../lib/prompt-variables";
 import { createTemplate } from "../../../../services/templates/templates.server";
+import {
+  MVP_GENERATION_MODEL_ID,
+  MVP_PRICE_USD_PER_GENERATION,
+} from "../../../../lib/generation-settings";
 import logger from "../../../../lib/logger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -122,6 +126,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       photoRequired: true,
       textInputEnabled: text_input_enabled === "true",
       prompt: prompt || null,
+      generationModelIdentifier: MVP_GENERATION_MODEL_ID,
+      priceUsdPerGeneration: MVP_PRICE_USD_PER_GENERATION,
       variableNames,
     });
 
