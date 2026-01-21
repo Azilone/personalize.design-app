@@ -148,6 +148,21 @@ model ShopProduct {
   @@map("shop_products")
 }
 
+model ProductTemplateAssignment {
+  id                       String   @id @default(cuid())
+  shop_id                  String
+  product_id               String
+  template_id              String
+  personalization_enabled  Boolean  @default(false)
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+
+  @@unique([shop_id, product_id])
+  @@index([shop_id])
+  @@index([template_id])
+  @@map("product_template_assignments")
+}
+
 enum PlanStatus {
   none
   standard

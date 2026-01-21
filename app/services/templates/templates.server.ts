@@ -79,6 +79,11 @@ export type DesignTemplateListItem = {
   updatedAt: Date;
 };
 
+export type PublishedTemplateListItem = {
+  id: string;
+  templateName: string;
+};
+
 // --- Input types ---
 
 export type CreateTemplateInput = {
@@ -135,6 +140,57 @@ export const listTemplates = async (
     createdAt: t.created_at,
     updatedAt: t.updated_at,
   }));
+};
+
+/**
+ * List published templates for a shop.
+ */
+export const listPublishedTemplates = async (
+  shopId: string,
+): Promise<PublishedTemplateListItem[]> => {
+  const templates = await prisma.designTemplate.findMany({
+    where: { shop_id: shopId, status: PUBLISHED_STATUS },
+    select: {
+      id: true,
+      template_name: true,
+      created_at: true,
+    },
+    orderBy: { created_at: "desc" },
+  });
+
+  return templates.map((template) => ({
+    id: template.id,
+    templateName: template.template_name,
+  }));
+};
+
+/**
+ * Fetch a published template by ID.
+ */
+export const getPublishedTemplate = async (
+  templateId: string,
+  shopId: string,
+): Promise<PublishedTemplateListItem | null> => {
+  const template = await prisma.designTemplate.findFirst({
+    where: {
+      id: templateId,
+      shop_id: shopId,
+      status: PUBLISHED_STATUS,
+    },
+    select: {
+      id: true,
+      template_name: true,
+    },
+  });
+
+  if (!template) {
+    return null;
+  }
+
+  return {
+    id: template.id,
+    templateName: template.template_name,
+  };
 };
 
 /**

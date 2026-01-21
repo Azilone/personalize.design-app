@@ -17,6 +17,10 @@ const resetBillingDevSchema = z.object({
   intent: z.literal("reset_billing_dev"),
 });
 
+const devBypassAccessSchema = z.object({
+  intent: z.literal("dev_bypass_access"),
+});
+
 const syncPendingStatusSchema = z.object({
   intent: z.literal("sync_pending_status"),
 });
@@ -25,6 +29,7 @@ export const paywallActionSchema = z.discriminatedUnion("intent", [
   subscribeIntentSchema,
   inviteUnlockSchema,
   resetBillingDevSchema,
+  devBypassAccessSchema,
   syncPendingStatusSchema,
 ]);
 
@@ -104,6 +109,22 @@ export const productsActionSchema = z.discriminatedUnion("intent", [
 ]);
 
 export type ProductsActionInput = z.infer<typeof productsActionSchema>;
+
+const productTemplateAssignmentSchema = z.object({
+  intent: z.literal("product_template_assignment_save"),
+  product_id: z.string().min(1, "Product ID is required"),
+  template_id: z.string().optional().default(""),
+  personalization_enabled: z.enum(["true", "false"]).default("false"),
+});
+
+export const productTemplateAssignmentActionSchema = z.discriminatedUnion(
+  "intent",
+  [productTemplateAssignmentSchema],
+);
+
+export type ProductTemplateAssignmentActionInput = z.infer<
+  typeof productTemplateAssignmentActionSchema
+>;
 
 const finishOnboardingSchema = z.object({
   intent: z.literal("finish_onboarding"),
