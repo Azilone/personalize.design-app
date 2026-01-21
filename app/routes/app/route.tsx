@@ -7,15 +7,17 @@ import {
   Link,
   Outlet,
   useLoaderData,
-  useNavigate,
+  useLocation,
   useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { NavMenu } from "@shopify/app-bridge-react";
 
 import { authenticate } from "../../shopify.server";
 import { getShopIdFromSession } from "../../lib/tenancy";
 import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
+import { buildEmbeddedSearch } from "../../lib/embedded-search";
 import {
   buildReadinessChecklist,
   type ReadinessItem,
@@ -150,74 +152,24 @@ export const shouldRevalidate: ShouldRevalidateFunction = ({
 
 export default function App() {
   const { apiKey, isDev } = useLoaderData<typeof loader>();
-  const navigate = useNavigate();
-  let lastNavTime = 0;
-
-  const handleNavigate = (to: string) => {
-    const now = Date.now();
-    if (now - lastNavTime < 200) {
-      return;
-    }
-    lastNavTime = now;
-
-    const currentSearch = window.location.search;
-    const query = currentSearch ? `${to}${currentSearch}` : to;
-    navigate(query);
-  };
+  const { search } = useLocation();
+  const embeddedSearch = buildEmbeddedSearch(search);
 
   return (
     <AppProvider embedded apiKey={apiKey}>
-      <s-app-nav>
-        <Link
-          to="/app"
-          onClick={(e) => {
-            e.preventDefault();
-            handleNavigate("/app");
-          }}
-        >
+      <NavMenu>
+        <Link to={`/app${embeddedSearch}`} rel="home">
           Setup
         </Link>
-        <Link
-          to="/app/templates"
-          onClick={(e) => {
-            e.preventDefault();
-            handleNavigate("/app/templates");
-          }}
-        >
-          Templates
-        </Link>
-        <Link
-          to="/app/products"
-          onClick={(e) => {
-            e.preventDefault();
-            handleNavigate("/app/products");
-          }}
-        >
-          Products
-        </Link>
+        <Link to={`/app/templates${embeddedSearch}`}>Templates</Link>
+        <Link to={`/app/products${embeddedSearch}`}>Products</Link>
         {isDev ? (
-          <Link
-            to="/app/additional"
-            onClick={(e) => {
-              e.preventDefault();
-              handleNavigate("/app/additional");
-            }}
-          >
-            Sandbox (dev)
-          </Link>
+          <Link to={`/app/additional${embeddedSearch}`}>Sandbox (dev)</Link>
         ) : null}
         {isDev ? (
-          <Link
-            to="/app/dev"
-            onClick={(e) => {
-              e.preventDefault();
-              handleNavigate("/app/dev");
-            }}
-          >
-            Dev tools (dev)
-          </Link>
+          <Link to={`/app/dev${embeddedSearch}`}>Dev tools (dev)</Link>
         ) : null}
-      </s-app-nav>
+      </NavMenu>
       <Outlet />
     </AppProvider>
   );
