@@ -209,8 +209,10 @@ describe("Supabase storage", () => {
       const expectedExpiry = now + 30 * 60 * 1000;
       const result = await generateSignedUrls("shop-123", "photo.jpg", 1024);
 
+      expect(result.expiresAt).toBeInstanceOf(Date);
+      // Allow 1ms tolerance for timing differences between generation and assertion
       expect(result.expiresAt.getTime()).toBeGreaterThanOrEqual(
-        expectedExpiry - 1000,
+        expectedExpiry - 1,
       );
       expect(result.expiresAt.getTime()).toBeLessThanOrEqual(
         expectedExpiry + 1000,

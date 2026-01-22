@@ -1,13 +1,14 @@
 {
-  "name": "shopify-dev-mcp",
-  "version": "1.0.0",
   "mcpServers": {
+    "chrome-devtools": {
+      "command": "npx",
+      "args": ["-y", "chrome-devtools-mcp@latest"]
+    },
     "shopify-dev-mcp": {
       "command": "npx",
       "args": ["-y", "@shopify/dev-mcp@latest"],
       "env": {
-        "POLARIS_UNIFIED": "true",
-        "LIQUID": "true"
+        "OPT_OUT_INSTRUMENTATION": "true"
       }
     }
   }

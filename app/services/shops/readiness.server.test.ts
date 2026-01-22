@@ -3,6 +3,7 @@ import { getShopReadinessSignals } from "./readiness.server";
 import { getSpendSafetySettings } from "./spend-safety.server";
 import { getStorefrontPersonalizationSettings } from "./storefront-personalization.server";
 import { getPrintifyIntegration } from "../printify/integration.server";
+import { clearCachedValues } from "../../lib/ttl-cache.server";
 
 vi.mock("./spend-safety.server", () => ({
   getSpendSafetySettings: vi.fn(),
@@ -15,6 +16,7 @@ vi.mock("../printify/integration.server", () => ({
 }));
 
 beforeEach(() => {
+  clearCachedValues();
   vi.mocked(getSpendSafetySettings).mockResolvedValue({
     monthlyCapCents: null,
     paidUsageConsentAt: null,

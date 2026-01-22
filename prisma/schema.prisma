@@ -84,6 +84,7 @@ model DesignTemplate {
   generation_model_identifier String?
   price_usd_per_generation    Decimal?
   remove_background_enabled   Boolean                  @default(false)
+  aspect_ratio                TemplateAspectRatio      @default(ratio_1_1)
   status                      DesignTemplateStatus     @default(draft)
   test_generation_count       Int                      @default(0)
   test_generation_month       String?
@@ -163,6 +164,29 @@ model ProductTemplateAssignment {
   @@map("product_template_assignments")
 }
 
+model MerchantPreview {
+  id               String                @id @default(cuid())
+  job_id           String
+  shop_id          String
+  product_id       String
+  template_id      String
+  status           MerchantPreviewStatus @default(queued)
+  cover_print_area Boolean               @default(false)
+  test_image_url   String
+  test_text        String?
+  variable_values  Json?
+  design_url       String?
+  mockup_urls      Json?
+  error_message    String?
+  created_at       DateTime              @default(now())
+  updated_at       DateTime              @updatedAt
+
+  @@unique([shop_id, job_id])
+  @@index([shop_id])
+  @@index([job_id])
+  @@map("merchant_previews")
+}
+
 enum PlanStatus {
   none
   standard
@@ -174,4 +198,20 @@ enum PlanStatus {
 enum DesignTemplateStatus {
   draft
   published
+}
+
+enum TemplateAspectRatio {
+  ratio_1_1
+  ratio_3_4
+  ratio_4_3
+  ratio_9_16
+  ratio_16_9
+}
+
+enum MerchantPreviewStatus {
+  queued
+  generating
+  creating_mockups
+  done
+  failed
 }

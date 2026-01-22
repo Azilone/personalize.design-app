@@ -819,15 +819,16 @@ export default function ProductConfigurationPage() {
             ) : (
               <s-banner tone="warning">
                 <s-text>
-                  This product is not linked to a Printify product. Link a
-                  Printify product to enable preview generation with mockups.
+                  Preview generation requires linking this product to a Printify
+                  product. Go to the Printify integration page to connect and
+                  configure.
                 </s-text>
               </s-banner>
             )
           ) : (
             <s-banner tone="info">
               <s-text>
-                Assign a published template to enable the preview simulator.
+                Assign a published template to enable preview simulator.
               </s-text>
             </s-banner>
           )}
@@ -887,7 +888,7 @@ function SimulatorPanel({
         return fileName;
       }
     } catch (error) {
-      console.error("Unable to parse download URL", error);
+      // Error parsing URL - fallback to filename
     }
     return fallback;
   };
@@ -911,7 +912,8 @@ function SimulatorPanel({
       document.body.removeChild(anchor);
       window.URL.revokeObjectURL(objectUrl);
     } catch (error) {
-      console.error("Download failed", error);
+      // Download failed - error is handled by UI error banner
+      throw error;
     }
   };
 

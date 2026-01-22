@@ -46,7 +46,6 @@ const printifyProductResponseSchema = z.object({
     .optional(),
 });
 
-
 const resolveFileName = (imageUrl: string): string => {
   try {
     const url = new URL(imageUrl);
@@ -78,10 +77,7 @@ const uploadPrintifyImage = async (
     },
   );
 
-  await assertPrintifyOk(
-    response,
-    "Unable to upload image to Printify.",
-  );
+  await assertPrintifyOk(response, "Unable to upload image to Printify.");
 
   const payload = (await response.json()) as unknown;
   const parsed = printifyUploadResponseSchema.safeParse(payload);
@@ -95,7 +91,9 @@ const uploadPrintifyImage = async (
   return String(parsed.data.id);
 };
 
-const extractMockupUrls = (images: { src: string; type?: string }[]): string[] => {
+const extractMockupUrls = (
+  images: { src: string; type?: string }[],
+): string[] => {
   if (!images.length) {
     return [];
   }
@@ -122,7 +120,7 @@ export const createTempProduct = async (
 
   if (variants.length === 0) {
     throw new PrintifyRequestError(
-      "unexpected_response",
+      "printify_no_variants",
       "At least one Printify variant is required.",
     );
   }
@@ -179,7 +177,7 @@ export const createTempProduct = async (
   const parsed = printifyProductResponseSchema.safeParse(payload);
   if (!parsed.success) {
     throw new PrintifyRequestError(
-      "unexpected_response",
+      "printify_invalid_product_response",
       "Printify product response was invalid.",
     );
   }
@@ -192,16 +190,13 @@ export const createTempProduct = async (
     { method: "GET" },
   );
 
-  await assertPrintifyOk(
-    detailsResponse,
-    "Unable to fetch Printify mockups.",
-  );
+  await assertPrintifyOk(detailsResponse, "Unable to fetch Printify mockups.");
 
   const detailsPayload = (await detailsResponse.json()) as unknown;
   const detailsParsed = printifyProductResponseSchema.safeParse(detailsPayload);
   if (!detailsParsed.success) {
     throw new PrintifyRequestError(
-      "unexpected_response",
+      "printify_invalid_product_details",
       "Printify product details were invalid.",
     );
   }

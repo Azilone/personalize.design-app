@@ -13,7 +13,10 @@ import { getTemplate } from "../../templates/templates.server";
 import { applyPromptVariableValues } from "../../../lib/prompt-variables";
 import { calculateFalImageSize } from "../../fal/image-size.server";
 import { getPrintifyVariantPrintArea } from "../../printify/print-area.server";
-import { createTempProduct, deleteProduct } from "../../printify/temp-product.server";
+import {
+  createTempProduct,
+  deleteProduct,
+} from "../../printify/temp-product.server";
 import { getPrintifyProductDetails } from "../../printify/product-details.server";
 
 const selectPreviewVariant = (
@@ -37,7 +40,7 @@ const buildPrompt = (
 
 export const merchantPreviewGenerate = inngest.createFunction(
   {
-    id: "merchant-preview-generate",
+    id: "merchant_preview_generate",
     concurrency: {
       key: "event.data.shop_id",
       limit: 2,
@@ -278,7 +281,10 @@ export const merchantPreviewGenerate = inngest.createFunction(
               shop_id: payload.shop_id,
               job_id: payload.job_id,
               printify_product_id: cleanupProductId,
-              error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError),
             },
             "Failed to cleanup temporary Printify product",
           );

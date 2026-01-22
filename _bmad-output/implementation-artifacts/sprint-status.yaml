@@ -63,12 +63,12 @@ development_status:
 
   epic-4: in-progress
   4-1-sync-shopify-products-select-product-to-configure: done
-  4-2-assign-single-template-to-product-explicit-enable-mvp: review
-  4-3-merchant-product-preview-simulator-only-when-configured: backlog
+  4-2-assign-single-template-to-product-explicit-enable-mvp: done
+  4-3-merchant-product-preview-simulator-only-when-configured: done
   epic-4-retrospective: optional
 
-  epic-5: backlog
-  5-1-usage-ledger-1-free-ai-usage-gift: backlog
+  epic-5: in-progress
+  5-1-usage-ledger-1-free-ai-usage-gift: ready-for-dev
   5-2-spend-safety-setup-monthly-cap-paid-usage-consent: backlog
   5-3-monthly-cap-enforcement-explicit-cap-increase-flow: backlog
   5-4-usage-visibility-auditable-billing-events: backlog

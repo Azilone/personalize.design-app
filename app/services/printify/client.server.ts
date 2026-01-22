@@ -19,7 +19,14 @@ export type PrintifyErrorCode =
   | "invalid_token"
   | "rate_limited"
   | "no_shops"
-  | "unexpected_response";
+  | "unexpected_response"
+  | "printify_not_configured"
+  | "printify_no_variants"
+  | "printify_invalid_product_response"
+  | "printify_invalid_product_details"
+  | "printify_create_product_failed"
+  | "printify_fetch_mockups_failed"
+  | "printify_delete_product_failed";
 
 export class PrintifyRequestError extends Error {
   code: PrintifyErrorCode;

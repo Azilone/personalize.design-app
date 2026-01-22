@@ -8,10 +8,12 @@ import {
 } from "../types";
 import { generateImages } from "../../fal/generate.server";
 import { removeBackground } from "../../fal/models/birefnet-v2";
+import { calculateFalImageSize } from "../../fal/image-size.server";
 import {
   recordTestGeneration,
   releaseTestGenerationQuota,
 } from "../../templates/templates.server";
+import { getTemplate } from "../../templates/templates.server";
 import logger from "../../../lib/logger";
 import type { GenerationOutput } from "../../fal/types";
 
@@ -155,12 +157,27 @@ export const templateTestGenerate = inngest.createFunction(
       return mappedResult;
     }
 
+    const template = await step.run("load-template", async () =>
+      getTemplate(payload.template_id, payload.shop_id),
+    );
+
+    if (!template) {
+      throw new NonRetriableError("Template not found for test generation");
+    }
+
+    const imageSize = calculateFalImageSize({
+      coverPrintArea: false,
+      templateAspectRatio: template.aspectRatio,
+      printAreaDimensions: null,
+    });
+
     const generationResult = await step.run("generate-images", async () =>
       generateImages({
         modelId: payload.generation_model_identifier,
         imageUrls: [payload.test_photo_url!],
         prompt: payload.prompt,
         numImages: payload.num_images,
+        imageSize,
         shopId: payload.shop_id,
         removeBackgroundEnabled: false,
       }),
