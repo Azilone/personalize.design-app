@@ -1,9 +1,11 @@
+import { useEffect } from "react";
 import type { ActionFunctionArgs, HeadersFunction } from "react-router";
 import {
   Form,
   Link,
   data,
   useActionData,
+  useFetcher,
   useLocation,
   useNavigation,
   useRouteLoaderData,
@@ -17,6 +19,7 @@ import {
   canFinishOnboarding,
   type ReadinessItem,
 } from "../../../lib/readiness";
+import type { ReadinessLoaderData } from "../readiness/route";
 import { finishOnboardingActionSchema } from "../../../schemas/admin";
 import { getShopReadinessSignals } from "../../../services/shops/readiness.server";
 import type { AppLoaderData } from "../route";
@@ -62,14 +65,19 @@ export default function Index() {
   const planStatus = appData?.planStatus ?? PlanStatus.none;
   const freeGiftCents = appData?.freeGiftCents ?? 0;
   const freeGiftRemainingCents = appData?.freeGiftRemainingCents ?? 0;
-  const readinessItems: ReadinessItem[] = appData?.readinessItems ?? [];
-  const readinessSignals = appData?.readinessSignals ?? null;
+  const readinessFetcher = useFetcher<ReadinessLoaderData>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { search } = useLocation();
   const formatUsd = (cents: number) => (cents / 100).toFixed(2);
 
   const embeddedSearch = buildEmbeddedSearch(search);
+  const readinessItems: ReadinessItem[] =
+    readinessFetcher.data?.readinessItems ?? appData?.readinessItems ?? [];
+  const readinessSignals =
+    readinessFetcher.data?.readinessSignals ?? appData?.readinessSignals ?? null;
+  const isReadinessLoading =
+    readinessFetcher.state !== "idle" && !readinessFetcher.data;
   const errorMessage =
     actionData && typeof actionData === "object" && "error" in actionData
       ? actionData.error.message
@@ -87,6 +95,12 @@ export default function Index() {
           readinessSignals.storefrontPersonalizationConfirmed,
       })
     : false;
+
+  useEffect(() => {
+    if (readinessFetcher.state === "idle" && !readinessFetcher.data) {
+      readinessFetcher.load(`/app/readiness${embeddedSearch}`);
+    }
+  }, [embeddedSearch, readinessFetcher]);
 
   return (
     <s-page heading="Setup">
@@ -157,7 +171,12 @@ export default function Index() {
 
       <s-section heading="Setup checklist">
         <s-stack direction="block" gap="base">
-          {readinessItems.length === 0 ? (
+          {isReadinessLoading ? (
+            <s-banner tone="info">
+              <s-text>Loading setup checklist...</s-text>
+            </s-banner>
+          ) : null}
+          {!isReadinessLoading && readinessItems.length === 0 ? (
             <s-banner tone="warning">
               <s-text>Setup checklist is unavailable right now.</s-text>
             </s-banner>

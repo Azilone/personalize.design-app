@@ -1,0 +1,36 @@
+uid=6_0 RootWebArea url="https://dev.personalize.design/auth/login"
+  uid=6_1 ignored
+    uid=6_2 ignored
+      uid=6_3 main
+        uid=6_4 ignored
+          uid=6_5 ignored
+            uid=6_6 generic
+              uid=6_7 generic
+                uid=6_8 heading "Log in" level="2"
+                  uid=6_9 ignored
+                    uid=6_10 StaticText "Log in"
+                      uid=6_11 InlineTextBox "Log in"
+                uid=6_12 ignored
+                  uid=6_13 generic
+                    uid=6_14 LabelText
+                      uid=6_15 StaticText "Shop domain"
+                        uid=6_16 InlineTextBox "Shop domain"
+                    uid=6_17 generic
+                      uid=6_18 ignored
+                        uid=6_19 ignored
+                          uid=6_20 ignored
+                            uid=6_21 ignored
+                        uid=6_22 ignored
+                          uid=6_23 textbox "Shop domain"
+                            uid=6_24 generic
+                    uid=6_25 ignored
+                      uid=6_26 StaticText "example.myshopify.com"
+                        uid=6_27 InlineTextBox "example.myshopify.com"
+                uid=6_28 generic
+                  uid=6_29 button "Log in"
+                    uid=6_30 ignored
+                      uid=6_31 ignored
+                        uid=6_32 ignored
+                          uid=6_33 StaticText "Log in"
+                            uid=6_34 InlineTextBox "Log in"
+          uid=6_35 ignored

@@ -4,7 +4,6 @@ import type {
   ShouldRevalidateFunction,
 } from "react-router";
 import {
-  Link,
   Outlet,
   useLoaderData,
   useLocation,
@@ -18,10 +17,8 @@ import { authenticate } from "../../shopify.server";
 import { getShopIdFromSession } from "../../lib/tenancy";
 import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
 import { buildEmbeddedSearch } from "../../lib/embedded-search";
-import {
-  buildReadinessChecklist,
-  type ReadinessItem,
-} from "../../lib/readiness";
+import { getOrSetCachedValue } from "../../lib/ttl-cache.server";
+import type { ReadinessItem } from "../../lib/readiness";
 import { getSubscriptionStatus } from "../../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
@@ -31,11 +28,10 @@ import {
   getShopPlanStatus,
   isPlanActive,
 } from "../../services/shops/plan.server";
-import {
-  getShopReadinessSignals,
-  type ShopReadinessSignals,
-} from "../../services/shops/readiness.server";
+import type { ShopReadinessSignals } from "../../services/shops/readiness.server";
 import { PlanStatus } from "@prisma/client";
+
+const SUBSCRIPTION_STATUS_CACHE_TTL_MS = 15_000;
 
 export type AppLoaderData = {
   apiKey: string;
@@ -54,20 +50,26 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { admin, session, redirect } = await authenticate.admin(request);
   const pathname = new URL(request.url).pathname;
   const shopId = getShopIdFromSession(session);
-  let planStatus = await getShopPlanStatus(shopId);
+  let plan = await getShopPlan(shopId);
+  let planStatus = plan?.plan_status ?? PlanStatus.none;
+  let shouldRefreshPlan = false;
 
   if (
     planStatus === PlanStatus.standard_pending ||
     planStatus === PlanStatus.early_access_pending
   ) {
-    const plan = await getShopPlan(shopId);
-
-    if (plan?.shopify_subscription_id) {
+    const subscriptionId = plan?.shopify_subscription_id ?? null;
+    if (subscriptionId) {
       try {
-        const subscription = await getSubscriptionStatus({
-          admin,
-          subscriptionId: plan.shopify_subscription_id,
-        });
+        const subscription = await getOrSetCachedValue(
+          `subscription-status:${subscriptionId}`,
+          SUBSCRIPTION_STATUS_CACHE_TTL_MS,
+          () =>
+            getSubscriptionStatus({
+              admin,
+              subscriptionId,
+            }),
+        );
 
         if (subscription.status === "ACTIVE") {
           if (planStatus === PlanStatus.standard_pending) {
@@ -76,6 +78,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               subscriptionId: subscription.id,
               subscriptionStatus: subscription.status,
             });
+            planStatus = PlanStatus.standard;
           }
 
           if (planStatus === PlanStatus.early_access_pending) {
@@ -84,17 +87,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
               subscriptionId: subscription.id,
               subscriptionStatus: subscription.status,
             });
+            planStatus = PlanStatus.early_access;
           }
-
-          planStatus = await getShopPlanStatus(shopId);
+          shouldRefreshPlan = true;
         } else if (subscription.status !== "PENDING") {
           await clearPlanToNone(shopId);
           planStatus = PlanStatus.none;
+          shouldRefreshPlan = true;
         }
       } catch {
         // If billing status check fails, keep pending state and let paywall handle resume UX.
       }
     }
+  }
+
+  if (shouldRefreshPlan) {
+    plan = await getShopPlan(shopId);
   }
   const hasAccess = isPlanActive(planStatus);
   const isDev = process.env.NODE_ENV === "development";
@@ -113,14 +121,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     return redirect(buildEmbeddedRedirectPath(request, "/app"));
   }
 
-  const plan = await getShopPlan(shopId);
-  const planStatusForUi = plan?.plan_status ?? PlanStatus.none;
-  const readinessSignals = await getShopReadinessSignals(shopId);
-
-  const readinessItems = buildReadinessChecklist({
-    planStatus: planStatusForUi,
-    ...readinessSignals,
-  });
+  const planStatusForUi = plan?.plan_status ?? planStatus;
+  const fallbackReadinessSignals: ShopReadinessSignals = {
+    printifyConnected: false,
+    storefrontPersonalizationEnabled: false,
+    storefrontPersonalizationConfirmed: false,
+    spendSafetyConfigured: false,
+  };
+  const readinessSignals = fallbackReadinessSignals;
+  const readinessItems: ReadinessItem[] = [];
 
   // eslint-disable-next-line no-undef
   const data: AppLoaderData = {
@@ -158,16 +167,16 @@ export default function App() {
   return (
     <AppProvider embedded apiKey={apiKey}>
       <NavMenu>
-        <Link to={`/app${embeddedSearch}`} rel="home">
+        <a href={`/app${embeddedSearch}`} rel="home">
           Setup
-        </Link>
-        <Link to={`/app/templates${embeddedSearch}`}>Templates</Link>
-        <Link to={`/app/products${embeddedSearch}`}>Products</Link>
+        </a>
+        <a href={`/app/templates${embeddedSearch}`}>Templates</a>
+        <a href={`/app/products${embeddedSearch}`}>Products</a>
         {isDev ? (
-          <Link to={`/app/additional${embeddedSearch}`}>Sandbox (dev)</Link>
+          <a href={`/app/additional${embeddedSearch}`}>Sandbox (dev)</a>
         ) : null}
         {isDev ? (
-          <Link to={`/app/dev${embeddedSearch}`}>Dev tools (dev)</Link>
+          <a href={`/app/dev${embeddedSearch}`}>Dev tools (dev)</a>
         ) : null}
       </NavMenu>
       <Outlet />
