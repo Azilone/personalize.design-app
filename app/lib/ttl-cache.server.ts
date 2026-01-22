@@ -63,3 +63,7 @@ export const getOrSetCachedValue = async <T>(
   cache.set(key, promise);
   return promise;
 };
+
+export const clearCachedValues = (): void => {
+  cache.clear();
+};

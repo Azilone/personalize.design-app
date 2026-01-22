@@ -36,6 +36,8 @@ export interface GenerateOptions {
   numImages: number;
   /** Optional seed for reproducibility */
   seed?: number;
+  /** Optional target image size for generation */
+  imageSize?: { width: number; height: number };
   /** Shop ID for multi-tenancy logging */
   shopId?: string;
   /** Apply background removal after generation */
@@ -76,6 +78,7 @@ export async function generateImages(
     prompt,
     numImages,
     seed,
+    imageSize,
     shopId,
     removeBackgroundEnabled = false,
     removeBackgroundOptions,
@@ -116,6 +119,7 @@ export async function generateImages(
     prompt,
     numImages,
     seed,
+    imageSize,
   };
 
   logger.info(

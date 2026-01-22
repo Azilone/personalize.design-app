@@ -3,6 +3,10 @@ import {
   MVP_GENERATION_MODEL_ID,
   MVP_PRICE_USD_PER_GENERATION,
 } from "../lib/generation-settings";
+import {
+  DEFAULT_TEMPLATE_ASPECT_RATIO,
+  TEMPLATE_ASPECT_RATIOS,
+} from "../lib/template-aspect-ratios";
 
 const subscribeIntentSchema = z.object({
   intent: z.literal("subscribe"),
@@ -117,9 +121,18 @@ const productTemplateAssignmentSchema = z.object({
   personalization_enabled: z.enum(["true", "false"]).default("false"),
 });
 
+const productPreviewGenerateSchema = z.object({
+  intent: z.literal("product_preview_generate"),
+  product_id: z.string().min(1, "Product ID is required"),
+  template_id: z.string().min(1, "Template ID is required"),
+  cover_print_area: z.enum(["true", "false"]).default("false"),
+  test_text: z.string().optional(),
+  variable_values_json: z.string().default("{}"),
+});
+
 export const productTemplateAssignmentActionSchema = z.discriminatedUnion(
   "intent",
-  [productTemplateAssignmentSchema],
+  [productTemplateAssignmentSchema, productPreviewGenerateSchema],
 );
 
 export type ProductTemplateAssignmentActionInput = z.infer<
@@ -148,6 +161,9 @@ const templateCreateSchema = z.object({
   intent: z.literal("template_create"),
   template_name: z.string().min(1, "Template name is required"),
   text_input_enabled: z.enum(["true", "false"]).default("false"),
+  aspect_ratio: z
+    .enum(TEMPLATE_ASPECT_RATIOS)
+    .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
   prompt: z
     .string()
     .max(5000, "Prompt must be less than 5000 characters")
@@ -175,6 +191,9 @@ const templateUpdateSchema = z.object({
   template_id: z.string().min(1, "Template ID is required"),
   template_name: z.string().min(1, "Template name is required"),
   text_input_enabled: z.enum(["true", "false"]).default("false"),
+  aspect_ratio: z
+    .enum(TEMPLATE_ASPECT_RATIOS)
+    .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
   prompt: z
     .string()
     .max(5000, "Prompt must be less than 5000 characters")

@@ -20,6 +20,8 @@ export interface GenerationInput {
   numImages: number;
   /** Optional seed for reproducibility */
   seed?: number;
+  /** Optional target image size for generation */
+  imageSize?: { width: number; height: number };
 }
 
 /**

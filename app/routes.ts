@@ -44,5 +44,9 @@ export default [
     ),
     route("products", "./routes/app/products/_index/route.tsx"),
     route("products/:productId", "./routes/app/products/$productId/route.tsx"),
+    route(
+      "api/preview/:jobId",
+      "./routes/app/api/preview/$jobId/route.tsx",
+    ),
   ]),
 ] satisfies RouteConfig;

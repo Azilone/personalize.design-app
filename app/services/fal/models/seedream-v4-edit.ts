@@ -51,7 +51,7 @@ export const seedreamV4EditAdapter: ModelAdapter = {
   config: SEEDREAM_V4_EDIT_CONFIG,
 
   async generate(input: GenerationInput): Promise<GenerationOutput> {
-    const { imageUrls, prompt, numImages, seed } = input;
+    const { imageUrls, prompt, numImages, seed, imageSize } = input;
 
     // Validate input
     if (!imageUrls.length) {
@@ -98,6 +98,7 @@ export const seedreamV4EditAdapter: ModelAdapter = {
             image_urls: imageUrls,
             num_images: numImages,
             ...(seed !== undefined && { seed }),
+            ...(imageSize && { image_size: imageSize }),
           },
           logs: false,
           // Note: @fal-ai/client handles timeout internally

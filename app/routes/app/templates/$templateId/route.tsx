@@ -45,6 +45,12 @@ import {
   TEMPLATE_TEST_LIMIT_PER_MONTH,
   REMOVE_BG_PRICE_USD,
 } from "../../../../lib/generation-settings";
+import {
+  DEFAULT_TEMPLATE_ASPECT_RATIO,
+  TEMPLATE_ASPECT_RATIO_LABELS,
+  TEMPLATE_ASPECT_RATIOS,
+  type TemplateAspectRatio,
+} from "../../../../lib/template-aspect-ratios";
 
 export type LoaderData = {
   template: DesignTemplateDto | null;
@@ -327,6 +333,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     generation_model_identifier,
     price_usd_per_generation,
     remove_background_enabled,
+    aspect_ratio,
   } = parsed.data;
 
   // Parse variable names from JSON
@@ -387,6 +394,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       generationModelIdentifier: generation_model_identifier ?? null,
       priceUsdPerGeneration: price_usd_per_generation ?? null,
       removeBackgroundEnabled: remove_background_enabled === "true",
+      aspectRatio: aspect_ratio,
       variableNames,
     });
 
@@ -486,6 +494,9 @@ export default function TemplateEditPage() {
   const [textInputEnabled, setTextInputEnabled] = useState(
     template?.textInputEnabled ?? false,
   );
+  const [aspectRatio, setAspectRatio] = useState<TemplateAspectRatio>(
+    template?.aspectRatio ?? DEFAULT_TEMPLATE_ASPECT_RATIO,
+  );
   const [prompt, setPrompt] = useState(template?.prompt ?? "");
   const [variableNames, setVariableNames] = useState<string[]>(
     template?.variables.map((v) => v.name) ?? [],
@@ -547,18 +558,10 @@ export default function TemplateEditPage() {
     setVariableNames((prev) => prev.filter((n) => n !== name));
   }, []);
 
-  console.log("RENDER", {
-    isGenerationInProgress,
-    hasLiveResults: !!liveTestResults,
-    testResultId: testResults?.id,
-    ignoredId: ignoredGenerationId.current,
-    navState: navigation.state,
-  });
 
   // Track generation progress
   useEffect(() => {
     if (queuedMessage) {
-      console.log("Queued message received", queuedMessage);
       setIsGenerationInProgress(true);
 
       // Update the ignored ID if we somehow missed it (though onSubmit should catch it)
@@ -578,20 +581,14 @@ export default function TemplateEditPage() {
         testResults.id &&
         testResults.id !== ignoredGenerationId.current
       ) {
-        console.log("Strict Mode: New result ID detected. Unlocking loader.");
         setLiveTestResults(testResults);
         setIsGenerationInProgress(false);
-      } else {
-        console.log(
-          "Strict Mode: Ignoring server update (still generating or old data).",
-        );
       }
       return;
     }
 
     // 2. If we are NOT generating, simply allow the server to drive the UI
     if (testResults) {
-      console.log("Strict Mode: Syncing server results (idle state).");
       setLiveTestResults(testResults);
     }
   }, [testResults, isGenerationInProgress]);
@@ -729,6 +726,53 @@ export default function TemplateEditPage() {
                 }
                 required
               />
+
+              <s-stack direction="block" gap="small">
+                <label htmlFor="aspect_ratio">
+                  <strong>Base aspect ratio</strong>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    id="aspect_ratio"
+                    name="aspect_ratio"
+                    value={aspectRatio}
+                    onChange={(event) =>
+                      setAspectRatio(event.target.value as TemplateAspectRatio)
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 32px 8px 12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
+                      fontFamily: "inherit",
+                      fontSize: "inherit",
+                      appearance: "none",
+                    }}
+                  >
+                    {TEMPLATE_ASPECT_RATIOS.map((ratio) => (
+                      <option key={ratio} value={ratio}>
+                        {TEMPLATE_ASPECT_RATIO_LABELS[ratio]}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "#666",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </div>
+                <s-text color="subdued">
+                  Used when "Cover entire print area" is disabled in previews.
+                </s-text>
+              </s-stack>
 
               <s-stack direction="block" gap="small">
                 <s-checkbox

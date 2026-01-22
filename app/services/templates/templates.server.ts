@@ -9,6 +9,10 @@ import prisma from "../../db.server";
 import type { DesignTemplateStatus } from "@prisma/client";
 import type { Decimal } from "@prisma/client/runtime/library";
 import logger from "../../lib/logger";
+import {
+  DEFAULT_TEMPLATE_ASPECT_RATIO,
+  type TemplateAspectRatio,
+} from "../../lib/template-aspect-ratios";
 
 // --- Constants ---
 
@@ -60,6 +64,7 @@ export type DesignTemplateDto = {
   generationModelIdentifier: string | null;
   priceUsdPerGeneration: number | null;
   removeBackgroundEnabled: boolean;
+  aspectRatio: TemplateAspectRatio;
   status: DesignTemplateStatus;
   /** Monthly test generation count for rate limiting */
   testGenerationCount: number;
@@ -95,6 +100,7 @@ export type CreateTemplateInput = {
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
   removeBackgroundEnabled?: boolean;
+  aspectRatio?: TemplateAspectRatio;
   variableNames: string[];
 };
 
@@ -108,6 +114,7 @@ export type UpdateTemplateInput = {
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
   removeBackgroundEnabled?: boolean;
+  aspectRatio?: TemplateAspectRatio;
   variableNames: string[];
 };
 
@@ -231,6 +238,7 @@ export const getTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -259,6 +267,7 @@ export const createTemplate = async (
       generation_model_identifier: input.generationModelIdentifier ?? null,
       price_usd_per_generation: input.priceUsdPerGeneration ?? null,
       remove_background_enabled: input.removeBackgroundEnabled ?? false,
+      aspect_ratio: input.aspectRatio ?? DEFAULT_TEMPLATE_ASPECT_RATIO,
       status: "draft",
       variables: {
         create: input.variableNames.map((name) => ({ name })),
@@ -277,6 +286,7 @@ export const createTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -323,6 +333,7 @@ export const updateTemplate = async (
         generation_model_identifier: input.generationModelIdentifier ?? null,
         price_usd_per_generation: input.priceUsdPerGeneration ?? null,
         remove_background_enabled: input.removeBackgroundEnabled ?? false,
+        aspect_ratio: input.aspectRatio ?? DEFAULT_TEMPLATE_ASPECT_RATIO,
         variables: {
           create: input.variableNames.map((name) => ({ name })),
         },
@@ -341,6 +352,7 @@ export const updateTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -447,6 +459,7 @@ export const publishTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,
@@ -510,6 +523,7 @@ export const unpublishTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
     testGenerationMonth: template.test_generation_month,

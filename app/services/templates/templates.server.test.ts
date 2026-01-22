@@ -17,6 +17,10 @@ import {
   type UpdateTemplateInput,
   type TestGenerationOutput,
 } from "./templates.server";
+import {
+  DEFAULT_TEMPLATE_ASPECT_RATIO,
+  TEMPLATE_ASPECT_RATIOS,
+} from "../../lib/template-aspect-ratios";
 
 describe("Templates Service", () => {
   const shopId = "test-shop-123";
@@ -78,6 +82,7 @@ describe("Templates Service", () => {
       expect(template.prompt).toBeNull();
       expect(template.generationModelIdentifier).toBeNull();
       expect(template.priceUsdPerGeneration).toBeNull();
+      expect(template.aspectRatio).toBe(DEFAULT_TEMPLATE_ASPECT_RATIO);
     });
 
     it("creates template with generation settings", async () => {
@@ -120,6 +125,19 @@ describe("Templates Service", () => {
       const template = await createTemplate(input);
 
       expect(template.removeBackgroundEnabled).toBe(false);
+    });
+
+    it("creates template with explicit aspect ratio", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "Aspect Ratio Template",
+        aspectRatio: TEMPLATE_ASPECT_RATIOS[2],
+        variableNames: [],
+      };
+
+      const template = await createTemplate(input);
+
+      expect(template.aspectRatio).toBe(TEMPLATE_ASPECT_RATIOS[2]);
     });
   });
 
@@ -306,6 +324,30 @@ describe("Templates Service", () => {
         "fal-ai/bytedance/seedream/v4/edit",
       );
       expect(fetched?.priceUsdPerGeneration).toBe(0.05);
+    });
+
+    it("updates template aspect ratio", async () => {
+      const input: CreateTemplateInput = {
+        shopId,
+        templateName: "Ratio Template",
+        variableNames: [],
+      };
+
+      const created = await createTemplate(input);
+      const updateInput: UpdateTemplateInput = {
+        templateId: created.id,
+        shopId,
+        templateName: "Ratio Template",
+        aspectRatio: TEMPLATE_ASPECT_RATIOS[4],
+        variableNames: [],
+      };
+
+      const updated = await updateTemplate(updateInput);
+
+      expect(updated?.aspectRatio).toBe(TEMPLATE_ASPECT_RATIOS[4]);
+
+      const fetched = await getTemplate(created.id, shopId);
+      expect(fetched?.aspectRatio).toBe(TEMPLATE_ASPECT_RATIOS[4]);
     });
   });
 

@@ -5,11 +5,9 @@
  * - Signed URL generation for uploads
  * - Signed URL generation for reads
  * - File type validation
- *
- * Note: Currently mocked for development without full Supabase setup.
- * When Supabase is fully configured, replace mock implementations
- * with actual Supabase Storage client calls.
  */
+
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Allowed file types for test photo uploads.
@@ -65,6 +63,48 @@ export interface UploadResult {
   /** Expiry timestamp for signed URLs */
   expiresAt: Date;
 }
+
+let supabaseClient: SupabaseClient | null | undefined;
+
+const isHttpUrl = (value: string): boolean =>
+  value.startsWith("https://") || value.startsWith("http://");
+
+const getSupabaseClient = (): SupabaseClient | null => {
+  if (supabaseClient !== undefined) {
+    return supabaseClient;
+  }
+
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseServiceKey = process.env.SUPABASE_SERVICE_KEY;
+  const hasAnyConfig = Boolean(supabaseUrl || supabaseServiceKey);
+
+  if (hasAnyConfig) {
+    if (!supabaseUrl || !supabaseServiceKey || !isHttpUrl(supabaseUrl)) {
+      throw new StorageError(
+        "storage_error",
+        "Supabase storage is misconfigured. Set SUPABASE_URL to the project HTTPS URL and SUPABASE_SERVICE_KEY to the service role key.",
+        false,
+      );
+    }
+  }
+
+  if (!supabaseUrl || !supabaseServiceKey) {
+    supabaseClient = null;
+    return supabaseClient;
+  }
+
+  supabaseClient = createClient(supabaseUrl, supabaseServiceKey, {
+    auth: {
+      persistSession: false,
+    },
+  });
+
+  return supabaseClient;
+};
+
+export const isSupabaseConfigured = (): boolean => {
+  return getSupabaseClient() !== null;
+};
 
 /**
  * Error codes for storage operations.
@@ -166,9 +206,6 @@ export function generateStorageKey(shopId: string, extension: string): string {
 /**
  * Generate signed URLs for uploading and reading a file.
  *
- * MOCKED VERSION: Returns placeholder URLs for development.
- * When Supabase is configured, replace with actual Supabase client calls.
- *
  * @param shopId - Shop ID for multi-tenancy
  * @param originalFilename - Original filename
  * @param sizeBytes - File size in bytes
@@ -188,23 +225,112 @@ export async function generateSignedUrls(
   const storageKey = generateStorageKey(shopId, extension);
   const expiresAt = new Date(Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000);
 
-  // MOCK: Return placeholder URLs
-  // TODO: Replace with actual Supabase Storage signed URL generation
-  // Example with Supabase:
-  // const { data, error } = await supabase.storage
-  //   .from(TEST_UPLOADS_BUCKET)
-  //   .createSignedUploadUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
-  //
-  // const readUrl = supabase.storage
-  //   .from(TEST_UPLOADS_BUCKET)
-  //   .getSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
-  //
-  // if (error) throw new StorageError("storage_error", error.message);
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    if (process.env.NODE_ENV === "production") {
+      throw new StorageError(
+        "storage_error",
+        "Supabase storage is not configured.",
+        false,
+      );
+    }
+
+    return {
+      storageKey,
+      uploadUrl: `https://mock-storage.example.com/upload/${storageKey}`,
+      readUrl: `https://mock-storage.example.com/read/${storageKey}`,
+      expiresAt,
+    };
+  }
+
+  const { data: uploadData, error: uploadError } = await supabase.storage
+    .from(TEST_UPLOADS_BUCKET)
+    .createSignedUploadUrl(storageKey);
+
+  if (uploadError || !uploadData?.signedUrl) {
+    throw new StorageError(
+      "storage_error",
+      uploadError?.message ?? "Unable to create upload URL.",
+    );
+  }
+
+  const { data: readData, error: readError } = await supabase.storage
+    .from(TEST_UPLOADS_BUCKET)
+    .createSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
+
+  if (readError || !readData?.signedUrl) {
+    throw new StorageError(
+      "storage_error",
+      readError?.message ?? "Unable to create read URL.",
+    );
+  }
 
   return {
     storageKey,
-    uploadUrl: `https://mock-storage.example.com/upload/${storageKey}`,
-    readUrl: `https://mock-storage.example.com/read/${storageKey}`,
+    uploadUrl: uploadData.signedUrl,
+    readUrl: readData.signedUrl,
+    expiresAt,
+  };
+}
+
+export async function uploadFileAndGetReadUrl(
+  shopId: string,
+  originalFilename: string,
+  sizeBytes: number,
+  fileBuffer: Buffer,
+  contentType: string,
+): Promise<UploadResult> {
+  const extension = getFileExtension(originalFilename);
+  validateFileType(extension);
+  validateFileSize(sizeBytes);
+
+  const storageKey = generateStorageKey(shopId, extension);
+  const expiresAt = new Date(Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000);
+
+  const supabase = getSupabaseClient();
+  if (!supabase) {
+    if (process.env.NODE_ENV === "production") {
+      throw new StorageError(
+        "storage_error",
+        "Supabase storage is not configured.",
+        false,
+      );
+    }
+
+    return {
+      storageKey,
+      uploadUrl: `https://mock-storage.example.com/upload/${storageKey}`,
+      readUrl: `https://mock-storage.example.com/read/${storageKey}`,
+      expiresAt,
+    };
+  }
+
+  const { error: uploadError } = await supabase.storage
+    .from(TEST_UPLOADS_BUCKET)
+    .upload(storageKey, fileBuffer, {
+      contentType,
+      upsert: true,
+    });
+
+  if (uploadError) {
+    throw new StorageError("storage_error", uploadError.message);
+  }
+
+  const { data: readData, error: readError } = await supabase.storage
+    .from(TEST_UPLOADS_BUCKET)
+    .createSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
+
+  if (readError || !readData?.signedUrl) {
+    throw new StorageError(
+      "storage_error",
+      readError?.message ?? "Unable to create read URL.",
+    );
+  }
+
+  return {
+    storageKey,
+    uploadUrl: readData.signedUrl,
+    readUrl: readData.signedUrl,
     expiresAt,
   };
 }

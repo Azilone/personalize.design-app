@@ -27,6 +27,12 @@ import {
   MVP_GENERATION_MODEL_ID,
   MVP_PRICE_USD_PER_GENERATION,
 } from "../../../../lib/generation-settings";
+import {
+  DEFAULT_TEMPLATE_ASPECT_RATIO,
+  TEMPLATE_ASPECT_RATIO_LABELS,
+  TEMPLATE_ASPECT_RATIOS,
+  type TemplateAspectRatio,
+} from "../../../../lib/template-aspect-ratios";
 import logger from "../../../../lib/logger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -69,8 +75,13 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const { template_name, text_input_enabled, prompt, variable_names_json } =
-    parsed.data;
+  const {
+    template_name,
+    text_input_enabled,
+    prompt,
+    variable_names_json,
+    aspect_ratio,
+  } = parsed.data;
 
   // Parse variable names from JSON
   let variableNames: string[] = [];
@@ -128,6 +139,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       prompt: prompt || null,
       generationModelIdentifier: MVP_GENERATION_MODEL_ID,
       priceUsdPerGeneration: MVP_PRICE_USD_PER_GENERATION,
+      aspectRatio: aspect_ratio,
       variableNames,
     });
 
@@ -197,6 +209,9 @@ export default function TemplateNewPage() {
   // State for form fields
   const [templateName, setTemplateName] = useState("");
   const [textInputEnabled, setTextInputEnabled] = useState(false);
+  const [aspectRatio, setAspectRatio] = useState(
+    DEFAULT_TEMPLATE_ASPECT_RATIO,
+  );
   const [prompt, setPrompt] = useState("");
   const [variableNames, setVariableNames] = useState<string[]>([]);
   const [variableInput, setVariableInput] = useState("");
@@ -272,6 +287,53 @@ export default function TemplateNewPage() {
                 }
                 required
               />
+
+              <s-stack direction="block" gap="small">
+                <label htmlFor="aspect_ratio">
+                  <strong>Base aspect ratio</strong>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    id="aspect_ratio"
+                    name="aspect_ratio"
+                    value={aspectRatio}
+                    onChange={(event) =>
+                      setAspectRatio(event.target.value as TemplateAspectRatio)
+                    }
+                    style={{
+                      width: "100%",
+                      padding: "8px 32px 8px 12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
+                      fontFamily: "inherit",
+                      fontSize: "inherit",
+                      appearance: "none",
+                    }}
+                  >
+                    {TEMPLATE_ASPECT_RATIOS.map((ratio) => (
+                      <option key={ratio} value={ratio}>
+                        {TEMPLATE_ASPECT_RATIO_LABELS[ratio]}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "#666",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </div>
+                <s-text color="subdued">
+                  Used when "Cover entire print area" is disabled in previews.
+                </s-text>
+              </s-stack>
 
               <s-stack direction="block" gap="small">
                 <s-checkbox
