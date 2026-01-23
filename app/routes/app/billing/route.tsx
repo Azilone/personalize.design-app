@@ -13,15 +13,23 @@ import {
   useNavigation,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { PlanStatus } from "@prisma/client";
 import { authenticate } from "../../../shopify.server";
 import { getShopIdFromSession } from "../../../lib/tenancy";
 import { buildEmbeddedSearch } from "../../../lib/embedded-search";
 import logger from "../../../lib/logger";
+import {
+  USAGE_BILLING_NOTES,
+  USAGE_PRICING_ITEMS,
+} from "../../../lib/usage-pricing";
 import { spendSafetyActionSchema } from "../../../schemas/admin";
+import { billingSummarySchema } from "../../../schemas/billing";
 import {
   getSpendSafetySettings,
   upsertSpendSafetySettings,
 } from "../../../services/shops/spend-safety.server";
+import { getShopPlan } from "../../../services/shops/plan.server";
+import { getUsageLedgerSummary } from "../../../services/shopify/billing.server";
 
 const DEFAULT_MONTHLY_CAP_CENTS = 1000;
 
@@ -71,13 +79,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const settings = await getSpendSafetySettings(shopId);
     const monthlyCapCents =
       settings.monthlyCapCents ?? DEFAULT_MONTHLY_CAP_CENTS;
+    const plan = await getShopPlan(shopId);
+    const planStatus = plan?.plan_status ?? PlanStatus.none;
+    const ledgerSummary = await getUsageLedgerSummary({ shopId });
 
-    return {
+    const summary = billingSummarySchema.parse({
       monthlyCapCents,
       paidUsageConsentAt: settings.paidUsageConsentAt
         ? settings.paidUsageConsentAt.toISOString()
         : null,
-    };
+      giftGrantTotalCents: ledgerSummary.giftGrantTotalCents,
+      giftBalanceCents: ledgerSummary.giftBalanceCents,
+      paidUsageMonthToDateCents: ledgerSummary.paidUsageMonthToDateCents,
+      planStatus,
+    });
+
+    return summary;
   } catch (error) {
     if (error instanceof Response) {
       if (shouldLogAuthFlow()) {
@@ -169,8 +186,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 };
 
 export default function BillingSettings() {
-  const { monthlyCapCents, paidUsageConsentAt } =
-    useLoaderData<typeof loader>();
+  const {
+    monthlyCapCents,
+    paidUsageConsentAt,
+    giftGrantTotalCents,
+    giftBalanceCents,
+    paidUsageMonthToDateCents,
+    planStatus,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { search } = useLocation();
@@ -199,9 +222,59 @@ export default function BillingSettings() {
     monthlyCapCents,
     paidUsageConsentAt,
   });
+  const giftBalanceUsd = (giftBalanceCents / 100).toFixed(2);
+  const giftGrantTotalUsd = (giftGrantTotalCents / 100).toFixed(2);
+  const paidUsageUsd = (paidUsageMonthToDateCents / 100).toFixed(2);
+  const isStandardPlan = planStatus === "standard";
+  const formatUsageUsd = (amount: number) =>
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    }).format(amount);
+  const planLabel: Record<string, string> = {
+    none: "No active plan",
+    standard: "Standard",
+    early_access: "Early Access",
+    standard_pending: "Standard (pending)",
+    early_access_pending: "Early Access (pending)",
+  };
 
   return (
-    <s-page heading="Billing & spend safety">
+    <s-page heading="Usage & billing">
+      <s-section heading="Usage summary">
+        <s-stack direction="block" gap="base">
+          <s-stack direction="block" gap="base">
+            <s-heading>Current usage balance</s-heading>
+            <s-paragraph>
+              Plan: {planLabel[planStatus] ?? planStatus}
+            </s-paragraph>
+            <s-paragraph>Free gift issued: ${giftGrantTotalUsd}</s-paragraph>
+            <s-paragraph>Free gift remaining: ${giftBalanceUsd}</s-paragraph>
+            <s-paragraph>Paid usage month-to-date: ${paidUsageUsd}</s-paragraph>
+          </s-stack>
+          <s-stack direction="block" gap="base">
+            <s-heading>Pricing</s-heading>
+            <s-unordered-list>
+              {USAGE_PRICING_ITEMS.map((item) => (
+                <s-list-item key={item.key}>
+                  {item.label}: ${formatUsageUsd(item.priceUsd)}
+                </s-list-item>
+              ))}
+              <s-list-item>
+                {USAGE_BILLING_NOTES.gift_applies_first}
+              </s-list-item>
+              <s-list-item>
+                {USAGE_BILLING_NOTES.printify_mockups_not_billed}
+              </s-list-item>
+            </s-unordered-list>
+          </s-stack>
+          {isStandardPlan ? (
+            <s-banner tone="info">
+              <s-text>{USAGE_BILLING_NOTES.standard_trial_note}</s-text>
+            </s-banner>
+          ) : null}
+        </s-stack>
+      </s-section>
       <s-section heading="Spend safety">
         <s-stack direction="block" gap="base">
           {errorMessage ? (

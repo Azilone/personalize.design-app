@@ -21,8 +21,12 @@ import { buildEmbeddedSearch } from "../../../../lib/embedded-search";
 import prisma from "../../../../db.server";
 import logger from "../../../../lib/logger";
 import { captureEvent } from "../../../../lib/posthog.server";
+import { buildPlaceholderUrl } from "../../../../lib/placeholder-images";
 import { productTemplateAssignmentActionSchema } from "../../../../schemas/admin";
-import { merchantPreviewGeneratePayloadSchema } from "../../../../services/inngest/types";
+import {
+  merchantPreviewFakeGeneratePayloadSchema,
+  merchantPreviewGeneratePayloadSchema,
+} from "../../../../services/inngest/types";
 import { inngest } from "../../../../services/inngest/client.server";
 import {
   clearProductTemplateAssignment,
@@ -37,6 +41,7 @@ import {
   getTemplate,
   type DesignTemplateDto,
 } from "../../../../services/templates/templates.server";
+import { calculateFalImageSize } from "../../../../services/fal/image-size.server";
 import {
   generateSignedUrls,
   isSupabaseConfigured,
@@ -150,6 +155,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const productId = parsed.data.product_id.trim();
     const templateId = parsed.data.template_id.trim();
     const coverPrintArea = parsed.data.cover_print_area === "true";
+    const fakeGeneration = parsed.data.fake_generation;
 
     if (productId !== routeProductId) {
       return data(
@@ -163,15 +169,19 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
 
     const testImage = formData.get("test_image");
-    if (!(testImage instanceof File) || testImage.size === 0) {
-      return data(
-        {
-          previewError: {
-            message: "Please upload a test image before generating a preview.",
+    const testImageFile = testImage instanceof File ? testImage : null;
+    if (!fakeGeneration) {
+      if (!testImageFile || testImageFile.size === 0) {
+        return data(
+          {
+            previewError: {
+              message:
+                "Please upload a test image before generating a preview.",
+            },
           },
-        },
-        { status: 400 },
-      );
+          { status: 400 },
+        );
+      }
     }
 
     let variableValues: Record<string, string> = {};
@@ -189,34 +199,68 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       variableValues = {};
     }
 
-    let uploadResult;
+    let uploadResult: { readUrl: string; uploadUrl?: string } | null = null;
     let requiresUpload = false;
-    try {
-      const supabaseConfigured = isSupabaseConfigured();
-      if (supabaseConfigured) {
-        uploadResult = await uploadFileAndGetReadUrl(
-          shopId,
-          testImage.name,
-          testImage.size,
-          Buffer.from(await testImage.arrayBuffer()),
-          testImage.type || "application/octet-stream",
-        );
-      } else {
-        requiresUpload = true;
-        uploadResult = await generateSignedUrls(
-          shopId,
-          testImage.name,
-          testImage.size,
+
+    if (fakeGeneration) {
+      const template = await getTemplate(templateId, shopId);
+      if (!template) {
+        return data(
+          {
+            previewError: {
+              message: "Template not found for preview.",
+            },
+          },
+          { status: 404 },
         );
       }
-    } catch (error) {
+
+      const imageSize = calculateFalImageSize({
+        coverPrintArea: false,
+        templateAspectRatio: template.aspectRatio,
+        printAreaDimensions: null,
+      });
+
+      uploadResult = { readUrl: buildPlaceholderUrl(imageSize) };
+    } else if (testImageFile) {
+      try {
+        const supabaseConfigured = isSupabaseConfigured();
+        if (supabaseConfigured) {
+          uploadResult = await uploadFileAndGetReadUrl(
+            shopId,
+            testImageFile.name,
+            testImageFile.size,
+            Buffer.from(await testImageFile.arrayBuffer()),
+            testImageFile.type || "application/octet-stream",
+          );
+        } else {
+          requiresUpload = true;
+          uploadResult = await generateSignedUrls(
+            shopId,
+            testImageFile.name,
+            testImageFile.size,
+          );
+        }
+      } catch (error) {
+        return data(
+          {
+            previewError: {
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "Unable to prepare upload.",
+            },
+          },
+          { status: 400 },
+        );
+      }
+    }
+
+    if (!uploadResult) {
       return data(
         {
           previewError: {
-            message:
-              error instanceof Error
-                ? error.message
-                : "Unable to prepare upload.",
+            message: "Unable to prepare preview image.",
           },
         },
         { status: 400 },
@@ -225,15 +269,26 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     if (
       requiresUpload &&
+      uploadResult.uploadUrl &&
       !uploadResult.uploadUrl.includes("mock-storage.example.com")
     ) {
+      if (!testImageFile) {
+        return data(
+          {
+            previewError: {
+              message: "Missing test image for upload.",
+            },
+          },
+          { status: 400 },
+        );
+      }
       const uploadResponse = await fetch(uploadResult.uploadUrl, {
         method: "PUT",
         headers: {
-          "Content-Type": testImage.type || "application/octet-stream",
+          "Content-Type": testImageFile?.type || "application/octet-stream",
           "x-upsert": "true",
         },
-        body: Buffer.from(await testImage.arrayBuffer()),
+        body: Buffer.from(await testImageFile.arrayBuffer()),
       });
 
       if (!uploadResponse.ok) {
@@ -269,6 +324,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         template_id: templateId,
         job_id: jobId,
         cover_print_area: coverPrintArea,
+        fake_generation: fakeGeneration,
         variable_count: Object.keys(variableValues).length,
         has_test_text: Boolean(parsed.data.test_text?.trim()),
       },
@@ -287,21 +343,38 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         variableValues,
       });
 
-      const payload = merchantPreviewGeneratePayloadSchema.parse({
-        job_id: jobId,
-        shop_id: shopId,
-        product_id: productId,
-        template_id: templateId,
-        cover_print_area: coverPrintArea,
-        test_image_url: uploadResult.readUrl,
-        test_text: parsed.data.test_text,
-        variable_values: variableValues,
-      });
+      if (fakeGeneration) {
+        const payload = merchantPreviewFakeGeneratePayloadSchema.parse({
+          job_id: jobId,
+          shop_id: shopId,
+          product_id: productId,
+          template_id: templateId,
+          cover_print_area: coverPrintArea,
+          test_text: parsed.data.test_text,
+          variable_values: variableValues,
+        });
 
-      await inngest.send({
-        name: "merchant_previews.generate.requested",
-        data: payload,
-      });
+        await inngest.send({
+          name: "merchant_previews.fake_generate.requested",
+          data: payload,
+        });
+      } else {
+        const payload = merchantPreviewGeneratePayloadSchema.parse({
+          job_id: jobId,
+          shop_id: shopId,
+          product_id: productId,
+          template_id: templateId,
+          cover_print_area: coverPrintArea,
+          test_image_url: uploadResult.readUrl,
+          test_text: parsed.data.test_text,
+          variable_values: variableValues,
+        });
+
+        await inngest.send({
+          name: "merchant_previews.generate.requested",
+          data: payload,
+        });
+      }
     } catch (error) {
       return data(
         {
@@ -509,6 +582,7 @@ export default function ProductConfigurationPage() {
   );
   const [previewJobId, setPreviewJobId] = useState<string | null>(null);
   const previewPollTimeoutRef = useRef<number | null>(null);
+  const [fakeGeneration, setFakeGeneration] = useState(false);
 
   useEffect(() => {
     if (isError) {

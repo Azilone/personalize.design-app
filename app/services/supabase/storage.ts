@@ -107,6 +107,14 @@ export const isSupabaseConfigured = (): boolean => {
 };
 
 /**
+ * Reset the cached Supabase client.
+ * Only exported for testing purposes.
+ */
+export const resetSupabaseClientForTesting = (): void => {
+  supabaseClient = undefined;
+};
+
+/**
  * Error codes for storage operations.
  */
 export type StorageErrorCode =

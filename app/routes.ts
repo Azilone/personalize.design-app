@@ -20,7 +20,6 @@ export default [
   ),
   route("app", "./routes/app/route.tsx", { id: "routes/app" }, [
     index("./routes/app/_index/route.tsx"),
-    route("additional", "./routes/app/additional/route.tsx"),
     route("billing", "./routes/app/billing/route.tsx"),
     route("billing/confirm", "./routes/app/billing/confirm/route.tsx"),
     route("dev", "./routes/app/dev/route.tsx"),
@@ -44,9 +43,6 @@ export default [
     ),
     route("products", "./routes/app/products/_index/route.tsx"),
     route("products/:productId", "./routes/app/products/$productId/route.tsx"),
-    route(
-      "api/preview/:jobId",
-      "./routes/app/api/preview/$jobId/route.tsx",
-    ),
+    route("api/preview/:jobId", "./routes/app/api/preview/$jobId/route.ts"),
   ]),
 ] satisfies RouteConfig;

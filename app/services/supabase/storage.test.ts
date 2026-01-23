@@ -5,7 +5,7 @@
  * and signed URL generation.
  */
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import {
   getFileExtension,
   validateFileType,
@@ -15,9 +15,33 @@ import {
   ALLOWED_FILE_TYPES,
   MAX_FILE_SIZE_BYTES,
   StorageError,
+  resetSupabaseClientForTesting,
 } from "./storage";
 
+// Mock the Supabase client to avoid real API calls
+vi.mock("@supabase/supabase-js", () => ({
+  createClient: vi.fn(() => ({
+    storage: {
+      from: vi.fn(() => ({
+        createSignedUploadUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: "https://mock.supabase.co/upload/test-key" },
+          error: null,
+        }),
+        createSignedUrl: vi.fn().mockResolvedValue({
+          data: { signedUrl: "https://mock.supabase.co/read/test-key" },
+          error: null,
+        }),
+      })),
+    },
+  })),
+}));
+
 describe("Supabase storage", () => {
+  beforeEach(() => {
+    // Reset the cached Supabase client before each test
+    resetSupabaseClientForTesting();
+  });
+
   describe("ALLOWED_FILE_TYPES", () => {
     it("should include all expected file types", () => {
       expect(ALLOWED_FILE_TYPES).toEqual(

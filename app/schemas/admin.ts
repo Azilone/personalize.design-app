@@ -128,6 +128,10 @@ const productPreviewGenerateSchema = z.object({
   cover_print_area: z.enum(["true", "false"]).default("false"),
   test_text: z.string().optional(),
   variable_values_json: z.string().default("{}"),
+  fake_generation: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export const productTemplateAssignmentActionSchema = z.discriminatedUnion(

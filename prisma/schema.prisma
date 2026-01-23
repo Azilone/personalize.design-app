@@ -187,6 +187,21 @@ model MerchantPreview {
   @@map("merchant_previews")
 }
 
+model UsageLedgerEntry {
+  id              String               @id @default(cuid())
+  shop_id         String
+  entry_type      UsageLedgerEntryType
+  amount_cents    Int
+  currency_code   String               @default("USD")
+  idempotency_key String
+  description     String?
+  created_at      DateTime             @default(now())
+
+  @@index([shop_id, created_at])
+  @@unique([shop_id, idempotency_key])
+  @@map("usage_ledger_entries")
+}
+
 enum PlanStatus {
   none
   standard
@@ -214,4 +229,11 @@ enum MerchantPreviewStatus {
   creating_mockups
   done
   failed
+}
+
+enum UsageLedgerEntryType {
+  gift_grant
+  gift_spend
+  paid_usage
+  adjustment
 }

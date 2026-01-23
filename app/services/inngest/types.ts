@@ -48,8 +48,18 @@ export type TemplateTestGeneratePayload = z.infer<
   typeof templateTestGeneratePayloadSchema
 >;
 
+export const templateTestFakeGeneratePayloadSchema = z.object({
+  shop_id: z.string().min(1),
+  template_id: z.string().min(1),
+  num_images: z.number().int().min(1).max(4),
+});
+
 export type TemplateTestRemoveBackgroundPayload = z.infer<
   typeof templateTestRemoveBackgroundPayloadSchema
+>;
+
+export type TemplateTestFakeGeneratePayload = z.infer<
+  typeof templateTestFakeGeneratePayloadSchema
 >;
 
 export const merchantPreviewGeneratePayloadSchema = z.object({
@@ -63,8 +73,22 @@ export const merchantPreviewGeneratePayloadSchema = z.object({
   variable_values: z.record(z.string(), z.string()),
 });
 
+export const merchantPreviewFakeGeneratePayloadSchema = z.object({
+  job_id: z.string().min(1),
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+  template_id: z.string().min(1),
+  cover_print_area: z.boolean(),
+  test_text: z.string().optional(),
+  variable_values: z.record(z.string(), z.string()),
+});
+
 export type MerchantPreviewGeneratePayload = z.infer<
   typeof merchantPreviewGeneratePayloadSchema
+>;
+
+export type MerchantPreviewFakeGeneratePayload = z.infer<
+  typeof merchantPreviewFakeGeneratePayloadSchema
 >;
 
 export const productsSyncPayloadSchema = z.object({

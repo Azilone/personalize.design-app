@@ -1,19 +1,26 @@
 import { NonRetriableError } from "inngest";
 import { inngest } from "../client.server";
 import {
+  templateTestFakeGeneratePayloadSchema,
   templateTestGeneratePayloadSchema,
   templateTestRemoveBackgroundPayloadSchema,
+  type TemplateTestFakeGeneratePayload,
   type TemplateTestGeneratePayload,
   type TemplateTestRemoveBackgroundPayload,
 } from "../types";
 import { generateImages } from "../../fal/generate.server";
 import { removeBackground } from "../../fal/models/birefnet-v2";
 import { calculateFalImageSize } from "../../fal/image-size.server";
+import { buildPlaceholderUrl } from "../../../lib/placeholder-images";
 import {
   recordTestGeneration,
   releaseTestGenerationQuota,
 } from "../../templates/templates.server";
 import { getTemplate } from "../../templates/templates.server";
+import {
+  buildUsageChargeIdempotencyKey,
+  recordUsageCharge,
+} from "../../shopify/billing.server";
 import logger from "../../../lib/logger";
 import type { GenerationOutput } from "../../fal/types";
 
@@ -60,9 +67,12 @@ const mapGenerationResult = (
   };
 };
 
-const createFakeGenerationOutput = (numImages: number): GenerationOutput => ({
+const createFakeGenerationOutput = (
+  numImages: number,
+  placeholderUrl: string,
+): GenerationOutput => ({
   images: Array.from({ length: numImages }, () => ({
-    url: "https://placehold.co/600x400",
+    url: placeholderUrl,
     generationTimeSeconds: 0.5,
     costUsd: 0,
     generationCostUsd: 0,
@@ -104,6 +114,90 @@ const mapRemoveBackgroundResult = (
   };
 };
 
+export const templateTestFakeGenerate = inngest.createFunction(
+  {
+    id: "templates/test-fake-generate",
+    concurrency: {
+      key: "event.data.shop_id",
+      limit: 2,
+    },
+  },
+  { event: "templates/test.fake_generate.requested" },
+  async ({ event, step }) => {
+    const parsed = templateTestFakeGeneratePayloadSchema.safeParse(event.data);
+    if (!parsed.success) {
+      logger.warn(
+        { errors: parsed.error.flatten().fieldErrors },
+        "Invalid fake generation payload",
+      );
+      throw new NonRetriableError("Invalid fake generation payload");
+    }
+
+    const payload: TemplateTestFakeGeneratePayload = parsed.data;
+    const usageIdempotencyId = event.id ?? payload.template_id;
+
+    const template = await step.run("load-template", async () =>
+      getTemplate(payload.template_id, payload.shop_id),
+    );
+
+    if (!template) {
+      throw new NonRetriableError("Template not found for fake generation");
+    }
+
+    const imageSize = calculateFalImageSize({
+      coverPrintArea: false,
+      templateAspectRatio: template.aspectRatio,
+      printAreaDimensions: null,
+    });
+
+    const placeholderUrl = buildPlaceholderUrl(imageSize);
+    const fakeResult = createFakeGenerationOutput(
+      payload.num_images,
+      placeholderUrl,
+    );
+    const mappedResult = mapGenerationResult(fakeResult);
+
+    await step.run("record-test-generation", async () =>
+      recordTestGeneration({
+        templateId: payload.template_id,
+        shopId: payload.shop_id,
+        numImagesRequested: payload.num_images,
+        numImagesGenerated: fakeResult.images.length,
+        totalCostUsd: fakeResult.totalCostUsd,
+        totalTimeSeconds: fakeResult.totalTimeSeconds,
+        generationCostUsd: 0,
+        removeBgCostUsd: 0,
+        success: true,
+        resultImages: mappedResult,
+      }),
+    );
+
+    await step.run("record-test-usage-ledger", async () =>
+      recordUsageCharge({
+        shopId: payload.shop_id,
+        totalCostUsd: fakeResult.totalCostUsd,
+        idempotencyKey: buildUsageChargeIdempotencyKey(
+          "template_test_fake_generate",
+          usageIdempotencyId,
+        ),
+        description: "template_test_fake_generate",
+      }),
+    );
+
+    logger.info(
+      {
+        shop_id: payload.shop_id,
+        template_id: payload.template_id,
+        fake_generation: true,
+        generated_count: fakeResult.images.length,
+      },
+      "Template fake generation completed",
+    );
+
+    return mappedResult;
+  },
+);
+
 export const templateTestGenerate = inngest.createFunction(
   {
     id: "templates/test-generate",
@@ -124,38 +218,8 @@ export const templateTestGenerate = inngest.createFunction(
     }
 
     const payload: TemplateTestGeneratePayload = parsed.data;
-
-    if (payload.fake_generation) {
-      const fakeResult = createFakeGenerationOutput(payload.num_images);
-      const mappedResult = mapGenerationResult(fakeResult);
-
-      await step.run("record-test-generation", async () =>
-        recordTestGeneration({
-          templateId: payload.template_id,
-          shopId: payload.shop_id,
-          numImagesRequested: payload.num_images,
-          numImagesGenerated: fakeResult.images.length,
-          totalCostUsd: fakeResult.totalCostUsd,
-          totalTimeSeconds: fakeResult.totalTimeSeconds,
-          generationCostUsd: 0,
-          removeBgCostUsd: 0,
-          success: true,
-          resultImages: mappedResult,
-        }),
-      );
-
-      logger.info(
-        {
-          shop_id: payload.shop_id,
-          template_id: payload.template_id,
-          fake_generation: true,
-          generated_count: fakeResult.images.length,
-        },
-        "Template fake generation completed",
-      );
-
-      return mappedResult;
-    }
+    const usageIdempotencyId =
+      event.id ?? `${payload.shop_id}:${payload.template_id}`;
 
     const template = await step.run("load-template", async () =>
       getTemplate(payload.template_id, payload.shop_id),
@@ -198,6 +262,18 @@ export const templateTestGenerate = inngest.createFunction(
           removeBgCostUsd: generationResult.images[0]?.removeBgCostUsd,
           success: true,
           resultImages: mappedResult,
+        }),
+      );
+
+      await step.run("record-test-usage-ledger", async () =>
+        recordUsageCharge({
+          shopId: payload.shop_id,
+          totalCostUsd: generationResult.totalCostUsd,
+          idempotencyKey: buildUsageChargeIdempotencyKey(
+            "template_test_generate",
+            usageIdempotencyId,
+          ),
+          description: "template_test_generate",
         }),
       );
 
@@ -270,6 +346,8 @@ export const templateTestRemoveBackground = inngest.createFunction(
     }
 
     const payload = parsed.data;
+    const usageIdempotencyId =
+      event.id ?? `${payload.shop_id}:${payload.template_id}`;
 
     const removeBgResults = await step.run("remove-background", async () =>
       Promise.all(
@@ -317,6 +395,18 @@ export const templateTestRemoveBackground = inngest.createFunction(
       }),
     );
 
+    await step.run("record-test-usage-ledger", async () =>
+      recordUsageCharge({
+        shopId: payload.shop_id,
+        totalCostUsd: finalResult.total_cost_usd,
+        idempotencyKey: buildUsageChargeIdempotencyKey(
+          "template_test_remove_background",
+          usageIdempotencyId,
+        ),
+        description: "template_test_remove_background",
+      }),
+    );
+
     logger.info(
       {
         shop_id: payload.shop_id,
@@ -335,10 +425,12 @@ export const templateTestGenerateFailure = inngest.createFunction(
   { event: "inngest/function.failed" },
   async ({ event, step }) => {
     const isTestGenerate = event.data.function_id === "templates/test-generate";
+    const isFakeGenerate =
+      event.data.function_id === "templates/test-fake-generate";
     const isRemoveBg =
       event.data.function_id === "templates/test-remove-background";
 
-    if (!isTestGenerate && !isRemoveBg) {
+    if (!isTestGenerate && !isFakeGenerate && !isRemoveBg) {
       return { ignored: true };
     }
 
@@ -346,7 +438,9 @@ export const templateTestGenerateFailure = inngest.createFunction(
       ? templateTestRemoveBackgroundPayloadSchema.safeParse(
           event.data.event.data,
         )
-      : templateTestGeneratePayloadSchema.safeParse(event.data.event.data);
+      : isFakeGenerate
+        ? templateTestFakeGeneratePayloadSchema.safeParse(event.data.event.data)
+        : templateTestGeneratePayloadSchema.safeParse(event.data.event.data);
 
     if (!payload.success) {
       logger.warn(
@@ -393,6 +487,7 @@ export const templateTestGenerateFailure = inngest.createFunction(
 );
 
 export const inngestFunctions = [
+  templateTestFakeGenerate,
   templateTestGenerate,
   templateTestRemoveBackground,
   templateTestGenerateFailure,

@@ -30,6 +30,8 @@ export type PrintifyTempProductResult = {
   mockupUrls: string[];
 };
 
+const DEFAULT_PREVIEW_IMAGE_SCALE = 1;
+
 const printifyUploadResponseSchema = z.object({
   id: z.union([z.string(), z.number()]),
 });
@@ -156,7 +158,7 @@ export const createTempProduct = async (
                     id: uploadId,
                     x: printAreaImage.x ?? 0.5,
                     y: printAreaImage.y ?? 0.5,
-                    scale: printAreaImage.scale ?? 1,
+                    scale: printAreaImage.scale ?? DEFAULT_PREVIEW_IMAGE_SCALE,
                     angle: printAreaImage.angle ?? 0,
                   },
                 ],

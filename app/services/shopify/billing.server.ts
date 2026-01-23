@@ -1,4 +1,8 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { UsageLedgerEntryType } from "@prisma/client";
+import prisma from "../../db.server";
+import { USAGE_GIFT_CENTS } from "../../lib/usage-pricing";
+import { trackUsageGiftGrant } from "../posthog/events";
 
 type MoneyInput = {
   amount: number;
@@ -27,6 +31,266 @@ type AppSubscriptionCreateInput = {
   returnUrl: string;
   trialDays: number;
   lineItems: AppSubscriptionLineItemInput[];
+};
+
+type UsageLedgerEntryInput = {
+  entryType: UsageLedgerEntryType;
+  amountCents: number;
+};
+
+const giftEntryTypes: UsageLedgerEntryType[] = [
+  UsageLedgerEntryType.gift_grant,
+  UsageLedgerEntryType.gift_spend,
+];
+
+export const buildUsageGiftGrantIdempotencyKey = (shopId: string) =>
+  `usage_gift_grant:${shopId}`;
+
+export const buildUsageChargeIdempotencyKey = (
+  source: string,
+  sourceId: string,
+) => `usage_charge:${source}:${sourceId}`;
+
+export const calculateGiftBalanceCents = (
+  entries: UsageLedgerEntryInput[],
+): number => {
+  return entries.reduce((total, entry) => {
+    if (!giftEntryTypes.includes(entry.entryType)) {
+      return total;
+    }
+
+    return total + entry.amountCents;
+  }, 0);
+};
+
+type GrantUsageGiftInput = {
+  shopId: string;
+  reason?: string;
+};
+
+type GrantUsageGiftResult = {
+  created: boolean;
+  entryId: string;
+};
+
+export const grantUsageGift = async (
+  input: GrantUsageGiftInput,
+): Promise<GrantUsageGiftResult> => {
+  const idempotencyKey = buildUsageGiftGrantIdempotencyKey(input.shopId);
+
+  try {
+    const entry = await prisma.usageLedgerEntry.create({
+      data: {
+        shop_id: input.shopId,
+        entry_type: UsageLedgerEntryType.gift_grant,
+        amount_cents: USAGE_GIFT_CENTS,
+        currency_code: "USD",
+        idempotency_key: idempotencyKey,
+        description: input.reason ?? "usage_gift_grant",
+      },
+    });
+
+    trackUsageGiftGrant({
+      shopId: input.shopId,
+      ledgerEntryId: entry.id,
+      idempotencyKey,
+      giftAmountCents: USAGE_GIFT_CENTS,
+    });
+
+    return { created: true, entryId: entry.id };
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
+      const existing = await prisma.usageLedgerEntry.findUnique({
+        where: {
+          shop_id_idempotency_key: {
+            shop_id: input.shopId,
+            idempotency_key: idempotencyKey,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        throw error;
+      }
+
+      return { created: false, entryId: existing.id };
+    }
+
+    throw error;
+  }
+};
+
+type UsageLedgerSummary = {
+  giftGrantTotalCents: number;
+  giftBalanceCents: number;
+  paidUsageMonthToDateCents: number;
+};
+
+type UsageLedgerSummaryInput = {
+  shopId: string;
+  fallbackGiftBalanceCents?: number;
+  now?: Date;
+};
+
+export const getUsageLedgerSummary = async (
+  input: UsageLedgerSummaryInput,
+): Promise<UsageLedgerSummary> => {
+  const now = input.now ?? new Date();
+  const monthStart = new Date(
+    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+  );
+
+  const giftEntries = await prisma.usageLedgerEntry.findMany({
+    where: {
+      shop_id: input.shopId,
+      entry_type: {
+        in: giftEntryTypes,
+      },
+    },
+    select: {
+      entry_type: true,
+      amount_cents: true,
+    },
+  });
+
+  const giftGrantTotalCents = giftEntries.reduce((total, entry) => {
+    if (entry.entry_type !== UsageLedgerEntryType.gift_grant) {
+      return total;
+    }
+
+    return total + entry.amount_cents;
+  }, 0);
+
+  const mappedGiftEntries = giftEntries.map((entry) => ({
+    entryType: entry.entry_type,
+    amountCents: entry.amount_cents,
+  }));
+  const giftBalanceCents = giftEntries.length
+    ? calculateGiftBalanceCents(mappedGiftEntries)
+    : (input.fallbackGiftBalanceCents ?? 0);
+
+  const paidUsage = await prisma.usageLedgerEntry.aggregate({
+    where: {
+      shop_id: input.shopId,
+      entry_type: UsageLedgerEntryType.paid_usage,
+      created_at: {
+        gte: monthStart,
+      },
+    },
+    _sum: {
+      amount_cents: true,
+    },
+  });
+
+  return {
+    giftGrantTotalCents,
+    giftBalanceCents,
+    paidUsageMonthToDateCents: paidUsage._sum.amount_cents ?? 0,
+  };
+};
+
+type UsageChargeResult = {
+  created: boolean;
+  giftAppliedCents: number;
+  paidUsageCents: number;
+};
+
+type UsageChargeInput = {
+  shopId: string;
+  totalCostUsd: number;
+  idempotencyKey: string;
+  description?: string;
+  now?: Date;
+};
+
+const normalizeUsageCents = (amountUsd: number) =>
+  Math.max(0, Math.round(amountUsd * 100));
+
+export const recordUsageCharge = async (
+  input: UsageChargeInput,
+): Promise<UsageChargeResult> => {
+  const totalCostCents = normalizeUsageCents(input.totalCostUsd);
+  if (totalCostCents === 0) {
+    return { created: false, giftAppliedCents: 0, paidUsageCents: 0 };
+  }
+
+  const giftIdempotencyKey = `${input.idempotencyKey}:gift_spend`;
+  const paidIdempotencyKey = `${input.idempotencyKey}:paid_usage`;
+
+  return prisma.$transaction(async (tx) => {
+    const existingEntries = await tx.usageLedgerEntry.findMany({
+      where: {
+        shop_id: input.shopId,
+        idempotency_key: { in: [giftIdempotencyKey, paidIdempotencyKey] },
+      },
+      select: { entry_type: true, amount_cents: true },
+    });
+
+    if (existingEntries.length > 0) {
+      const giftAppliedCents = Math.abs(
+        existingEntries.find(
+          (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
+        )?.amount_cents ?? 0,
+      );
+      const paidUsageCents =
+        existingEntries.find(
+          (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
+        )?.amount_cents ?? 0;
+
+      return { created: false, giftAppliedCents, paidUsageCents };
+    }
+
+    const giftEntries = await tx.usageLedgerEntry.findMany({
+      where: {
+        shop_id: input.shopId,
+        entry_type: { in: giftEntryTypes },
+      },
+      select: { entry_type: true, amount_cents: true },
+    });
+
+    const giftBalanceCents = calculateGiftBalanceCents(
+      giftEntries.map((entry) => ({
+        entryType: entry.entry_type,
+        amountCents: entry.amount_cents,
+      })),
+    );
+
+    const giftAppliedCents = Math.min(giftBalanceCents, totalCostCents);
+    const paidUsageCents = totalCostCents - giftAppliedCents;
+
+    if (giftAppliedCents > 0) {
+      await tx.usageLedgerEntry.create({
+        data: {
+          shop_id: input.shopId,
+          entry_type: UsageLedgerEntryType.gift_spend,
+          amount_cents: -giftAppliedCents,
+          currency_code: "USD",
+          idempotency_key: giftIdempotencyKey,
+          description: input.description ?? "usage_charge",
+        },
+      });
+    }
+
+    if (paidUsageCents > 0) {
+      await tx.usageLedgerEntry.create({
+        data: {
+          shop_id: input.shopId,
+          entry_type: UsageLedgerEntryType.paid_usage,
+          amount_cents: paidUsageCents,
+          currency_code: "USD",
+          idempotency_key: paidIdempotencyKey,
+          description: input.description ?? "usage_charge",
+        },
+      });
+    }
+
+    return { created: true, giftAppliedCents, paidUsageCents };
+  });
 };
 
 type BuildStandardInputArgs = {

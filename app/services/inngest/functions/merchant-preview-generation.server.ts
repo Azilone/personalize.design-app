@@ -8,6 +8,10 @@ import {
 import { generateImages } from "../../fal/generate.server";
 import { MVP_GENERATION_MODEL_ID } from "../../../lib/generation-settings";
 import logger from "../../../lib/logger";
+import {
+  buildUsageChargeIdempotencyKey,
+  recordUsageCharge,
+} from "../../shopify/billing.server";
 import { updateMerchantPreview } from "../../merchant-previews/merchant-previews.server";
 import { getTemplate } from "../../templates/templates.server";
 import { applyPromptVariableValues } from "../../../lib/prompt-variables";
@@ -18,6 +22,22 @@ import {
   deleteProduct,
 } from "../../printify/temp-product.server";
 import { getPrintifyProductDetails } from "../../printify/product-details.server";
+
+const resolvePreviewImageScale = (input: {
+  coverPrintArea: boolean;
+  imageSize: { width: number; height: number };
+  printAreaDimensions: { width: number; height: number } | null;
+}): number | null => {
+  if (input.coverPrintArea || !input.printAreaDimensions) {
+    return null;
+  }
+
+  const widthRatio = input.printAreaDimensions.width / input.imageSize.width;
+  const heightRatio = input.printAreaDimensions.height / input.imageSize.height;
+  const fitRatio = Math.min(widthRatio, heightRatio, 1);
+
+  return fitRatio;
+};
 
 const selectPreviewVariant = (
   variants: Array<{ id: number; price: number; isEnabled: boolean }>,
@@ -58,6 +78,7 @@ export const merchantPreviewGenerate = inngest.createFunction(
     }
 
     const payload: MerchantPreviewGeneratePayload = parsed.data;
+    const usageIdempotencyId = event.id ?? payload.job_id;
 
     const template = await step.run("load-template", async () =>
       getTemplate(payload.template_id, payload.shop_id),
@@ -122,20 +143,24 @@ export const merchantPreviewGenerate = inngest.createFunction(
       throw new NonRetriableError("No Printify variants available.");
     }
 
-    const printAreaDimensions = payload.cover_print_area
-      ? await step.run("fetch-print-area", async () =>
-          getPrintifyVariantPrintArea({
-            shopId: payload.shop_id,
-            blueprintId: printifyProduct.blueprintId,
-            printProviderId: printifyProduct.printProviderId,
-            variantId: previewVariant.id,
-          }),
-        )
-      : null;
+    const printAreaDimensions = await step.run("fetch-print-area", async () =>
+      getPrintifyVariantPrintArea({
+        shopId: payload.shop_id,
+        blueprintId: printifyProduct.blueprintId,
+        printProviderId: printifyProduct.printProviderId,
+        variantId: previewVariant.id,
+      }),
+    );
 
     const imageSize = calculateFalImageSize({
       coverPrintArea: payload.cover_print_area,
       templateAspectRatio: template.aspectRatio,
+      printAreaDimensions,
+    });
+
+    const previewImageScale = resolvePreviewImageScale({
+      coverPrintArea: payload.cover_print_area,
+      imageSize,
       printAreaDimensions,
     });
 
@@ -202,6 +227,18 @@ export const merchantPreviewGenerate = inngest.createFunction(
       throw new NonRetriableError("No design generated.");
     }
 
+    await step.run("record-preview-usage-ledger", async () =>
+      recordUsageCharge({
+        shopId: payload.shop_id,
+        totalCostUsd: generationResult.totalCostUsd,
+        idempotencyKey: buildUsageChargeIdempotencyKey(
+          "merchant_preview_generate",
+          usageIdempotencyId,
+        ),
+        description: "merchant_preview_generate",
+      }),
+    );
+
     await step.run("mark-creating-mockups", async () =>
       updateMerchantPreview({
         jobId: payload.job_id,
@@ -222,6 +259,7 @@ export const merchantPreviewGenerate = inngest.createFunction(
           {
             url: designUrl,
             position: printAreaDimensions?.position ?? "front",
+            scale: previewImageScale ?? undefined,
           },
         ),
       );

@@ -122,7 +122,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         {
           error: {
             code: "sync_timeout",
-            message: "Sync is taking longer than expected. Refresh in a moment.",
+            message:
+              "Sync is taking longer than expected. Refresh in a moment.",
           },
         },
         { status: 504 },
@@ -259,8 +260,8 @@ export default function ProductsListPage() {
           {!hasProducts ? (
             <s-banner tone="info">
               <s-text>
-                No products synced yet. Click &quot;Sync products&quot; to pull your
-                Shopify catalog.
+                No products synced yet. Click &quot;Sync products&quot; to pull
+                your Shopify catalog.
               </s-text>
             </s-banner>
           ) : (
@@ -308,7 +309,7 @@ export default function ProductsListPage() {
                             </s-badge>
                           </s-stack>
                           <s-text color="subdued">
-                            Template: {" "}
+                            Template:{" "}
                             {
                               assignmentsByProductId[product.productId]
                                 .templateName
@@ -321,17 +322,23 @@ export default function ProductsListPage() {
                         </s-text>
                       )}
                     </s-stack>
-                    <s-button
-                      id={`product-${index}`}
-                      variant="primary"
-                      onClick={() => {
-                        // URL-encode the GID to handle slashes (gid://shopify/Product/...)
-                        const encodedId = encodeURIComponent(product.productId);
-                        navigate(`/app/products/${encodedId}${embeddedSearch}`);
-                      }}
-                    >
-                      Configure
-                    </s-button>
+                    {product.printifyProductId ? (
+                      <s-button
+                        id={`product-${index}`}
+                        variant="primary"
+                        onClick={() => {
+                          // URL-encode the GID to handle slashes (gid://shopify/Product/...)
+                          const encodedId = encodeURIComponent(
+                            product.productId,
+                          );
+                          navigate(
+                            `/app/products/${encodedId}${embeddedSearch}`,
+                          );
+                        }}
+                      >
+                        Configure
+                      </s-button>
+                    ) : null}
                   </s-stack>
                 </s-card>
               ))}

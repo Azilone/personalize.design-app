@@ -358,6 +358,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         "Paywall invite unlock failed",
       );
 
+      await clearPendingPlan({
+        shopId,
+        pendingStatus: "early_access_pending",
+      });
+
       return data(
         {
           error: {
@@ -426,7 +431,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             code: "billing_failed",
             message: resolveBillingErrorMessage(
               error,
-              "We couldn’t unlock Early Access. Please try again or contact support.",
+              "We couldn't set up your Early Access plan. Please try again or contact support if the issue persists.",
             ),
           },
         },

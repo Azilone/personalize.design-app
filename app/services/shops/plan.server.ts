@@ -1,7 +1,6 @@
 import { PlanStatus } from "@prisma/client";
 import prisma from "../../db.server";
-
-const FREE_GIFT_CENTS = 100;
+import { grantUsageGift } from "../shopify/billing.server";
 
 export const isPlanActive = (status: PlanStatus): boolean => {
   return status === PlanStatus.standard || status === PlanStatus.early_access;
@@ -88,7 +87,10 @@ const reservePlanPending = async (
     select: { plan_status: true },
   });
 
-  return { acquired: false, planStatus: latest?.plan_status ?? PlanStatus.none };
+  return {
+    acquired: false,
+    planStatus: latest?.plan_status ?? PlanStatus.none,
+  };
 };
 
 export const reserveStandardPlanPending = async (
@@ -138,26 +140,13 @@ export const resetPlanForDev = async (shopId: string) => {
 };
 
 export const activateDevBypassPlan = async (shopId: string) => {
-  const existing = await prisma.shopPlan.findUnique({
-    where: { shop_id: shopId },
-    select: {
-      free_usage_gift_cents: true,
-      free_usage_gift_remaining_cents: true,
-    },
-  });
-
-  const giftCents = existing?.free_usage_gift_cents ?? 0;
-  const giftRemaining = existing?.free_usage_gift_remaining_cents ?? 0;
-
-  return prisma.shopPlan.upsert({
+  const result = await prisma.shopPlan.upsert({
     where: { shop_id: shopId },
     update: {
       plan_status: PlanStatus.early_access,
       shopify_subscription_id: null,
       shopify_subscription_status: null,
       shopify_confirmation_url: null,
-      free_usage_gift_cents: giftCents || FREE_GIFT_CENTS,
-      free_usage_gift_remaining_cents: giftRemaining || FREE_GIFT_CENTS,
     },
     create: {
       shop_id: shopId,
@@ -165,10 +154,15 @@ export const activateDevBypassPlan = async (shopId: string) => {
       shopify_subscription_id: null,
       shopify_subscription_status: null,
       shopify_confirmation_url: null,
-      free_usage_gift_cents: FREE_GIFT_CENTS,
-      free_usage_gift_remaining_cents: FREE_GIFT_CENTS,
     },
   });
+
+  await grantUsageGift({
+    shopId,
+    reason: "dev_bypass_activation",
+  });
+
+  return result;
 };
 
 type PendingStandardPlanInput = {
@@ -269,26 +263,18 @@ type ActivatePlanInput = {
 };
 
 const activatePlanWithGift = async (input: ActivatePlanInput) => {
-  const existing = await prisma.shopPlan.findUnique({
-    where: { shop_id: input.shopId },
-    select: {
-      free_usage_gift_cents: true,
-      free_usage_gift_remaining_cents: true,
-    },
+  await grantUsageGift({
+    shopId: input.shopId,
+    reason: `plan_activation:${input.planStatus}`,
   });
 
-  const giftCents = existing?.free_usage_gift_cents ?? 0;
-  const giftRemaining = existing?.free_usage_gift_remaining_cents ?? 0;
-
-  return prisma.shopPlan.upsert({
+  const result = await prisma.shopPlan.upsert({
     where: { shop_id: input.shopId },
     update: {
       plan_status: input.planStatus,
       shopify_subscription_id: input.subscriptionId,
       shopify_subscription_status: input.subscriptionStatus,
       shopify_confirmation_url: null,
-      free_usage_gift_cents: giftCents || FREE_GIFT_CENTS,
-      free_usage_gift_remaining_cents: giftRemaining || FREE_GIFT_CENTS,
     },
     create: {
       shop_id: input.shopId,
@@ -296,8 +282,8 @@ const activatePlanWithGift = async (input: ActivatePlanInput) => {
       shopify_subscription_id: input.subscriptionId,
       shopify_subscription_status: input.subscriptionStatus,
       shopify_confirmation_url: null,
-      free_usage_gift_cents: FREE_GIFT_CENTS,
-      free_usage_gift_remaining_cents: FREE_GIFT_CENTS,
     },
   });
+
+  return result;
 };

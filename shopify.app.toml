@@ -1,6 +1,6 @@
 # Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
 
-client_id = "a0137874729cde913c673554ef995bd4"
+client_id = "bc305e19755316f49796bc0f3b126e34"
 name = "personalize.design-app"
 application_url = "https://dev.personalize.design"
 embedded = true

@@ -19,7 +19,10 @@ import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
 import { buildEmbeddedSearch } from "../../lib/embedded-search";
 import { getOrSetCachedValue } from "../../lib/ttl-cache.server";
 import type { ReadinessItem } from "../../lib/readiness";
-import { getSubscriptionStatus } from "../../services/shopify/billing.server";
+import {
+  getSubscriptionStatus,
+  getUsageLedgerSummary,
+} from "../../services/shopify/billing.server";
 import {
   activateEarlyAccessPlan,
   activateStandardPlan,
@@ -122,6 +125,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   }
 
   const planStatusForUi = plan?.plan_status ?? planStatus;
+  const ledgerSummary = await getUsageLedgerSummary({ shopId });
   const fallbackReadinessSignals: ShopReadinessSignals = {
     printifyConnected: false,
     storefrontPersonalizationEnabled: false,
@@ -141,8 +145,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     subscriptionStatus: plan?.shopify_subscription_status ?? null,
     readinessItems,
     readinessSignals,
-    freeGiftCents: plan?.free_usage_gift_cents ?? 0,
-    freeGiftRemainingCents: plan?.free_usage_gift_remaining_cents ?? 0,
+    freeGiftCents: ledgerSummary.giftGrantTotalCents,
+    freeGiftRemainingCents: ledgerSummary.giftBalanceCents,
   };
 
   return data;
@@ -170,11 +174,9 @@ export default function App() {
         <a href={`/app${embeddedSearch}`} rel="home">
           Setup
         </a>
+        <a href={`/app/billing${embeddedSearch}`}>Usage & Billing</a>
         <a href={`/app/templates${embeddedSearch}`}>Templates</a>
         <a href={`/app/products${embeddedSearch}`}>Products</a>
-        {isDev ? (
-          <a href={`/app/additional${embeddedSearch}`}>Sandbox (dev)</a>
-        ) : null}
         {isDev ? (
           <a href={`/app/dev${embeddedSearch}`}>Dev tools (dev)</a>
         ) : null}

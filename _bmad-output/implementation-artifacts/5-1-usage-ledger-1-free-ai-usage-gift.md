@@ -1,8 +1,6 @@
 # Story 5.1: Usage Ledger + $1 Free AI Usage Gift
 
-Status: ready-for-dev
-
-<!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
+Status: done
 
 ## Story
 
@@ -18,17 +16,17 @@ so that I can test the product and understand future costs.
 
 ## Tasks / Subtasks
 
-- [ ] Define usage ledger model and gift balance tracking (AC: 1)
-  - [ ] Add Prisma schema for gift grant + ledger entries using snake_case fields
-  - [ ] Add migration with composite indexes for shop_id + event ordering
-- [ ] Provision gift grant on plan activation (AC: 1)
-  - [ ] Add service method to record the $1.00 gift with idempotency key
-  - [ ] Emit PostHog event for gift grant with shop_id correlation
-- [ ] Build billing/usage UI summary (AC: 2, 3)
-  - [ ] Add loader/service query to compute gift balance + paid usage MTD
-  - [ ] Render pricing and gift notes in admin UI with Polaris components
-- [ ] Document pricing constants and usage ledger behavior (AC: 2)
-  - [ ] Add shared constants for USD prices and labels used in UI
+- [x] Define usage ledger model and gift balance tracking (AC: 1)
+  - [x] Add Prisma schema for gift grant + ledger entries using snake_case fields
+  - [x] Add migration with composite indexes for shop_id + event ordering
+- [x] Provision gift grant on plan activation (AC: 1)
+  - [x] Add service method to record the $1.00 gift with idempotency key
+  - [x] Emit PostHog event for gift grant with shop_id correlation
+- [x] Build billing/usage UI summary (AC: 2, 3)
+  - [x] Add loader/service query to compute gift balance + paid usage MTD
+  - [x] Render pricing and gift notes in admin UI with Polaris components
+- [x] Document pricing constants and usage ledger behavior (AC: 2)
+  - [x] Add shared constants for USD prices and labels used in UI
 
 ## Dev Notes
 
@@ -100,10 +98,40 @@ OpenCode (OpenAI)
 
 - Workflow: create-story (YOLO mode)
 
+### Implementation Plan
+
+- Add usage ledger schema + migration with idempotency safeguards.
+- Record the gift grant on plan activation and emit PostHog events.
+- Build billing summary loader + UI using shared pricing constants.
+
 ### Completion Notes List
 
-- Story marked ready-for-dev with comprehensive context and guardrails.
+- Added usage ledger schema + migration with gift grant idempotency.
+- Granted gift on plan activation with PostHog tracking + ledger summary queries.
+- Added billing usage summary UI, pricing notes, and shared pricing constants.
+- Tests: `pnpm test` (pass). Lint: `pnpm lint` (fails with pre-existing lint errors in unrelated files).
+- Follow-up review fixes: ledger-only gift balance, usage ledger charges for template tests, idempotency coverage, PostHog correlation updates.
 
 ### File List
 
 - \_bmad-output/implementation-artifacts/5-1-usage-ledger-1-free-ai-usage-gift.md
+- app/lib/usage-pricing.ts
+- app/routes.ts
+- app/routes/app/billing/route.tsx
+- app/routes/app/route.tsx
+- app/schemas/billing.ts
+- app/services/inngest/functions/template-test-generate.server.ts
+- app/services/posthog/events.ts
+- app/services/shopify/billing.server.test.ts
+- app/services/shopify/billing.server.ts
+- app/services/shops/plan.server.ts
+- app/services/supabase/storage.test.ts
+- app/services/supabase/storage.ts
+- prisma/migrations/20260122175055_add_usage_ledger/migration.sql
+- prisma/schema.prisma
+- \_bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- Added usage ledger tracking, gift grant handling, and billing usage summary UI. (2026-01-22)
+- Review fixes: ledger-based gift balance, usage charge ledger entries, idempotency/PostHog updates. (2026-01-23)

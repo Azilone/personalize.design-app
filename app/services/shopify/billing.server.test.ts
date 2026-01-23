@@ -1,9 +1,34 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
+import { UsageLedgerEntryType } from "@prisma/client";
+
+const mockPrisma = vi.hoisted(() => ({
+  usageLedgerEntry: {
+    create: vi.fn(),
+    findUnique: vi.fn(),
+    findMany: vi.fn(),
+    aggregate: vi.fn(),
+  },
+  $transaction: vi.fn(),
+}));
+
+const mockTrackUsageGiftGrant = vi.hoisted(() => vi.fn());
+
+vi.mock("../../db.server", () => ({
+  default: mockPrisma,
+}));
+
+vi.mock("../posthog/events", () => ({
+  trackUsageGiftGrant: mockTrackUsageGiftGrant,
+}));
 import {
   buildEarlyAccessSubscriptionInput,
+  buildUsageGiftGrantIdempotencyKey,
   buildStandardSubscriptionInput,
+  calculateGiftBalanceCents,
+  grantUsageGift,
   getSubscriptionStatus,
+  recordUsageCharge,
 } from "./billing.server";
 
 describe("buildStandardSubscriptionInput", () => {
@@ -24,6 +49,66 @@ describe("buildStandardSubscriptionInput", () => {
     expect(recurring?.price.currencyCode).toBe("USD");
     expect(usage?.cappedAmount.amount).toBe(10);
     expect(usage?.cappedAmount.currencyCode).toBe("USD");
+  });
+});
+
+describe("grantUsageGift", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns existing entry on duplicate idempotency key", async () => {
+    const error = Object.assign(new Error("duplicate"), { code: "P2002" });
+    mockPrisma.usageLedgerEntry.create.mockRejectedValueOnce(error);
+    mockPrisma.usageLedgerEntry.findUnique.mockResolvedValueOnce({
+      id: "entry_1",
+    });
+
+    const result = await grantUsageGift({ shopId: "shop.myshopify.com" });
+
+    expect(result).toEqual({ created: false, entryId: "entry_1" });
+    expect(mockTrackUsageGiftGrant).not.toHaveBeenCalled();
+  });
+});
+
+describe("recordUsageCharge", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.$transaction.mockImplementation(async (callback) =>
+      callback(mockPrisma),
+    );
+  });
+
+  it("applies gift balance before paid usage", async () => {
+    mockPrisma.usageLedgerEntry.findMany
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          entry_type: UsageLedgerEntryType.gift_grant,
+          amount_cents: 100,
+        },
+      ]);
+    mockPrisma.usageLedgerEntry.create.mockResolvedValue({ id: "entry_1" });
+
+    const result = await recordUsageCharge({
+      shopId: "shop.myshopify.com",
+      totalCostUsd: 0.75,
+      idempotencyKey: "usage_charge:test:1",
+    });
+
+    expect(result).toEqual({
+      created: true,
+      giftAppliedCents: 75,
+      paidUsageCents: 0,
+    });
+    expect(mockPrisma.usageLedgerEntry.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.usageLedgerEntry.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        entry_type: UsageLedgerEntryType.gift_spend,
+        amount_cents: -75,
+        idempotency_key: "usage_charge:test:1:gift_spend",
+      }),
+    });
   });
 });
 
@@ -96,5 +181,25 @@ describe("getSubscriptionStatus", () => {
         subscriptionId: "gid://shopify/AppSubscription/123",
       }),
     ).rejects.toThrow("Subscription status not found.");
+  });
+});
+
+describe("buildUsageGiftGrantIdempotencyKey", () => {
+  it("builds a stable idempotency key per shop", () => {
+    const key = buildUsageGiftGrantIdempotencyKey("example.myshopify.com");
+
+    expect(key).toBe("usage_gift_grant:example.myshopify.com");
+  });
+});
+
+describe("calculateGiftBalanceCents", () => {
+  it("sums gift grant and spend entries", () => {
+    const balance = calculateGiftBalanceCents([
+      { entryType: UsageLedgerEntryType.gift_grant, amountCents: 100 },
+      { entryType: UsageLedgerEntryType.gift_spend, amountCents: -25 },
+      { entryType: UsageLedgerEntryType.paid_usage, amountCents: 50 },
+    ]);
+
+    expect(balance).toBe(75);
   });
 });

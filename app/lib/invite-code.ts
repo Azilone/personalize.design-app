@@ -5,5 +5,5 @@ export const isInviteCodeValid = (code: string): boolean => {
 };
 
 export const inviteCodeErrorMessage = (): string => {
-  return "Unable to unlock Early Access. Please try again.";
+  return "Invalid invite code. Please check your code and try again, or contact support if you believe this is an error.";
 };
