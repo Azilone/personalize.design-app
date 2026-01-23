@@ -156,6 +156,18 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     const templateId = parsed.data.template_id.trim();
     const coverPrintArea = parsed.data.cover_print_area === "true";
     const fakeGeneration = parsed.data.fake_generation;
+    const isDev = process.env.NODE_ENV === "development";
+
+    if (fakeGeneration && !isDev) {
+      return data(
+        {
+          previewError: {
+            message: "Fake generation is only available in development.",
+          },
+        },
+        { status: 400 },
+      );
+    }
 
     if (productId !== routeProductId) {
       return data(
@@ -582,7 +594,6 @@ export default function ProductConfigurationPage() {
   );
   const [previewJobId, setPreviewJobId] = useState<string | null>(null);
   const previewPollTimeoutRef = useRef<number | null>(null);
-  const [fakeGeneration, setFakeGeneration] = useState(false);
 
   useEffect(() => {
     if (isError) {
@@ -939,6 +950,8 @@ function SimulatorPanel({
   const [testText, setTestText] = useState("");
   const [coverPrintArea, setCoverPrintArea] = useState(true);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
+  const [fakeGeneration, setFakeGeneration] = useState(false);
+  const isDev = process.env.NODE_ENV === "development";
 
   const variableValuesJson = JSON.stringify(variableValues);
   const hasResults = Boolean(
@@ -1043,6 +1056,11 @@ function SimulatorPanel({
           name="variable_values_json"
           value={variableValuesJson}
         />
+        <input
+          type="hidden"
+          name="fake_generation"
+          value={fakeGeneration ? "true" : "false"}
+        />
 
         <s-stack direction="block" gap="base">
           <s-stack direction="block" gap="small">
@@ -1054,7 +1072,8 @@ function SimulatorPanel({
               name="test_image"
               type="file"
               accept="image/*"
-              required
+              required={!fakeGeneration}
+              disabled={fakeGeneration}
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0] ?? null;
                 setSelectedFileName(file ? file.name : null);
@@ -1068,6 +1087,22 @@ function SimulatorPanel({
               </s-text>
             )}
           </s-stack>
+
+          {isDev ? (
+            <s-stack direction="block" gap="small">
+              <s-checkbox
+                label="Fake generation (dev only)"
+                checked={fakeGeneration}
+                onChange={() => {
+                  setFakeGeneration((prev: boolean) => !prev);
+                  setSelectedFileName(null);
+                }}
+              />
+              <s-text color="subdued">
+                Use placeholder images instead of fal.ai. No cost incurred.
+              </s-text>
+            </s-stack>
+          ) : null}
 
           {template.variables.length > 0 && (
             <s-stack direction="block" gap="small">

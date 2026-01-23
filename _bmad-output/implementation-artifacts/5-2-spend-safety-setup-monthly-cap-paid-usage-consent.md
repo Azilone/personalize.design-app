@@ -1,6 +1,6 @@
 # Story 5.2: Spend Safety Setup (Monthly Cap + Paid Usage Consent)
 
-Status: ready-for-dev
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -25,19 +25,19 @@ so that there are no surprise charges and I stay in control of spend.
 
 ## Tasks / Subtasks
 
-- [ ] Add spend safety persistence for cap + consent (AC: 1, 2)
-  - [ ] Extend Prisma schema with monthly cap + consent timestamp fields (snake_case)
-  - [ ] Create migration and backfill defaults where needed
-- [ ] Build admin Billing/Spend Safety settings UI + validation (AC: 1, 2)
-  - [ ] Add loader/action with Zod validation and error envelope
-  - [ ] Render Polaris form with cap input, disclosure, consent checkbox, confirm CTA
-- [ ] Enforce consent + cap gating for billable actions (AC: 3, 4, 5)
-  - [ ] Update billing guard service to block paid usage when gift is insufficient and consent missing
-  - [ ] Surface gating errors to storefront/admin with clear copy + link
-- [ ] Add telemetry + logs for consent changes and blocked usage (AC: 2, 3, 4, 5)
-  - [ ] Emit PostHog events with correlation keys and snake_case props
-- [ ] Tests for spend safety validation + gating (AC: 1, 2, 3, 4, 5)
-  - [ ] Unit tests for cap validation, consent gating rules, idempotency
+- [x] Add spend safety persistence for cap + consent (AC: 1, 2)
+  - [x] Extend Prisma schema with monthly cap + consent timestamp fields (snake_case)
+  - [x] Create migration and backfill defaults where needed
+- [x] Build admin Billing/Spend Safety settings UI + validation (AC: 1, 2)
+  - [x] Add loader/action with Zod validation and error envelope
+  - [x] Render Polaris form with cap input, disclosure, consent checkbox, confirm CTA
+- [x] Enforce consent + cap gating for billable actions (AC: 3, 4, 5)
+  - [x] Update billing guard service to block paid usage when gift is insufficient and consent missing
+  - [x] Surface gating errors to storefront/admin with clear copy + link
+- [x] Add telemetry + logs for consent changes and blocked usage (AC: 2, 3, 4, 5)
+  - [x] Emit PostHog events with correlation keys and snake_case props
+- [x] Tests for spend safety validation + gating (AC: 1, 2, 3, 4, 5)
+  - [x] Unit tests for cap validation, consent gating rules, idempotency
 
 ## Dev Notes
 
@@ -136,7 +136,23 @@ OpenCode (OpenAI)
 ### Completion Notes List
 
 - Generated story context with spend safety defaults, consent gating, and testing guidance.
+- Implemented billing guardrails module (`billing-guardrails.server.ts`) with `checkBillableActionAllowed` function.
+- Added PostHog telemetry for blocked usage (`billing.usage_blocked` event).
+- Integrated guardrails into Inngest functions (`templateTestGenerate`, `templateTestRemoveBackground`).
+- Added 7 unit tests covering all gating scenarios.
 
 ### File List
 
-- \_bmad-output/implementation-artifacts/5-2-spend-safety-setup-monthly-cap-paid-usage-consent.md
+- app/services/shopify/billing-guardrails.server.ts
+- app/services/shopify/billing-guardrails.server.test.ts
+- app/services/posthog/events.ts
+- app/services/inngest/functions/template-test-generate.server.ts
+- app/routes/app/billing/route.tsx
+- app/services/shops/spend-safety.server.ts
+- prisma/schema.prisma
+- \_bmad-output/implementation-artifacts/sprint-status.yaml
+
+### Change Log
+
+- Added consent gating enforcement for billable actions (AC 3, 4, 5). (2026-01-23)
+- Fixed billing guardrails to enforce monthly cap (AC 5.3) and improved UI quality in billing settings. (2026-01-23)
