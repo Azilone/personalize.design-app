@@ -1,7 +1,8 @@
 import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { UsageLedgerEntryType } from "@prisma/client";
 import prisma from "../../db.server";
-import { USAGE_GIFT_CENTS } from "../../lib/usage-pricing";
+import { USAGE_GIFT_CENTS, USAGE_GIFT_MILLS } from "../../lib/usage-pricing";
+import { millsToCents, usdToMills } from "./billing-guardrails";
 import { trackUsageGiftGrant } from "../posthog/events";
 
 type MoneyInput = {
@@ -35,7 +36,7 @@ type AppSubscriptionCreateInput = {
 
 type UsageLedgerEntryInput = {
   entryType: UsageLedgerEntryType;
-  amountCents: number;
+  amountMills: number;
 };
 
 const giftEntryTypes: UsageLedgerEntryType[] = [
@@ -51,7 +52,7 @@ export const buildUsageChargeIdempotencyKey = (
   sourceId: string,
 ) => `usage_charge:${source}:${sourceId}`;
 
-export const calculateGiftBalanceCents = (
+export const calculateGiftBalanceMills = (
   entries: UsageLedgerEntryInput[],
 ): number => {
   return entries.reduce((total, entry) => {
@@ -59,7 +60,7 @@ export const calculateGiftBalanceCents = (
       return total;
     }
 
-    return total + entry.amountCents;
+    return total + entry.amountMills;
   }, 0);
 };
 
@@ -84,6 +85,7 @@ export const grantUsageGift = async (
         shop_id: input.shopId,
         entry_type: UsageLedgerEntryType.gift_grant,
         amount_cents: USAGE_GIFT_CENTS,
+        amount_mills: USAGE_GIFT_MILLS,
         currency_code: "USD",
         idempotency_key: idempotencyKey,
         description: input.reason ?? "usage_gift_grant",
@@ -126,14 +128,14 @@ export const grantUsageGift = async (
 };
 
 type UsageLedgerSummary = {
-  giftGrantTotalCents: number;
-  giftBalanceCents: number;
-  paidUsageMonthToDateCents: number;
+  giftGrantTotalMills: number;
+  giftBalanceMills: number;
+  paidUsageMonthToDateMills: number;
 };
 
 type UsageLedgerSummaryInput = {
   shopId: string;
-  fallbackGiftBalanceCents?: number;
+  fallbackGiftBalanceMills?: number;
   now?: Date;
 };
 
@@ -155,24 +157,26 @@ export const getUsageLedgerSummary = async (
     select: {
       entry_type: true,
       amount_cents: true,
+      amount_mills: true,
     },
   });
 
-  const giftGrantTotalCents = giftEntries.reduce((total, entry) => {
+  const giftGrantTotalMills = giftEntries.reduce((total, entry) => {
     if (entry.entry_type !== UsageLedgerEntryType.gift_grant) {
       return total;
     }
 
-    return total + entry.amount_cents;
+    const amountMills = entry.amount_mills ?? entry.amount_cents * 10;
+    return total + amountMills;
   }, 0);
 
   const mappedGiftEntries = giftEntries.map((entry) => ({
     entryType: entry.entry_type,
-    amountCents: entry.amount_cents,
+    amountMills: entry.amount_mills ?? entry.amount_cents * 10,
   }));
-  const giftBalanceCents = giftEntries.length
-    ? calculateGiftBalanceCents(mappedGiftEntries)
-    : (input.fallbackGiftBalanceCents ?? 0);
+  const giftBalanceMills = giftEntries.length
+    ? calculateGiftBalanceMills(mappedGiftEntries)
+    : (input.fallbackGiftBalanceMills ?? 0);
 
   const paidUsage = await prisma.usageLedgerEntry.aggregate({
     where: {
@@ -183,21 +187,21 @@ export const getUsageLedgerSummary = async (
       },
     },
     _sum: {
-      amount_cents: true,
+      amount_mills: true,
     },
   });
 
   return {
-    giftGrantTotalCents,
-    giftBalanceCents,
-    paidUsageMonthToDateCents: paidUsage._sum.amount_cents ?? 0,
+    giftGrantTotalMills,
+    giftBalanceMills,
+    paidUsageMonthToDateMills: paidUsage._sum?.amount_mills ?? 0,
   };
 };
 
 type UsageChargeResult = {
   created: boolean;
-  giftAppliedCents: number;
-  paidUsageCents: number;
+  giftAppliedMills: number;
+  paidUsageMills: number;
 };
 
 type UsageChargeInput = {
@@ -208,15 +212,14 @@ type UsageChargeInput = {
   now?: Date;
 };
 
-const normalizeUsageCents = (amountUsd: number) =>
-  Math.max(0, Math.round(amountUsd * 100));
+const normalizeUsageMills = (amountUsd: number) => usdToMills(amountUsd);
 
 export const recordUsageCharge = async (
   input: UsageChargeInput,
 ): Promise<UsageChargeResult> => {
-  const totalCostCents = normalizeUsageCents(input.totalCostUsd);
-  if (totalCostCents === 0) {
-    return { created: false, giftAppliedCents: 0, paidUsageCents: 0 };
+  const totalCostMills = normalizeUsageMills(input.totalCostUsd);
+  if (totalCostMills === 0) {
+    return { created: false, giftAppliedMills: 0, paidUsageMills: 0 };
   }
 
   const giftIdempotencyKey = `${input.idempotencyKey}:gift_spend`;
@@ -228,21 +231,27 @@ export const recordUsageCharge = async (
         shop_id: input.shopId,
         idempotency_key: { in: [giftIdempotencyKey, paidIdempotencyKey] },
       },
-      select: { entry_type: true, amount_cents: true },
+      select: { entry_type: true, amount_cents: true, amount_mills: true },
     });
 
     if (existingEntries.length > 0) {
-      const giftAppliedCents = Math.abs(
+      const giftAppliedMills = Math.abs(
         existingEntries.find(
           (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
-        )?.amount_cents ?? 0,
+        )?.amount_mills ??
+          (existingEntries.find(
+            (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
+          )?.amount_cents ?? 0) * 10,
       );
-      const paidUsageCents =
+      const paidUsageMills =
         existingEntries.find(
           (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
-        )?.amount_cents ?? 0;
+        )?.amount_mills ??
+        (existingEntries.find(
+          (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
+        )?.amount_cents ?? 0) * 10;
 
-      return { created: false, giftAppliedCents, paidUsageCents };
+      return { created: false, giftAppliedMills, paidUsageMills };
     }
 
     const giftEntries = await tx.usageLedgerEntry.findMany({
@@ -250,25 +259,26 @@ export const recordUsageCharge = async (
         shop_id: input.shopId,
         entry_type: { in: giftEntryTypes },
       },
-      select: { entry_type: true, amount_cents: true },
+      select: { entry_type: true, amount_cents: true, amount_mills: true },
     });
 
-    const giftBalanceCents = calculateGiftBalanceCents(
+    const giftBalanceMills = calculateGiftBalanceMills(
       giftEntries.map((entry) => ({
         entryType: entry.entry_type,
-        amountCents: entry.amount_cents,
+        amountMills: entry.amount_mills ?? entry.amount_cents * 10,
       })),
     );
 
-    const giftAppliedCents = Math.min(giftBalanceCents, totalCostCents);
-    const paidUsageCents = totalCostCents - giftAppliedCents;
+    const giftAppliedMills = Math.min(giftBalanceMills, totalCostMills);
+    const paidUsageMills = totalCostMills - giftAppliedMills;
 
-    if (giftAppliedCents > 0) {
+    if (giftAppliedMills > 0) {
       await tx.usageLedgerEntry.create({
         data: {
           shop_id: input.shopId,
           entry_type: UsageLedgerEntryType.gift_spend,
-          amount_cents: -giftAppliedCents,
+          amount_cents: -millsToCents(giftAppliedMills),
+          amount_mills: -giftAppliedMills,
           currency_code: "USD",
           idempotency_key: giftIdempotencyKey,
           description: input.description ?? "usage_charge",
@@ -276,12 +286,13 @@ export const recordUsageCharge = async (
       });
     }
 
-    if (paidUsageCents > 0) {
+    if (paidUsageMills > 0) {
       await tx.usageLedgerEntry.create({
         data: {
           shop_id: input.shopId,
           entry_type: UsageLedgerEntryType.paid_usage,
-          amount_cents: paidUsageCents,
+          amount_cents: millsToCents(paidUsageMills),
+          amount_mills: paidUsageMills,
           currency_code: "USD",
           idempotency_key: paidIdempotencyKey,
           description: input.description ?? "usage_charge",
@@ -289,7 +300,7 @@ export const recordUsageCharge = async (
       });
     }
 
-    return { created: true, giftAppliedCents, paidUsageCents };
+    return { created: true, giftAppliedMills, paidUsageMills };
   });
 };
 

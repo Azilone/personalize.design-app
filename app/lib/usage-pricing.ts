@@ -5,6 +5,7 @@ import {
 
 export const USAGE_GIFT_CENTS = 100;
 export const USAGE_GIFT_USD = USAGE_GIFT_CENTS / 100;
+export const USAGE_GIFT_MILLS = USAGE_GIFT_CENTS * 10;
 
 export const USAGE_PRICING_ITEMS = [
   {

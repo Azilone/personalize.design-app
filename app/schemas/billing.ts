@@ -3,9 +3,9 @@ import { z } from "zod";
 export const billingSummarySchema = z.object({
   monthlyCapCents: z.number().int().nonnegative(),
   paidUsageConsentAt: z.string().nullable(),
-  giftGrantTotalCents: z.number().int().nonnegative(),
-  giftBalanceCents: z.number().int().nonnegative(),
-  paidUsageMonthToDateCents: z.number().int().nonnegative(),
+  giftGrantTotalMills: z.number().int().nonnegative(),
+  giftBalanceMills: z.number().int().nonnegative(),
+  paidUsageMonthToDateMills: z.number().int().nonnegative(),
   planStatus: z.enum([
     "none",
     "standard",

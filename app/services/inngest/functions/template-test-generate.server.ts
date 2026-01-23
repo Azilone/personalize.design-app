@@ -13,14 +13,20 @@ import { removeBackground } from "../../fal/models/birefnet-v2";
 import { calculateFalImageSize } from "../../fal/image-size.server";
 import { buildPlaceholderUrl } from "../../../lib/placeholder-images";
 import {
+  MVP_PRICE_USD_PER_GENERATION,
+  REMOVE_BG_PRICE_USD,
+} from "../../../lib/generation-settings";
+import {
+  getTemplate,
   recordTestGeneration,
   releaseTestGenerationQuota,
 } from "../../templates/templates.server";
-import { getTemplate } from "../../templates/templates.server";
 import {
   buildUsageChargeIdempotencyKey,
   recordUsageCharge,
 } from "../../shopify/billing.server";
+import { usdToMills } from "../../shopify/billing-guardrails";
+import { checkBillableActionAllowed } from "../../shopify/billing-guardrails.server";
 import logger from "../../../lib/logger";
 import type { GenerationOutput } from "../../fal/types";
 
@@ -235,6 +241,24 @@ export const templateTestGenerate = inngest.createFunction(
       printAreaDimensions: null,
     });
 
+    // Check billing guardrails before incurring costs
+    const estimatedCostUsd =
+      MVP_PRICE_USD_PER_GENERATION * payload.num_images +
+      (payload.remove_background_enabled
+        ? REMOVE_BG_PRICE_USD * payload.num_images
+        : 0);
+
+    await step.run("check-billing-guardrails", async () => {
+      const check = await checkBillableActionAllowed({
+        shopId: payload.shop_id,
+        costMills: usdToMills(estimatedCostUsd),
+      });
+
+      if (!check.allowed) {
+        throw new NonRetriableError(check.message);
+      }
+    });
+
     const generationResult = await step.run("generate-images", async () =>
       generateImages({
         modelId: payload.generation_model_identifier,
@@ -348,6 +372,21 @@ export const templateTestRemoveBackground = inngest.createFunction(
     const payload = parsed.data;
     const usageIdempotencyId =
       event.id ?? `${payload.shop_id}:${payload.template_id}`;
+
+    // Check billing guardrails before incurring costs
+    const estimatedRemoveBgCostUsd =
+      REMOVE_BG_PRICE_USD * payload.generated_images.length;
+
+    await step.run("check-billing-guardrails", async () => {
+      const check = await checkBillableActionAllowed({
+        shopId: payload.shop_id,
+        costMills: usdToMills(estimatedRemoveBgCostUsd),
+      });
+
+      if (!check.allowed) {
+        throw new NonRetriableError(check.message);
+      }
+    });
 
     const removeBgResults = await step.run("remove-background", async () =>
       Promise.all(

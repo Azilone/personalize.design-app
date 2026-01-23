@@ -65,8 +65,15 @@ const spendSafetySaveSchema = z.object({
   paid_usage_consent: z.string().optional(),
 });
 
+const increaseCapSchema = z.object({
+  intent: z.literal("increase_cap"),
+  new_cap_usd: z.coerce.number().finite().gt(0),
+  confirm_increase: z.string(),
+});
+
 export const spendSafetyActionSchema = z.discriminatedUnion("intent", [
   spendSafetySaveSchema,
+  increaseCapSchema,
 ]);
 
 export type SpendSafetyActionInput = z.infer<typeof spendSafetyActionSchema>;

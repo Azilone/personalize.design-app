@@ -3,6 +3,7 @@ import type {
   HeadersFunction,
   LoaderFunctionArgs,
 } from "react-router";
+import { useState } from "react";
 import {
   Form,
   Link,
@@ -30,6 +31,13 @@ import {
 } from "../../../services/shops/spend-safety.server";
 import { getShopPlan } from "../../../services/shops/plan.server";
 import { getUsageLedgerSummary } from "../../../services/shopify/billing.server";
+import { trackBillingCapIncreased } from "../../../services/posthog/events";
+import {
+  centsToMills,
+  formatResetDate,
+  getNextMonthResetDate,
+  millsToUsd,
+} from "../../../services/shopify/billing-guardrails";
 
 const DEFAULT_MONTHLY_CAP_CENTS = 1000;
 
@@ -88,9 +96,9 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       paidUsageConsentAt: settings.paidUsageConsentAt
         ? settings.paidUsageConsentAt.toISOString()
         : null,
-      giftGrantTotalCents: ledgerSummary.giftGrantTotalCents,
-      giftBalanceCents: ledgerSummary.giftBalanceCents,
-      paidUsageMonthToDateCents: ledgerSummary.paidUsageMonthToDateCents,
+      giftGrantTotalMills: ledgerSummary.giftGrantTotalMills,
+      giftBalanceMills: ledgerSummary.giftBalanceMills,
+      paidUsageMonthToDateMills: ledgerSummary.paidUsageMonthToDateMills,
       planStatus,
     });
 
@@ -143,6 +151,80 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   const settings = await getSpendSafetySettings(shopId);
+
+  // Handle cap increase intent
+  if (parsed.data.intent === "increase_cap") {
+    if (!parsed.data.confirm_increase) {
+      return data(
+        {
+          error: {
+            code: "confirmation_required",
+            message: "Please confirm the cap increase.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    const newCapCents = Math.round(parsed.data.new_cap_usd * 100);
+    const oldCapCents = settings.monthlyCapCents ?? 0;
+
+    if (!Number.isFinite(newCapCents) || newCapCents <= 0) {
+      return data(
+        {
+          error: {
+            code: "invalid_request",
+            message: "New cap must be greater than $0.00.",
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    // Validate new cap > current MTD spend
+    const ledgerSummary = await getUsageLedgerSummary({ shopId });
+    const newCapMills = centsToMills(newCapCents);
+    if (newCapMills <= ledgerSummary.paidUsageMonthToDateMills) {
+      const mtdSpendUsd = millsToUsd(
+        ledgerSummary.paidUsageMonthToDateMills,
+      ).toFixed(3);
+      return data(
+        {
+          error: {
+            code: "cap_below_spend",
+            message: `New cap must be greater than current month-to-date spend ($${mtdSpendUsd}).`,
+          },
+        },
+        { status: 400 },
+      );
+    }
+
+    await upsertSpendSafetySettings({
+      shopId,
+      monthlyCapCents: newCapCents,
+      paidUsageConsentAt: settings.paidUsageConsentAt,
+    });
+
+    // Emit PostHog event for cap increase
+    trackBillingCapIncreased({
+      shopId,
+      oldCapCents,
+      newCapCents,
+    });
+
+    logger.info(
+      {
+        shop_id: shopId,
+        old_cap_cents: oldCapCents,
+        new_cap_cents: newCapCents,
+      },
+      "Billing cap increased",
+    );
+
+    return data({ success: true, capIncreased: true });
+  }
+
+  // Handle save_spend_safety intent
   const consentAlreadyRecorded = Boolean(settings.paidUsageConsentAt);
   const consentProvided = Boolean(parsed.data.paid_usage_consent);
 
@@ -189,9 +271,9 @@ export default function BillingSettings() {
   const {
     monthlyCapCents,
     paidUsageConsentAt,
-    giftGrantTotalCents,
-    giftBalanceCents,
-    paidUsageMonthToDateCents,
+    giftGrantTotalMills,
+    giftBalanceMills,
+    paidUsageMonthToDateMills,
     planStatus,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
@@ -199,6 +281,11 @@ export default function BillingSettings() {
   const { search } = useLocation();
   const embeddedSearch = buildEmbeddedSearch(search);
   const setupHref = `/app${embeddedSearch}`;
+
+  // State for cap increase flow
+  const [showIncreaseForm, setShowIncreaseForm] = useState(false);
+  const [newCapValue, setNewCapValue] = useState("");
+  const [confirmIncrease, setConfirmIncrease] = useState(false);
 
   const errorMessage =
     actionData && typeof actionData === "object" && "error" in actionData
@@ -217,20 +304,21 @@ export default function BillingSettings() {
     : null;
   const isSubmitting =
     navigation.formData?.get("intent") === "save_spend_safety";
+  const isIncreasing = navigation.formData?.get("intent") === "increase_cap";
   const monthlyCapUsd = (monthlyCapCents / 100).toFixed(2);
   const spendSafetyConfigured = isSpendSafetyConfigured({
     monthlyCapCents,
     paidUsageConsentAt,
   });
-  const giftBalanceUsd = (giftBalanceCents / 100).toFixed(2);
-  const giftGrantTotalUsd = (giftGrantTotalCents / 100).toFixed(2);
-  const paidUsageUsd = (paidUsageMonthToDateCents / 100).toFixed(2);
-  const isStandardPlan = planStatus === "standard";
   const formatUsageUsd = (amount: number) =>
     new Intl.NumberFormat("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 3,
     }).format(amount);
+  const giftBalanceUsd = formatUsageUsd(millsToUsd(giftBalanceMills));
+  const giftGrantTotalUsd = formatUsageUsd(millsToUsd(giftGrantTotalMills));
+  const paidUsageUsd = formatUsageUsd(millsToUsd(paidUsageMonthToDateMills));
+  const isStandardPlan = planStatus === "standard";
   const planLabel: Record<string, string> = {
     none: "No active plan",
     standard: "Standard",
@@ -238,6 +326,17 @@ export default function BillingSettings() {
     standard_pending: "Standard (pending)",
     early_access_pending: "Early Access (pending)",
   };
+
+  // Calculate remaining capacity and cap status
+  const monthlyCapMills = centsToMills(monthlyCapCents);
+  const remainingCapMills = Math.max(
+    0,
+    monthlyCapMills - paidUsageMonthToDateMills,
+  );
+  const remainingCapUsd = formatUsageUsd(millsToUsd(remainingCapMills));
+  const capReached = paidUsageMonthToDateMills >= monthlyCapMills;
+  const resetDate = getNextMonthResetDate();
+  const resetDateFormatted = formatResetDate(resetDate);
 
   return (
     <s-page heading="Usage & billing">
@@ -292,39 +391,123 @@ export default function BillingSettings() {
               <s-text>Spend safety is configured.</s-text>
             </s-banner>
           ) : null}
+          {capReached && spendSafetyConfigured ? (
+            <s-banner tone="warning">
+              <s-text>
+                Monthly spending cap reached. Your cap resets{" "}
+                {resetDateFormatted}. Increase your cap below to continue using
+                paid features.
+              </s-text>
+            </s-banner>
+          ) : null}
           <s-paragraph>
             Set a monthly spending cap and confirm paid usage before usage
             charges can apply. The $1.00 free AI usage gift is applied first.
           </s-paragraph>
-          <Form method="post">
-            <input type="hidden" name="intent" value="save_spend_safety" />
-            <s-stack direction="block" gap="base">
-              <s-text-field
-                label="Monthly spending cap (USD)"
-                name="monthly_cap_usd"
-                placeholder="10.00"
-                defaultValue={monthlyCapUsd}
-              />
-              {!hasConsent ? (
-                <label>
-                  <input type="checkbox" name="paid_usage_consent" /> I
-                  understand paid usage charges will apply after the free gift
-                  is used.
-                </label>
-              ) : (
-                <s-paragraph>
-                  Paid usage consent recorded {consentDate}.
-                </s-paragraph>
-              )}
-              <s-button
-                type="submit"
-                variant="primary"
-                {...(isSubmitting ? { loading: true } : {})}
-              >
-                Save spend safety
-              </s-button>
+
+          {/* Cap Status Display */}
+          {spendSafetyConfigured ? (
+            <s-stack direction="block" gap="small">
+              <s-heading>Monthly Cap Status</s-heading>
+              <s-paragraph>Current cap: ${monthlyCapUsd}</s-paragraph>
+              <s-paragraph>
+                Month-to-date paid spend: ${paidUsageUsd}
+              </s-paragraph>
+              <s-paragraph>
+                Remaining capacity: ${remainingCapUsd} of ${monthlyCapUsd}
+              </s-paragraph>
+              <s-paragraph>Cap resets: {resetDateFormatted}</s-paragraph>
             </s-stack>
-          </Form>
+          ) : null}
+
+          {/* Initial Setup Form (when not configured) */}
+          {!spendSafetyConfigured ? (
+            <Form method="post">
+              <input type="hidden" name="intent" value="save_spend_safety" />
+              <s-stack direction="block" gap="base">
+                <s-text-field
+                  label="Monthly spending cap (USD)"
+                  name="monthly_cap_usd"
+                  placeholder="10.00"
+                  defaultValue={monthlyCapUsd}
+                />
+                {!hasConsent ? (
+                  <s-checkbox
+                    label="I understand paid usage charges will apply after the free gift is used."
+                    name="paid_usage_consent"
+                  />
+                ) : (
+                  <s-paragraph>
+                    Paid usage consent recorded {consentDate}.
+                  </s-paragraph>
+                )}
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  {...(isSubmitting ? { loading: true } : {})}
+                >
+                  Save spend safety
+                </s-button>
+              </s-stack>
+            </Form>
+          ) : null}
+
+          {/* Increase Cap Flow (when already configured) */}
+          {spendSafetyConfigured ? (
+            <s-stack direction="block" gap="base">
+              {!showIncreaseForm ? (
+                <s-button
+                  variant="secondary"
+                  onClick={() => setShowIncreaseForm(true)}
+                >
+                  Increase Cap
+                </s-button>
+              ) : (
+                <Form method="post">
+                  <input type="hidden" name="intent" value="increase_cap" />
+                  <s-stack direction="block" gap="base">
+                    <s-text-field
+                      label="New monthly cap (USD)"
+                      name="new_cap_usd"
+                      placeholder="20.00"
+                      value={newCapValue}
+                      onChange={(e: { currentTarget: { value: string } }) =>
+                        setNewCapValue(e.currentTarget.value)
+                      }
+                    />
+                    <s-checkbox
+                      label="I confirm I want to increase my monthly spending cap."
+                      name="confirm_increase"
+                      checked={confirmIncrease}
+                      onChange={(e: { currentTarget: { checked: boolean } }) =>
+                        setConfirmIncrease(e.currentTarget.checked)
+                      }
+                    />
+                    <s-stack direction="inline" gap="small">
+                      <s-button
+                        type="submit"
+                        variant="primary"
+                        {...(isIncreasing ? { loading: true } : {})}
+                      >
+                        Confirm Increase
+                      </s-button>
+                      <s-button
+                        variant="secondary"
+                        onClick={() => {
+                          setShowIncreaseForm(false);
+                          setNewCapValue("");
+                          setConfirmIncrease(false);
+                        }}
+                      >
+                        Cancel
+                      </s-button>
+                    </s-stack>
+                  </s-stack>
+                </Form>
+              )}
+            </s-stack>
+          ) : null}
+
           <Link to={setupHref}>Back to setup</Link>
         </s-stack>
       </s-section>

@@ -48,6 +48,8 @@ import {
   TEMPLATE_TEST_LIMIT_PER_MONTH,
   REMOVE_BG_PRICE_USD,
 } from "../../../../lib/generation-settings";
+import { usdToMills } from "../../../../services/shopify/billing-guardrails";
+import { checkBillableActionAllowed } from "../../../../services/shopify/billing-guardrails.server";
 import {
   DEFAULT_TEMPLATE_ASPECT_RATIO,
   TEMPLATE_ASPECT_RATIO_LABELS,
@@ -250,6 +252,34 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       );
     }
 
+    const removeBackgroundEnabled =
+      remove_background_enabled === undefined
+        ? template.removeBackgroundEnabled
+        : remove_background_enabled === "true";
+
+    if (!fake_generation) {
+      const estimatedCostUsd =
+        MVP_PRICE_USD_PER_GENERATION * num_images +
+        (removeBackgroundEnabled ? REMOVE_BG_PRICE_USD * num_images : 0);
+      const billingCheck = await checkBillableActionAllowed({
+        shopId,
+        costMills: usdToMills(estimatedCostUsd),
+      });
+
+      if (!billingCheck.allowed) {
+        await releaseTestGenerationQuota(templateId, shopId, num_images);
+        return data(
+          {
+            error: {
+              code: billingCheck.code,
+              message: billingCheck.message,
+            },
+          },
+          { status: 400 },
+        );
+      }
+    }
+
     try {
       const { ids } = fake_generation
         ? await inngest.send({
@@ -271,10 +301,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
               num_images: num_images,
               generation_model_identifier:
                 template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
-              remove_background_enabled:
-                remove_background_enabled === undefined
-                  ? template.removeBackgroundEnabled
-                  : remove_background_enabled === "true",
+              remove_background_enabled: removeBackgroundEnabled,
               fake_generation,
             }),
           });
@@ -451,6 +478,7 @@ export default function TemplateEditPage() {
   const { search } = useLocation();
   const embeddedSearch = buildEmbeddedSearch(search);
   const templatesHref = `/app/templates${embeddedSearch}`;
+  const billingHref = `/app/billing${embeddedSearch}`;
 
   const isSubmitting = navigation.state === "submitting";
   const isUpdating =
@@ -1201,6 +1229,14 @@ export default function TemplateEditPage() {
                       </s-text>
                     )}
                   </s-stack>
+                </s-banner>
+
+                <s-banner tone="info">
+                  <s-text>
+                    Test generations respect your monthly spending cap. If your
+                    cap is reached, generation is blocked. Manage this in{" "}
+                    <Link to={billingHref}>Billing</Link>.
+                  </s-text>
                 </s-banner>
 
                 {/* Generate Button */}

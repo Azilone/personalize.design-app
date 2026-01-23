@@ -45,8 +45,8 @@ export type AppLoaderData = {
   subscriptionStatus: string | null;
   readinessItems: ReadinessItem[];
   readinessSignals: ShopReadinessSignals;
-  freeGiftCents: number;
-  freeGiftRemainingCents: number;
+  freeGiftMills: number;
+  freeGiftRemainingMills: number;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -145,8 +145,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     subscriptionStatus: plan?.shopify_subscription_status ?? null,
     readinessItems,
     readinessSignals,
-    freeGiftCents: ledgerSummary.giftGrantTotalCents,
-    freeGiftRemainingCents: ledgerSummary.giftBalanceCents,
+    freeGiftMills: ledgerSummary.giftGrantTotalMills,
+    freeGiftRemainingMills: ledgerSummary.giftBalanceMills,
   };
 
   return data;

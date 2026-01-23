@@ -63,19 +63,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Index() {
   const appData = useRouteLoaderData<AppLoaderData>("routes/app");
   const planStatus = appData?.planStatus ?? PlanStatus.none;
-  const freeGiftCents = appData?.freeGiftCents ?? 0;
-  const freeGiftRemainingCents = appData?.freeGiftRemainingCents ?? 0;
+  const freeGiftMills = appData?.freeGiftMills ?? 0;
+  const freeGiftRemainingMills = appData?.freeGiftRemainingMills ?? 0;
   const readinessFetcher = useFetcher<ReadinessLoaderData>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const { search } = useLocation();
-  const formatUsd = (cents: number) => (cents / 100).toFixed(2);
+  const formatUsd = (mills: number) =>
+    new Intl.NumberFormat("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 3,
+    }).format(mills / 1000);
 
   const embeddedSearch = buildEmbeddedSearch(search);
   const readinessItems: ReadinessItem[] =
     readinessFetcher.data?.readinessItems ?? appData?.readinessItems ?? [];
   const readinessSignals =
-    readinessFetcher.data?.readinessSignals ?? appData?.readinessSignals ?? null;
+    readinessFetcher.data?.readinessSignals ??
+    appData?.readinessSignals ??
+    null;
   const isReadinessLoading =
     readinessFetcher.state !== "idle" && !readinessFetcher.data;
   const errorMessage =
@@ -243,8 +249,8 @@ export default function Index() {
       <s-section heading="Billing overview">
         <s-stack direction="block" gap="small">
           <s-paragraph>
-            Free AI usage gift: ${formatUsd(freeGiftRemainingCents)} remaining
-            (of ${formatUsd(freeGiftCents)}).
+            Free AI usage gift: ${formatUsd(freeGiftRemainingMills)} remaining
+            (of ${formatUsd(freeGiftMills)}).
           </s-paragraph>
           <s-paragraph>
             Usage charges apply after the gift is used. Standard plan trial does

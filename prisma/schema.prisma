@@ -192,6 +192,7 @@ model UsageLedgerEntry {
   shop_id         String
   entry_type      UsageLedgerEntryType
   amount_cents    Int
+  amount_mills    Int                  @default(0)
   currency_code   String               @default("USD")
   idempotency_key String
   description     String?

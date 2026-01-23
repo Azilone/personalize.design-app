@@ -25,7 +25,7 @@ import {
   buildEarlyAccessSubscriptionInput,
   buildUsageGiftGrantIdempotencyKey,
   buildStandardSubscriptionInput,
-  calculateGiftBalanceCents,
+  calculateGiftBalanceMills,
   grantUsageGift,
   getSubscriptionStatus,
   recordUsageCharge,
@@ -86,6 +86,7 @@ describe("recordUsageCharge", () => {
         {
           entry_type: UsageLedgerEntryType.gift_grant,
           amount_cents: 100,
+          amount_mills: 1000,
         },
       ]);
     mockPrisma.usageLedgerEntry.create.mockResolvedValue({ id: "entry_1" });
@@ -98,14 +99,15 @@ describe("recordUsageCharge", () => {
 
     expect(result).toEqual({
       created: true,
-      giftAppliedCents: 75,
-      paidUsageCents: 0,
+      giftAppliedMills: 750,
+      paidUsageMills: 0,
     });
     expect(mockPrisma.usageLedgerEntry.create).toHaveBeenCalledTimes(1);
     expect(mockPrisma.usageLedgerEntry.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         entry_type: UsageLedgerEntryType.gift_spend,
         amount_cents: -75,
+        amount_mills: -750,
         idempotency_key: "usage_charge:test:1:gift_spend",
       }),
     });
@@ -192,14 +194,14 @@ describe("buildUsageGiftGrantIdempotencyKey", () => {
   });
 });
 
-describe("calculateGiftBalanceCents", () => {
+describe("calculateGiftBalanceMills", () => {
   it("sums gift grant and spend entries", () => {
-    const balance = calculateGiftBalanceCents([
-      { entryType: UsageLedgerEntryType.gift_grant, amountCents: 100 },
-      { entryType: UsageLedgerEntryType.gift_spend, amountCents: -25 },
-      { entryType: UsageLedgerEntryType.paid_usage, amountCents: 50 },
+    const balance = calculateGiftBalanceMills([
+      { entryType: UsageLedgerEntryType.gift_grant, amountMills: 1000 },
+      { entryType: UsageLedgerEntryType.gift_spend, amountMills: -250 },
+      { entryType: UsageLedgerEntryType.paid_usage, amountMills: 500 },
     ]);
 
-    expect(balance).toBe(75);
+    expect(balance).toBe(750);
   });
 });
