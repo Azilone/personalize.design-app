@@ -39,18 +39,13 @@ import {
   templateTestGeneratePayloadSchema,
 } from "../../../../services/inngest/types";
 import logger from "../../../../lib/logger";
-import { uploadFileAndGetReadUrl } from "../../../../services/supabase/storage";
 import {
   MVP_GENERATION_MODEL_ID,
   MVP_GENERATION_MODEL_DISPLAY_NAME,
   MVP_PRICE_USD_PER_GENERATION,
   REMOVE_BG_PRICE_USD,
 } from "../../../../lib/generation-settings";
-import {
-  usdToMills,
-  millsToUsd,
-  centsToUsd,
-} from "../../../../services/shopify/billing-guardrails";
+import { usdToMills, millsToUsd, centsToUsd } from "../../../../services/shopify/billing-guardrails";
 import { checkBillableActionAllowed } from "../../../../services/shopify/billing-guardrails.server";
 import { getUsageLedgerSummary } from "../../../../services/shopify/billing.server";
 import { getSpendSafetySettings } from "../../../../services/shops/spend-safety.server";
@@ -65,10 +60,12 @@ export type LoaderData = {
   template: DesignTemplateDto | null;
   testResults: TestGenerationOutput | null;
   pollInterval: number;
-  billing: {
-    giftBalanceUsd: number;
-    paidUsageUsd: number;
-    monthlyCapUsd: number;
+  usageLedger: {
+    giftBalanceMills: number;
+    paidUsageMonthToDateMills: number;
+  };
+  spendSafety: {
+    monthlyCapCents: number | null;
   };
 };
 
@@ -81,41 +78,41 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     throw new Response("Template ID required", { status: 400 });
   }
 
-  const template = await getTemplate(templateId, shopId);
+  const [template, testResults, usageLedger, spendSafety] = await Promise.all([
+    getTemplate(templateId, shopId),
+    getLatestTestGeneration(templateId, shopId),
+    getUsageLedgerSummary({ shopId }),
+    getSpendSafetySettings(shopId),
+  ]);
 
   if (!template) {
     logger.warn({ templateId, shopId }, "Template not found in loader");
     throw new Response("Template not found", { status: 404 });
   }
 
-  const testResults = await getLatestTestGeneration(templateId, shopId);
-
-  // Fetch billing data
-  const [ledgerSummary, spendSafety] = await Promise.all([
-    getUsageLedgerSummary({ shopId }),
-    getSpendSafetySettings(shopId),
-  ]);
-
-  const billing = {
-    giftBalanceUsd: millsToUsd(ledgerSummary.giftBalanceMills),
-    paidUsageUsd: millsToUsd(ledgerSummary.paidUsageMonthToDateMills),
-    monthlyCapUsd: centsToUsd(spendSafety.monthlyCapCents ?? 0),
-  };
-
-  // Poll=1 check removed as we now use useRevalidator which goes through the normal loader flow
-
   logger.info(
     { templateId, shopId, hasResults: !!testResults },
     "Template loaded",
   );
-  return { template, testResults, pollInterval: 3000, billing };
+  
+  return { 
+    template, 
+    testResults, 
+    pollInterval: 3000,
+    usageLedger: {
+        giftBalanceMills: usageLedger.giftBalanceMills,
+        paidUsageMonthToDateMills: usageLedger.paidUsageMonthToDateMills,
+    },
+    spendSafety: {
+        monthlyCapCents: spendSafety.monthlyCapCents,
+    }
+  };
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
-  const rawFormData = await request.formData();
-  const formData = Object.fromEntries(rawFormData);
+  const formData = Object.fromEntries(await request.formData());
   const parsed = templateActionSchema.safeParse(formData);
 
   if (!parsed.success) {
@@ -189,87 +186,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       fake_generation,
       remove_background_enabled,
     } = parsed.data;
-
-    const testImage = rawFormData.get("test_image");
-    const testImageFile = testImage instanceof File ? testImage : null;
-
-    // Validate that either URL or file is provided for non-fake generation
-    if (!fake_generation) {
-      const hasUrl = test_photo_url && test_photo_url.trim() !== "";
-      const hasFile = testImageFile && testImageFile.size > 0;
-
-      if (!hasUrl && !hasFile) {
-        return data(
-          {
-            error: {
-              code: "validation_error",
-              message:
-                "Please provide either a photo URL or upload a photo file.",
-            },
-          },
-          { status: 400 },
-        );
-      }
-
-      if (hasUrl && hasFile) {
-        return data(
-          {
-            error: {
-              code: "validation_error",
-              message:
-                "Please provide either a photo URL OR upload a photo file, not both.",
-            },
-          },
-          { status: 400 },
-        );
-      }
-    }
-
-    // Handle file upload
-    let finalTestPhotoUrl = test_photo_url;
-    if (!fake_generation && testImageFile && testImageFile.size > 0) {
-      // Security check: File size limit (10MB)
-      const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
-      if (testImageFile.size > MAX_FILE_SIZE) {
-        return data(
-          {
-            error: {
-              code: "file_too_large",
-              message: "File exceeds 10MB limit.",
-            },
-          },
-          { status: 400 },
-        );
-      }
-
-      try {
-        const uploadResult = await uploadFileAndGetReadUrl(
-          shopId,
-          testImageFile.name,
-          testImageFile.size,
-          Buffer.from(await testImageFile.arrayBuffer()),
-          testImageFile.type || "application/octet-stream",
-        );
-        finalTestPhotoUrl = uploadResult.readUrl;
-      } catch (error) {
-        logger.error(
-          { shop_id: shopId, template_id: templateId, err: error },
-          "File upload failed",
-        );
-        return data(
-          {
-            error: {
-              code: "upload_failed",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "Failed to upload file. Please try again.",
-            },
-          },
-          { status: 400 },
-        );
-      }
-    }
 
     // Require prompt for test generation
     if (!template.prompt?.trim()) {
@@ -375,7 +291,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
             data: templateTestGeneratePayloadSchema.parse({
               shop_id: shopId,
               template_id: templateId,
-              test_photo_url: finalTestPhotoUrl,
+              test_photo_url,
               prompt: generationPrompt,
               variable_values: safeVariableValues,
               num_images: num_images,
@@ -543,7 +459,7 @@ export const headers: HeadersFunction = () => {
 };
 
 export default function TemplateEditPage() {
-  const { template, testResults, pollInterval, billing } =
+  const { template, testResults, pollInterval, usageLedger, spendSafety } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -620,7 +536,7 @@ export default function TemplateEditPage() {
   const [fakeGeneration, setFakeGeneration] = useState(false);
   const isDev = process.env.NODE_ENV === "development";
 
-  // Generation settings (MVP: use constants, read persisted from template)
+  // Generation settings
   const generationModel =
     template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
   const generationPrice =
@@ -629,7 +545,6 @@ export default function TemplateEditPage() {
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
-  const [photoInputType, setPhotoInputType] = useState<"url" | "file">("url");
   const [testVariableValues, setTestVariableValues] = useState<
     Record<string, string>
   >({});
@@ -638,15 +553,7 @@ export default function TemplateEditPage() {
     isSubmitting &&
     navigation.formData?.get("intent") === "template_test_generate";
 
-  // Calculate current usage from template
-  // const testGenerationUsage = {
-  //   count: template?.testGenerationCount ?? 0,
-  //   limit: TEMPLATE_TEST_LIMIT_PER_MONTH,
-  //   remaining:
-  //     TEMPLATE_TEST_LIMIT_PER_MONTH - (template?.testGenerationCount ?? 0),
-  // };
-
-  // Estimated cost before generation (includes remove-bg if enabled)
+  // Estimated cost
   const estimatedGenerationCost = fakeGeneration
     ? 0
     : generationPrice * numImagesToGenerate;
@@ -656,7 +563,18 @@ export default function TemplateEditPage() {
       : REMOVE_BG_PRICE_USD * numImagesToGenerate;
   const estimatedCost = estimatedGenerationCost + estimatedRemoveBgCost;
 
-  // Serialize variable names to JSON for form submission
+  // Billing Stats
+  const mtdSpend = millsToUsd(usageLedger.paidUsageMonthToDateMills);
+  const giftBalance = millsToUsd(usageLedger.giftBalanceMills);
+  const monthlyCap = spendSafety.monthlyCapCents
+    ? centsToUsd(spendSafety.monthlyCapCents)
+    : 0;
+  
+  const isCapReached = monthlyCap > 0 && mtdSpend >= monthlyCap;
+  const hasGift = giftBalance > 0.01;
+  const isBillingBlocked = !fakeGeneration && isCapReached && !hasGift;
+
+  // Serialize variable names to JSON
   const variableNamesJson = JSON.stringify(variableNames);
 
   const addVariable = useCallback(() => {
@@ -675,8 +593,6 @@ export default function TemplateEditPage() {
   useEffect(() => {
     if (queuedMessage) {
       setIsGenerationInProgress(true);
-
-      // Update the ignored ID if we somehow missed it (though onSubmit should catch it)
       if (ignoredGenerationId.current === undefined) {
         ignoredGenerationId.current = testResults?.id;
       }
@@ -685,9 +601,7 @@ export default function TemplateEditPage() {
   }, [queuedMessage]);
 
   useEffect(() => {
-    // 1. If we are currently generating, strict checks apply
     if (isGenerationInProgress) {
-      // We only unlock if we have a GENUINELY NEW result
       if (
         testResults &&
         testResults.id &&
@@ -699,28 +613,23 @@ export default function TemplateEditPage() {
       return;
     }
 
-    // 2. If we are NOT generating, simply allow the server to drive the UI
     if (testResults) {
       setLiveTestResults(testResults);
     }
   }, [testResults, isGenerationInProgress]);
 
-  // Handle error cases - stop loading if action returns an error
   useEffect(() => {
     if (errorMessage) {
       setIsGenerationInProgress(false);
     }
   }, [errorMessage]);
 
-  // Redirect after delete
   useEffect(() => {
     if (deleted) {
       navigate(templatesHref);
     }
   }, [deleted, templatesHref, navigate]);
 
-  // Poll for test generation results when queued using Remix revalidator
-  // This ensures proper Shopify session handling (raw fetch would receive HTML auth redirects)
   useEffect(() => {
     if (!isGenerationInProgress) {
       if (pollIntervalRef.current) {
@@ -731,8 +640,6 @@ export default function TemplateEditPage() {
     }
 
     pollIntervalRef.current = setInterval(() => {
-      // Use Remix's revalidator to reload the loader data
-      // This properly handles authentication through Remix's data flow
       if (revalidator.state === "idle") {
         revalidator.revalidate();
       }
@@ -983,7 +890,6 @@ export default function TemplateEditPage() {
 
               <s-divider />
 
-              {/* Generation Settings Section (AC#1, AC#2) */}
               <s-stack direction="block" gap="small">
                 <s-text>
                   <strong>Generation settings</strong>
@@ -1051,7 +957,6 @@ export default function TemplateEditPage() {
                 </s-stack>
               </s-banner>
 
-              {/* Remove Background Setting */}
               <s-stack direction="block" gap="small">
                 <s-checkbox
                   label="Remove background from photos"
@@ -1086,30 +991,30 @@ export default function TemplateEditPage() {
         </s-stack>
       </s-section>
 
-      {/* Test Panel Section (AC #1-5) */}
+      {/* Test Panel Section */}
       {template.status === "draft" && (
         <s-section heading="Test Generation">
           <s-stack direction="block" gap="base">
             {/* Billing & Usage Display */}
             <s-stack direction="block" gap="small">
-              <s-stack direction="inline" gap="base">
-                {/* Gift Balance Badge (if any) */}
-                {billing.giftBalanceUsd > 0 && (
-                  <s-badge tone="success">
-                    Gift Balance: ${billing.giftBalanceUsd.toFixed(2)} available
-                  </s-badge>
-                )}
+              <s-stack direction="inline" gap="small" align="center" style={{ justifyContent: "space-between" }}>
+                <s-text>
+                  <strong>Billing & Usage</strong>
+                </s-text>
+                <Link to={billingHref} style={{ fontSize: "13px" }}>Manage Billing</Link>
+              </s-stack>
+              
+              <s-stack direction="inline" gap="small">
+                 <s-text>
+                   Monthly Spend: ${mtdSpend.toFixed(2)} / ${monthlyCap.toFixed(2)} (cap)
+                 </s-text>
+                 {hasGift && (
+                     <s-badge tone="success">
+                        Gift Balance: ${giftBalance.toFixed(2)}
+                     </s-badge>
+                 )}
               </s-stack>
 
-              <s-text>
-                <strong>Monthly Spending Cap</strong>
-              </s-text>
-              <s-stack direction="inline" gap="small">
-                <s-text>
-                  ${billing.paidUsageUsd.toFixed(2)} / $
-                  {billing.monthlyCapUsd.toFixed(2)} used
-                </s-text>
-              </s-stack>
               <div
                 style={{
                   height: "8px",
@@ -1121,23 +1026,22 @@ export default function TemplateEditPage() {
                 <div
                   style={{
                     height: "100%",
-                    width: `${Math.min(100, (billing.paidUsageUsd / Math.max(0.01, billing.monthlyCapUsd)) * 100)}%`,
+                    width: `${Math.min(100, monthlyCap > 0 ? (mtdSpend / monthlyCap) * 100 : 0)}%`,
                     backgroundColor:
-                      billing.paidUsageUsd >= billing.monthlyCapUsd
-                        ? "#d82c0d" // critical
-                        : billing.paidUsageUsd >= billing.monthlyCapUsd * 0.9
-                          ? "#f59e0b" // warning
-                          : "#22c55e", // success
+                      isCapReached
+                        ? "#d82c0d" 
+                        : mtdSpend > monthlyCap * 0.9 
+                          ? "#f59e0b"
+                          : "#22c55e",
                     transition: "width 0.3s ease",
                   }}
                 />
               </div>
-              {billing.paidUsageUsd >= billing.monthlyCapUsd && (
+              
+              {isBillingBlocked && (
                 <s-banner tone="warning">
                   <s-text>
-                    Monthly spending cap reached. Increase your cap in{" "}
-                    <Link to={billingHref}>Billing</Link> to continue
-                    generating.
+                    Monthly spending cap reached. Increase your cap in <Link to={billingHref}>Billing</Link> to continue generating.
                   </s-text>
                 </s-banner>
               )}
@@ -1148,16 +1052,9 @@ export default function TemplateEditPage() {
             {/* Test Form */}
             <Form
               method="post"
-              encType="multipart/form-data"
               onSubmit={() => {
-                // Immediate feedback: clear old results and show loader
-                // We use a timeout to ensure this runs after default behavior if needed,
-                // but usually direct state set is fine.
                 setLiveTestResults(null);
-
-                // Set ignored ID *before* state change to prevent race
                 ignoredGenerationId.current = testResults?.id;
-
                 setIsGenerationInProgress(true);
               }}
             >
@@ -1185,93 +1082,24 @@ export default function TemplateEditPage() {
               />
 
               <s-stack direction="block" gap="base">
-                {/* Photo Input Type Toggle */}
-                <s-stack direction="block" gap="small">
-                  <s-text>
-                    <strong>Test Image Source</strong>
-                  </s-text>
-                  <s-stack direction="inline" gap="small">
-                    <s-button
-                      type="button"
-                      variant={
-                        photoInputType === "url" ? "primary" : "secondary"
-                      }
-                      onClick={() => {
-                        setPhotoInputType("url");
-                        setSelectedFileName(null);
-                      }}
-                      disabled={fakeGeneration}
-                    >
-                      URL
-                    </s-button>
-                    <s-button
-                      type="button"
-                      variant={
-                        photoInputType === "file" ? "primary" : "secondary"
-                      }
-                      onClick={() => {
-                        setPhotoInputType("file");
-                        setTestPhotoUrl("");
-                      }}
-                      disabled={fakeGeneration}
-                    >
-                      Upload File
-                    </s-button>
-                  </s-stack>
-                </s-stack>
-
                 {/* Photo URL Input */}
-                {photoInputType === "url" && (
-                  <s-text-field
-                    label="Test Photo URL"
-                    placeholder="https://example.com/photo.jpg"
-                    value={testPhotoUrl}
-                    onChange={(event: {
-                      currentTarget?: { value?: string };
-                      detail?: { value?: string };
-                    }) => {
-                      const value =
-                        event.detail?.value ?? event.currentTarget?.value ?? "";
-                      setTestPhotoUrl(value);
-                    }}
-                    disabled={fakeGeneration}
-                  />
-                )}
-
-                {/* Photo File Input */}
-                {photoInputType === "file" && (
-                  <s-stack direction="block" gap="small">
-                    <label htmlFor="test_image">
-                      <strong>Upload Photo</strong>
-                    </label>
-                    <input
-                      id="test_image"
-                      name="test_image"
-                      type="file"
-                      accept="image/*"
-                      disabled={fakeGeneration}
-                      onChange={(event) => {
-                        const file = event.currentTarget.files?.[0] ?? null;
-                        setSelectedFileName(file ? file.name : null);
-                      }}
-                    />
-                    {selectedFileName ? (
-                      <s-text color="subdued">
-                        Selected: {selectedFileName}
-                      </s-text>
-                    ) : (
-                      <s-text color="subdued">
-                        Upload a JPG, PNG, HEIC, AVIF, or WEBP file (max 10MB).
-                      </s-text>
-                    )}
-                  </s-stack>
-                )}
-
-                {photoInputType === "url" && (
-                  <s-text color="subdued">
-                    Enter a publicly accessible URL to a test image
-                  </s-text>
-                )}
+                <s-text-field
+                  label="Test Photo URL"
+                  placeholder="https://example.com/photo.jpg"
+                  value={testPhotoUrl}
+                  onChange={(event: {
+                    currentTarget?: { value?: string };
+                    detail?: { value?: string };
+                  }) => {
+                    const value =
+                      event.detail?.value ?? event.currentTarget?.value ?? "";
+                    setTestPhotoUrl(value);
+                  }}
+                  disabled={fakeGeneration}
+                />
+                <s-text color="subdued">
+                  Enter a publicly accessible URL to a test image
+                </s-text>
 
                 {/* Fake Generation Checkbox (dev-only) */}
                 {isDev && (
@@ -1389,11 +1217,9 @@ export default function TemplateEditPage() {
                 </s-banner>
 
                 <s-banner tone="info">
-                  <s-text>
-                    Test generations respect your monthly spending cap. If your
-                    cap is reached, generation is blocked. Manage this in{" "}
-                    <Link to={billingHref}>Billing</Link>.
-                  </s-text>
+                   <s-text>
+                     Generations are billed to your Shopify plan. Check <Link to={billingHref}>Billing</Link> for details and caps.
+                   </s-text>
                 </s-banner>
 
                 {/* Generate Button */}
@@ -1402,11 +1228,8 @@ export default function TemplateEditPage() {
                   variant="primary"
                   loading={isTestGenerating || isGenerationInProgress}
                   disabled={
-                    (!fakeGeneration &&
-                      ((photoInputType === "url" && !testPhotoUrl.trim()) ||
-                        (photoInputType === "file" && !selectedFileName))) ||
-                    (billing.paidUsageUsd >= billing.monthlyCapUsd &&
-                      billing.giftBalanceUsd < estimatedCost) ||
+                    (!fakeGeneration && !testPhotoUrl.trim()) ||
+                    isBillingBlocked ||
                     isTestGenerating ||
                     isGenerationInProgress
                   }
@@ -1562,17 +1385,32 @@ export default function TemplateEditPage() {
                 </s-banner>
               )}
 
-            {/* Rate Limit Error */}
+            {/* Rate Limit Error (Now Billing Error) */}
             {errorMessage &&
               actionData &&
               typeof actionData === "object" &&
               "error" in actionData &&
               (actionData.error as { code?: string })?.code ===
-                "rate_limited" && (
+                "billing_cap_exceeded" && (
+                <s-banner tone="warning">
+                  <s-text>{errorMessage}</s-text>
+                  <Link to={billingHref}>Manage Billing</Link>
+                </s-banner>
+              )}
+             
+            {/* Generic Error */}
+            {errorMessage &&
+             actionData &&
+             typeof actionData === "object" &&
+             "error" in actionData &&
+             !["generation_failed", "remove_bg_failed", "billing_cap_exceeded"].includes(
+               (actionData.error as { code?: string })?.code ?? ""
+             ) && (
                 <s-banner tone="warning">
                   <s-text>{errorMessage}</s-text>
                 </s-banner>
-              )}
+              )
+            }
           </s-stack>
         </s-section>
       )}

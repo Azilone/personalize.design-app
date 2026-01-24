@@ -62,16 +62,16 @@ export const trackBillingCapExceeded = (
   });
 };
 
-type BillingCapIncreasedEventInput = {
+type BillingCapModifiedEventInput = {
   shopId: string;
   oldCapCents: number;
   newCapCents: number;
 };
 
-export const trackBillingCapIncreased = (
-  input: BillingCapIncreasedEventInput,
+export const trackBillingCapModified = (
+  input: BillingCapModifiedEventInput,
 ) => {
-  captureEvent("billing.cap_increased", {
+  captureEvent("billing.cap_modified", {
     shop_id: input.shopId,
     old_cap_cents: input.oldCapCents,
     new_cap_cents: input.newCapCents,

@@ -49,10 +49,26 @@ export type ReadinessChecklistInput = {
 export const canFinishOnboarding = (
   input: Pick<
     ReadinessChecklistInput,
-    "printifyConnected" | "storefrontPersonalizationConfirmed"
+    | "printifyConnected"
+    | "storefrontPersonalizationConfirmed"
+    | "spendSafetyConfigured"
   >,
 ): boolean =>
-  input.printifyConnected && input.storefrontPersonalizationConfirmed;
+  input.printifyConnected &&
+  input.storefrontPersonalizationConfirmed &&
+  input.spendSafetyConfigured;
+
+export const isSetupComplete = (
+  input: Pick<
+    ReadinessChecklistInput,
+    | "printifyConnected"
+    | "storefrontPersonalizationConfirmed"
+    | "spendSafetyConfigured"
+  >,
+): boolean =>
+  input.printifyConnected &&
+  input.storefrontPersonalizationConfirmed &&
+  input.spendSafetyConfigured;
 
 export const buildReadinessChecklist = (
   input: ReadinessChecklistInput,
@@ -79,6 +95,20 @@ export const buildReadinessChecklist = (
       actionLabel: input.printifyConnected ? undefined : "Open Printify setup",
     },
     {
+      key: "spend_safety",
+      label: "Spend safety",
+      status: input.spendSafetyConfigured ? "complete" : "incomplete",
+      hint: input.spendSafetyConfigured
+        ? "Spend safety is configured."
+        : "Review spend safety, set a monthly cap, and enable paid usage.",
+      actionHref: input.spendSafetyConfigured
+        ? undefined
+        : "/app/onboarding/spend-safety",
+      actionLabel: input.spendSafetyConfigured
+        ? undefined
+        : "Configure spend safety",
+    },
+    {
       key: "storefront_personalization",
       label: "Storefront personalization",
       status: input.storefrontPersonalizationConfirmed
@@ -99,20 +129,6 @@ export const buildReadinessChecklist = (
           ? undefined
           : "Review storefront setting"
         : "Open setup guide",
-    },
-    {
-      key: "spend_safety",
-      label: "Spend safety",
-      status: input.spendSafetyConfigured ? "complete" : "incomplete",
-      hint: input.spendSafetyConfigured
-        ? "Spend safety is configured."
-        : "Review spend safety, set a monthly cap, and enable paid usage.",
-      actionHref: input.spendSafetyConfigured
-        ? undefined
-        : "/app/onboarding/spend-safety",
-      actionLabel: input.spendSafetyConfigured
-        ? undefined
-        : "Configure spend safety",
     },
   ];
 };

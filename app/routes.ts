@@ -34,6 +34,7 @@ export default [
     route("paywall", "./routes/app/paywall/route.tsx"),
     route("printify", "./routes/app/printify/route.tsx"),
     route("readiness", "./routes/app/readiness/route.tsx"),
+    route("settings", "./routes/app/settings/route.tsx"),
     route("storefront", "./routes/app/storefront/route.tsx"),
     route("templates", "./routes/app/templates/_index/route.tsx"),
     route("templates/new", "./routes/app/templates/new/route.tsx"),

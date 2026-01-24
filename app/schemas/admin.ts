@@ -29,12 +29,17 @@ const syncPendingStatusSchema = z.object({
   intent: z.literal("sync_pending_status"),
 });
 
+const restartBillingSchema = z.object({
+  intent: z.literal("restart_billing"),
+});
+
 export const paywallActionSchema = z.discriminatedUnion("intent", [
   subscribeIntentSchema,
   inviteUnlockSchema,
   resetBillingDevSchema,
   devBypassAccessSchema,
   syncPendingStatusSchema,
+  restartBillingSchema,
 ]);
 
 export type PaywallActionInput = z.infer<typeof paywallActionSchema>;
@@ -68,7 +73,7 @@ const spendSafetySaveSchema = z.object({
 const increaseCapSchema = z.object({
   intent: z.literal("increase_cap"),
   new_cap_usd: z.coerce.number().finite().gt(0),
-  confirm_increase: z.string(),
+  confirm_increase: z.string().optional(),
 });
 
 export const spendSafetyActionSchema = z.discriminatedUnion("intent", [
@@ -252,15 +257,9 @@ const templateTestGenerateSchema = z
   .refine(
     (data) =>
       data.fake_generation ||
-      (data.test_photo_url !== undefined && data.test_photo_url.trim() !== ""),
-    "Test photo URL is required for real generation",
-  )
-  .refine(
-    (data) =>
-      data.fake_generation ||
-      (data.test_photo_url !== undefined &&
-        data.test_photo_url.trim() !== "" &&
-        z.string().url().safeParse(data.test_photo_url).success),
+      data.test_photo_url === undefined ||
+      data.test_photo_url.trim() === "" ||
+      z.string().url().safeParse(data.test_photo_url).success,
     "Test photo must be a valid URL for real generation",
   );
 

@@ -74,6 +74,15 @@ model ShopPrintifyIntegration {
   @@map("shop_printify_integrations")
 }
 
+model ShopOnboarding {
+  shop_id      String   @id
+  completed_at DateTime?
+  created_at   DateTime @default(now())
+  updated_at   DateTime @updatedAt
+
+  @@map("shop_onboarding")
+}
+
 model DesignTemplate {
   id                          String                   @id @default(cuid())
   shop_id                     String

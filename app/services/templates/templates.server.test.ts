@@ -24,13 +24,26 @@ import {
 
 describe("Templates Service", () => {
   const shopId = "test-shop-123";
+  const otherShopId = "other-shop-456";
 
   beforeEach(async () => {
-    await prisma.designTemplate.deleteMany({ where: { shop_id: shopId } });
+    await prisma.designTemplate.deleteMany({
+      where: {
+        shop_id: {
+          in: [shopId, otherShopId],
+        },
+      },
+    });
   });
 
   afterEach(async () => {
-    await prisma.designTemplate.deleteMany({ where: { shop_id: shopId } });
+    await prisma.designTemplate.deleteMany({
+      where: {
+        shop_id: {
+          in: [shopId, otherShopId],
+        },
+      },
+    });
   });
 
   describe("createTemplate", () => {
@@ -744,7 +757,7 @@ describe("Templates Service", () => {
         templateName: "Empty Gen Template",
         variableNames: [],
       });
-      
+
       await prisma.templateTestGeneration.create({
         data: {
           template_id: template.id,
@@ -753,7 +766,7 @@ describe("Templates Service", () => {
           num_images_generated: 0,
           total_cost_usd: 0,
           total_time_seconds: 0,
-          success: true, 
+          success: true,
           result_images: null, // No results
         },
       });

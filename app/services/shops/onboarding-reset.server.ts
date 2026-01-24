@@ -11,5 +11,8 @@ export const resetOnboardingForDev = async (shopId: string) => {
     prisma.shopPrintifyIntegration
       .delete({ where: { shop_id: shopId } })
       .catch(() => undefined),
+    prisma.shopOnboarding
+      .delete({ where: { shop_id: shopId } })
+      .catch(() => undefined),
   ]);
 };

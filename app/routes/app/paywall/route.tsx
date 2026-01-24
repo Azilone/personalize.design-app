@@ -27,6 +27,7 @@ import {
   createStandardSubscription,
   buildEarlyAccessSubscriptionInput,
   createEarlyAccessSubscription,
+  cancelSubscription,
   getSubscriptionStatus,
 } from "../../../services/shopify/billing.server";
 import {
@@ -106,6 +107,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const shopId = getShopIdFromSession(session);
   const planStatus = await getShopPlanStatus(shopId);
   const plan = await getShopPlan(shopId);
+  let currentPlanStatus = planStatus;
+  let currentPlan = plan;
+
+  const clearPendingToSwitch = async () => {
+    await clearPlanToNone(shopId);
+    currentPlanStatus = PlanStatus.none;
+    currentPlan = null;
+  };
 
   if (isPlanActive(planStatus)) {
     return redirect(buildEmbeddedRedirectPath(request, "/app"));
@@ -137,6 +146,56 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(buildEmbeddedRedirectPath(request, "/app"));
   }
 
+  if (parsed.data.intent === "restart_billing") {
+    if (
+      currentPlanStatus === PlanStatus.standard_pending ||
+      currentPlanStatus === PlanStatus.early_access_pending
+    ) {
+      const subscriptionStatus = currentPlan?.shopify_subscription_status;
+      const subscriptionId = currentPlan?.shopify_subscription_id;
+
+      if (
+        subscriptionId &&
+        subscriptionStatus &&
+        subscriptionStatus !== "PENDING"
+      ) {
+        try {
+          const cancelled = await cancelSubscription({
+            admin,
+            subscriptionId,
+          });
+          logger.info(
+            {
+              shop_id: shopId,
+              subscription_id: cancelled.id,
+              subscription_status: cancelled.status,
+            },
+            "Paywall pending subscription cancelled",
+          );
+        } catch (error) {
+          logger.error(
+            { shop_id: shopId, err: error },
+            "Paywall pending subscription cancel failed",
+          );
+          return data(
+            {
+              error: {
+                code: "subscription_cancel_failed",
+                message:
+                  "We couldn't cancel the pending subscription. Please try again or contact support.",
+              },
+            },
+            { status: 500 },
+          );
+        }
+      }
+
+      await clearPendingToSwitch();
+    }
+
+    return redirect(buildEmbeddedRedirectPath(request, "/app/paywall"));
+  }
+
   const resolveBillingErrorMessage = (
     error: unknown,
     fallback: string,
@@ -151,9 +210,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   };
 
   if (parsed.data.intent === "subscribe") {
-    if (planStatus === PlanStatus.standard_pending) {
-      if (plan?.shopify_confirmation_url) {
-        return data({ confirmation_url: plan.shopify_confirmation_url });
+    if (currentPlanStatus === PlanStatus.standard_pending) {
+      if (currentPlan?.shopify_confirmation_url) {
+        return data({ confirmation_url: currentPlan.shopify_confirmation_url });
       }
 
       return data(
@@ -168,11 +227,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       );
     }
 
+    if (currentPlanStatus === PlanStatus.early_access_pending) {
+      await clearPendingToSwitch();
+    }
+
     const reservation = await reserveStandardPlanPending(shopId);
     if (!reservation.acquired) {
       if (reservation.planStatus === PlanStatus.standard_pending) {
-        if (plan?.shopify_confirmation_url) {
-          return data({ confirmation_url: plan.shopify_confirmation_url });
+        if (currentPlan?.shopify_confirmation_url) {
+          return data({
+            confirmation_url: currentPlan.shopify_confirmation_url,
+          });
         }
 
         return data(
@@ -278,9 +343,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (parsed.data.intent === "invite_unlock") {
-    if (planStatus === PlanStatus.early_access_pending) {
-      if (plan?.shopify_confirmation_url) {
-        return data({ confirmation_url: plan.shopify_confirmation_url });
+    if (currentPlanStatus === PlanStatus.early_access_pending) {
+      if (currentPlan?.shopify_confirmation_url) {
+        return data({ confirmation_url: currentPlan.shopify_confirmation_url });
       }
 
       return data(
@@ -293,6 +358,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         },
         { status: 409 },
       );
+    }
+
+    if (currentPlanStatus === PlanStatus.standard_pending) {
+      await clearPendingToSwitch();
     }
 
     const reservation = await reserveEarlyAccessPlanPending(shopId);
@@ -542,6 +611,9 @@ export default function Paywall() {
   const isSyncSubmitting =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "sync_pending_status";
+  const isRestartSubmitting =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "restart_billing";
   const showReset =
     planStatus === PlanStatus.standard_pending ||
     planStatus === PlanStatus.early_access_pending;
@@ -580,116 +652,153 @@ export default function Paywall() {
     <s-page heading="Paywall – Access Required">
       <s-section heading="Choose how to unlock access">
         <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Pick the plan that matches your store. You can switch between
+            Standard and Early Access at any time before approving billing in
+            Shopify.
+          </s-paragraph>
           {errorMessage ? (
             <s-banner tone="critical">
               <s-text>{errorMessage}</s-text>
             </s-banner>
           ) : null}
           {showReset ? (
-            <s-banner tone="warning">
-              <s-text>
-                A subscription is pending. If you don’t see the Shopify
-                confirmation screen, you may have closed it or it may have been
-                blocked.
-              </s-text>
-              {subscriptionStatus ? (
-                <s-paragraph>Status: {subscriptionStatus}</s-paragraph>
-              ) : null}
-              {confirmationUrl ? (
-                <s-button
-                  variant="primary"
-                  onClick={() => redirectToConfirmation(confirmationUrl)}
-                >
-                  Continue on Shopify
-                </s-button>
-              ) : null}
-              <s-paragraph>
-                If you hit Back or closed the screen, use “Continue on Shopify”.
-              </s-paragraph>
-              <Form method="post">
-                <input
-                  type="hidden"
-                  name="intent"
-                  value="sync_pending_status"
-                />
-                <s-button
-                  type="submit"
-                  variant="secondary"
-                  {...(isSyncSubmitting ? { loading: true } : {})}
-                >
-                  I already approved
-                </s-button>
-              </Form>
-              {isDev ? (
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="reset_billing_dev"
-                  />
+            <s-banner tone="warning" heading="Approval needed in Shopify">
+              <s-stack direction="block" gap="small">
+                <s-text>
+                  Your subscription is pending. If the Shopify confirmation
+                  screen was closed or blocked, you can resume it here.
+                </s-text>
+                {subscriptionStatus ? (
+                  <s-stack direction="inline" gap="small">
+                    <s-badge tone="warning">Pending</s-badge>
+                    <s-text>Shopify status: {subscriptionStatus}</s-text>
+                  </s-stack>
+                ) : null}
+                {confirmationUrl ? (
                   <s-button
-                    type="submit"
-                    variant="tertiary"
-                    {...(isResetSubmitting ? { loading: true } : {})}
+                    variant="primary"
+                    onClick={() => redirectToConfirmation(confirmationUrl)}
                   >
-                    Reset billing state (dev)
+                    Continue on Shopify
                   </s-button>
-                </Form>
-              ) : null}
+                ) : null}
+                <s-paragraph>
+                  If you need to enter an invite code or switch plans, cancel
+                  the pending setup and start again.
+                </s-paragraph>
+                <s-stack direction="inline" gap="small">
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="sync_pending_status"
+                    />
+                    <s-button
+                      type="submit"
+                      variant="secondary"
+                      {...(isSyncSubmitting ? { loading: true } : {})}
+                    >
+                      I already approved
+                    </s-button>
+                  </Form>
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="restart_billing"
+                    />
+                    <s-button
+                      type="submit"
+                      variant="tertiary"
+                      {...(isRestartSubmitting ? { loading: true } : {})}
+                    >
+                      Start over
+                    </s-button>
+                  </Form>
+                </s-stack>
+                {isDev ? (
+                  <Form method="post">
+                    <input
+                      type="hidden"
+                      name="intent"
+                      value="reset_billing_dev"
+                    />
+                    <s-button
+                      type="submit"
+                      variant="tertiary"
+                      {...(isResetSubmitting ? { loading: true } : {})}
+                    >
+                      Reset billing state (dev)
+                    </s-button>
+                  </Form>
+                ) : null}
+              </s-stack>
             </s-banner>
           ) : null}
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>Standard Plan</s-heading>
-            <s-paragraph>
-              $19/month + $0.25 per successful personalized order line
-            </s-paragraph>
-            <s-paragraph>
-              Includes a 7-day free trial for the $19/month access fee.
-            </s-paragraph>
-            <s-paragraph>
-              The trial does not waive AI usage charges or the $0.25 per order
-              line fee.
-            </s-paragraph>
-            <s-paragraph>
-              Standard and Early Access both include a one-time $1.00 free AI
-              usage gift.
-            </s-paragraph>
-            <Form method="post">
-              <input type="hidden" name="intent" value="subscribe" />
-              <s-button
-                type="submit"
-                variant="primary"
-                {...(isSubscribeSubmitting ? { loading: true } : {})}
-              >
-                Subscribe
-              </s-button>
-            </Form>
+            <s-stack direction="block" gap="small">
+              <s-stack direction="inline" gap="small">
+                <s-heading>Standard Plan</s-heading>
+                <s-badge tone="info">Most stores</s-badge>
+              </s-stack>
+              <s-text>
+                $19/month + $0.25 per successful personalized order line
+              </s-text>
+              <s-paragraph>
+                Includes a 7-day free trial for the $19/month access fee.
+              </s-paragraph>
+              <s-paragraph>
+                The trial does not waive AI usage charges or the $0.25 per order
+                line fee.
+              </s-paragraph>
+              <s-paragraph>
+                Standard and Early Access both include a one-time $1.00 free AI
+                usage gift.
+              </s-paragraph>
+              <Form method="post">
+                <input type="hidden" name="intent" value="subscribe" />
+                <s-button
+                  type="submit"
+                  variant="primary"
+                  {...(isSubscribeSubmitting ? { loading: true } : {})}
+                >
+                  Start Standard Plan
+                </s-button>
+              </Form>
+            </s-stack>
           </s-box>
 
           <s-box padding="base" borderWidth="base" borderRadius="base">
-            <s-heading>Early Access (Invite Code)</s-heading>
-            <s-paragraph>
-              Unlock Early Access with your invite code to access $0/month
-              pricing during the program.
-            </s-paragraph>
-            <Form method="post">
-              <input type="hidden" name="intent" value="invite_unlock" />
-              <s-stack direction="inline" gap="base">
-                <s-text-field
-                  label="Invite code"
-                  placeholder="Enter invite code"
-                  name="invite_code"
-                  disabled={isInviteSubmitting}
-                />
-                <s-button
-                  type="submit"
-                  variant="secondary"
-                  {...(isInviteSubmitting ? { loading: true } : {})}
-                >
-                  Unlock Early Access
-                </s-button>
+            <s-stack direction="block" gap="small">
+              <s-stack direction="inline" gap="small">
+                <s-heading>Early Access</s-heading>
+                <s-badge tone="warning">Invite only</s-badge>
               </s-stack>
-            </Form>
+              <s-text>$0/month while your invite code is active</s-text>
+              <s-paragraph>
+                Enter your invite code to unlock early access pricing during the
+                program.
+              </s-paragraph>
+              <Form method="post">
+                <input type="hidden" name="intent" value="invite_unlock" />
+                <s-stack direction="block" gap="small">
+                  <s-text-field
+                    label="Invite code"
+                    placeholder="Enter invite code"
+                    name="invite_code"
+                    disabled={isInviteSubmitting}
+                  />
+                  <s-button
+                    type="submit"
+                    variant="secondary"
+                    {...(isInviteSubmitting ? { loading: true } : {})}
+                  >
+                    Unlock Early Access
+                  </s-button>
+                </s-stack>
+              </Form>
+            </s-stack>
           </s-box>
           {isDev ? (
             <s-box padding="base" borderWidth="base" borderRadius="base">

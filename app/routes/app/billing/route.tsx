@@ -31,7 +31,7 @@ import {
 } from "../../../services/shops/spend-safety.server";
 import { getShopPlan } from "../../../services/shops/plan.server";
 import { getUsageLedgerSummary } from "../../../services/shopify/billing.server";
-import { trackBillingCapIncreased } from "../../../services/posthog/events";
+import { trackBillingCapModified } from "../../../services/posthog/events";
 import {
   centsToMills,
   formatResetDate,
@@ -144,22 +144,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const parsed = spendSafetyActionSchema.safeParse(formData);
 
   if (!parsed.success) {
+    const errorDetails = parsed.error.issues
+      .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+      .join("; ");
     return data(
-      { error: { code: "invalid_request", message: "Invalid request." } },
+      {
+        error: {
+          code: "invalid_request",
+          message: errorDetails || "Invalid request.",
+        },
+      },
       { status: 400 },
     );
   }
 
   const settings = await getSpendSafetySettings(shopId);
 
-  // Handle cap increase intent
+  // Handle cap modify intent
   if (parsed.data.intent === "increase_cap") {
     if (!parsed.data.confirm_increase) {
       return data(
         {
           error: {
             code: "confirmation_required",
-            message: "Please confirm the cap increase.",
+            message:
+              "You must check the confirmation box to modify your monthly spending cap.",
           },
         },
         { status: 400 },
@@ -205,8 +214,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       paidUsageConsentAt: settings.paidUsageConsentAt,
     });
 
-    // Emit PostHog event for cap increase
-    trackBillingCapIncreased({
+    // Emit PostHog event for cap modification
+    trackBillingCapModified({
       shopId,
       oldCapCents,
       newCapCents,
@@ -218,7 +227,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         old_cap_cents: oldCapCents,
         new_cap_cents: newCapCents,
       },
-      "Billing cap increased",
+      "Billing cap modified",
     );
 
     return data({ success: true, capIncreased: true });
@@ -282,10 +291,10 @@ export default function BillingSettings() {
   const embeddedSearch = buildEmbeddedSearch(search);
   const setupHref = `/app${embeddedSearch}`;
 
-  // State for cap increase flow
-  const [showIncreaseForm, setShowIncreaseForm] = useState(false);
+  // State for cap modify flow
+  const [showModifyForm, setShowModifyForm] = useState(false);
   const [newCapValue, setNewCapValue] = useState("");
-  const [confirmIncrease, setConfirmIncrease] = useState(false);
+  const [confirmModify, setConfirmModify] = useState(false);
 
   const errorMessage =
     actionData && typeof actionData === "object" && "error" in actionData
@@ -452,35 +461,35 @@ export default function BillingSettings() {
             </Form>
           ) : null}
 
-          {/* Increase Cap Flow (when already configured) */}
+          {/* Modify Cap Flow (when already configured) */}
           {spendSafetyConfigured ? (
             <s-stack direction="block" gap="base">
-              {!showIncreaseForm ? (
+              {!showModifyForm ? (
                 <s-button
                   variant="secondary"
-                  onClick={() => setShowIncreaseForm(true)}
+                  onClick={() => setShowModifyForm(true)}
                 >
-                  Increase Cap
+                  Modify Cap
                 </s-button>
               ) : (
                 <Form method="post">
                   <input type="hidden" name="intent" value="increase_cap" />
                   <s-stack direction="block" gap="base">
                     <s-text-field
-                      label="New monthly cap (USD)"
+                      label="Monthly cap (USD)"
                       name="new_cap_usd"
-                      placeholder="20.00"
+                      placeholder={monthlyCapUsd}
                       value={newCapValue}
                       onChange={(e: { currentTarget: { value: string } }) =>
                         setNewCapValue(e.currentTarget.value)
                       }
                     />
                     <s-checkbox
-                      label="I confirm I want to increase my monthly spending cap."
+                      label="I confirm I want to modify my monthly spending cap."
                       name="confirm_increase"
-                      checked={confirmIncrease}
+                      checked={confirmModify}
                       onChange={(e: { currentTarget: { checked: boolean } }) =>
-                        setConfirmIncrease(e.currentTarget.checked)
+                        setConfirmModify(e.currentTarget.checked)
                       }
                     />
                     <s-stack direction="inline" gap="small">
@@ -489,14 +498,14 @@ export default function BillingSettings() {
                         variant="primary"
                         {...(isIncreasing ? { loading: true } : {})}
                       >
-                        Confirm Increase
+                        Save Cap
                       </s-button>
                       <s-button
                         variant="secondary"
                         onClick={() => {
-                          setShowIncreaseForm(false);
+                          setShowModifyForm(false);
                           setNewCapValue("");
-                          setConfirmIncrease(false);
+                          setConfirmModify(false);
                         }}
                       >
                         Cancel

@@ -19,6 +19,7 @@ import { buildEmbeddedRedirectPath, isPaywallPath } from "../../lib/routing";
 import { buildEmbeddedSearch } from "../../lib/embedded-search";
 import { getOrSetCachedValue } from "../../lib/ttl-cache.server";
 import type { ReadinessItem } from "../../lib/readiness";
+import { buildReadinessChecklist, isSetupComplete } from "../../lib/readiness";
 import {
   getSubscriptionStatus,
   getUsageLedgerSummary,
@@ -28,10 +29,11 @@ import {
   activateStandardPlan,
   clearPlanToNone,
   getShopPlan,
-  getShopPlanStatus,
   isPlanActive,
 } from "../../services/shops/plan.server";
 import type { ShopReadinessSignals } from "../../services/shops/readiness.server";
+import { getShopReadinessSignals } from "../../services/shops/readiness.server";
+import { isOnboardingComplete } from "../../services/shops/onboarding.server";
 import { PlanStatus } from "@prisma/client";
 
 const SUBSCRIPTION_STATUS_CACHE_TTL_MS = 15_000;
@@ -126,16 +128,34 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const planStatusForUi = plan?.plan_status ?? planStatus;
   const ledgerSummary = await getUsageLedgerSummary({ shopId });
-  const fallbackReadinessSignals: ShopReadinessSignals = {
-    printifyConnected: false,
-    storefrontPersonalizationEnabled: false,
-    storefrontPersonalizationConfirmed: false,
-    spendSafetyConfigured: false,
-  };
-  const readinessSignals = fallbackReadinessSignals;
-  const readinessItems: ReadinessItem[] = [];
+  const readinessSignals = await getShopReadinessSignals(shopId);
+  const readinessItems: ReadinessItem[] = buildReadinessChecklist({
+    planStatus: planStatusForUi,
+    ...readinessSignals,
+  });
+  const onboardingComplete = await isOnboardingComplete(shopId);
+  const setupComplete = isSetupComplete(readinessSignals) && onboardingComplete;
+  const normalizedPathname =
+    pathname !== "/" && pathname.endsWith("/")
+      ? pathname.slice(0, -1)
+      : pathname;
+  const setupAllowedPaths = new Set([
+    "/app",
+    "/app/readiness",
+    "/app/printify",
+    "/app/onboarding/storefront-personalization",
+    "/app/onboarding/spend-safety",
+    "/app/billing",
+    "/app/billing/confirm",
+    "/app/paywall",
+  ]);
+  const isSetupPath = setupAllowedPaths.has(normalizedPathname);
 
   // eslint-disable-next-line no-undef
+  if (!setupComplete && !isSetupPath && !isDevToolsPath) {
+    return redirect(buildEmbeddedRedirectPath(request, "/app"));
+  }
+
   const data: AppLoaderData = {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     isDev,
@@ -174,6 +194,7 @@ export default function App() {
         <a href={`/app${embeddedSearch}`} rel="home">
           Setup
         </a>
+        <a href={`/app/settings${embeddedSearch}`}>Settings</a>
         <a href={`/app/billing${embeddedSearch}`}>Usage & Billing</a>
         <a href={`/app/templates${embeddedSearch}`}>Templates</a>
         <a href={`/app/products${embeddedSearch}`}>Products</a>

@@ -123,18 +123,19 @@ describe("buildReadinessChecklist", () => {
     expect(items.map((item) => item.key)).toEqual([
       "plan_status",
       "printify_connection",
-      "storefront_personalization",
       "spend_safety",
+      "storefront_personalization",
     ]);
   });
 });
 
 describe("canFinishOnboarding", () => {
-  it("allows finishing when personalization is confirmed", () => {
+  it("allows finishing when requirements are met", () => {
     expect(
       canFinishOnboarding({
         printifyConnected: true,
         storefrontPersonalizationConfirmed: true,
+        spendSafetyConfigured: true,
       }),
     ).toBe(true);
   });
@@ -144,6 +145,17 @@ describe("canFinishOnboarding", () => {
       canFinishOnboarding({
         printifyConnected: true,
         storefrontPersonalizationConfirmed: false,
+        spendSafetyConfigured: true,
+      }),
+    ).toBe(false);
+  });
+
+  it("blocks finishing when spend safety is missing", () => {
+    expect(
+      canFinishOnboarding({
+        printifyConnected: true,
+        storefrontPersonalizationConfirmed: true,
+        spendSafetyConfigured: false,
       }),
     ).toBe(false);
   });

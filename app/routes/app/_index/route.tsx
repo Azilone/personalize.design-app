@@ -22,6 +22,7 @@ import {
 import type { ReadinessLoaderData } from "../readiness/route";
 import { finishOnboardingActionSchema } from "../../../schemas/admin";
 import { getShopReadinessSignals } from "../../../services/shops/readiness.server";
+import { markOnboardingComplete } from "../../../services/shops/onboarding.server";
 import type { AppLoaderData } from "../route";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -42,6 +43,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     printifyConnected: readinessSignals.printifyConnected,
     storefrontPersonalizationConfirmed:
       readinessSignals.storefrontPersonalizationConfirmed,
+    spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
   });
 
   if (!canFinish) {
@@ -50,12 +52,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         error: {
           code: "onboarding_requirements_incomplete",
           message:
-            "Connect Printify and confirm storefront personalization before finishing onboarding.",
+            "Connect Printify, confirm storefront personalization, and set spend safety before finishing onboarding.",
         },
       },
       { status: 400 },
     );
   }
+
+  await markOnboardingComplete(shopId);
 
   return data({ success: true });
 };
@@ -99,6 +103,7 @@ export default function Index() {
         printifyConnected: readinessSignals.printifyConnected,
         storefrontPersonalizationConfirmed:
           readinessSignals.storefrontPersonalizationConfirmed,
+        spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
       })
     : false;
 
