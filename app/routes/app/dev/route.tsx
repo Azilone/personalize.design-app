@@ -19,7 +19,13 @@ import {
   getShopPlan,
   resetPlanForDev,
 } from "../../../services/shops/plan.server";
-import { cancelSubscription } from "../../../services/shopify/billing.server";
+import {
+  cancelSubscription,
+  addFakeUsageCharge,
+  resetUsageGift,
+  consumeUsageGift,
+  resetPaidUsage,
+} from "../../../services/shopify/billing.server";
 import { resetOnboardingForDev } from "../../../services/shops/onboarding-reset.server";
 import { waivePendingTemplateTestGenerationEvents } from "../../../services/shopify/billable-events.server";
 import logger from "../../../lib/logger";
@@ -143,6 +149,56 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
   }
 
+  if (parsed.data.intent === "dev_add_fake_charge") {
+    await addFakeUsageCharge({
+      shopId,
+      amountUsd: 9.97,
+    });
+    captureEvent("dev.add_fake_charge", {
+      shop_id: shopId,
+      amount_usd: 9.97,
+    });
+    return data({
+      success: {
+        code: "fake_charge_added",
+        message: "Added $9.97 fake charge to ledger.",
+      },
+    });
+  }
+
+  if (parsed.data.intent === "dev_reset_usage_gift") {
+    await resetUsageGift(shopId);
+    captureEvent("dev.reset_usage_gift", { shop_id: shopId });
+    return data({
+      success: {
+        code: "usage_gift_reset",
+        message: "Usage gift balance reset to full ($1.00).",
+      },
+    });
+  }
+
+  if (parsed.data.intent === "dev_consume_usage_gift") {
+    await consumeUsageGift(shopId);
+    captureEvent("dev.consume_usage_gift", { shop_id: shopId });
+    return data({
+      success: {
+        code: "usage_gift_consumed",
+        message: "Usage gift balance consumed fully ($0.00).",
+      },
+    });
+  }
+
+  if (parsed.data.intent === "dev_reset_paid_usage") {
+    await resetPaidUsage(shopId);
+    captureEvent("dev.reset_paid_usage", { shop_id: shopId });
+    return data({
+      success: {
+        code: "paid_usage_reset",
+        message: "Paid usage month-to-date reset to $0.00.",
+      },
+    });
+  }
+
   return data(
     { error: { code: "unsupported_intent", message: "Unsupported action." } },
     { status: 400 },
@@ -207,9 +263,6 @@ export default function DevToolsBilling() {
           <Link to={`/app/paywall${embeddedSearch}`}>Go to paywall</Link>
         </s-box>
 
-        <s-paragraph>
-          <strong>Danger zone</strong>: these are destructive operations.
-        </s-paragraph>
         {!showDanger ? (
           <s-banner tone="warning">
             <s-text>
@@ -219,54 +272,153 @@ export default function DevToolsBilling() {
           </s-banner>
         ) : null}
 
-        <s-box padding="base">
-          <Form method="post">
-            <input type="hidden" name="intent" value="dev_onboarding_reset" />
-            <s-button disabled={!showDanger} tone="critical" type="submit">
-              Reset onboarding state (spend safety + storefront + printify)
-            </s-button>
-          </Form>
-          <s-paragraph>
-            This resets onboarding completion for the current shop (spend
-            safety, storefront personalization, and Printify integration) so you
-            can re-test the setup checklist.
-          </s-paragraph>
-        </s-box>
+        <div
+          style={{
+            display: "grid",
+            gap: "1rem",
+            gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
+          }}
+        >
+          <s-card>
+            <s-stack direction="block" gap="base">
+              <s-heading>Onboarding</s-heading>
+              <s-paragraph>
+                Resets spend safety, storefront, and Printify completion.
+              </s-paragraph>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_onboarding_reset"
+                />
+                <s-button disabled={!showDanger} tone="critical" type="submit">
+                  Reset onboarding state
+                </s-button>
+              </Form>
+            </s-stack>
+          </s-card>
 
-        <s-box padding="base">
-          <Form method="post">
-            <input
-              type="hidden"
-              name="intent"
-              value="dev_cancel_subscription"
-            />
-            <s-button disabled={!showDanger} tone="critical" type="submit">
-              Cancel subscription on Shopify + reset local state
-            </s-button>
-          </Form>
-        </s-box>
+          <s-card>
+            <s-stack direction="block" gap="base">
+              <s-heading>Subscription</s-heading>
+              <s-paragraph>
+                Cancels Shopify subscription and resets local plan to 'none'.
+              </s-paragraph>
+              <s-stack direction="inline" gap="small">
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_cancel_subscription"
+                  />
+                  <s-button
+                    disabled={!showDanger}
+                    tone="critical"
+                    type="submit"
+                  >
+                    Cancel & Reset
+                  </s-button>
+                </Form>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_billing_reset"
+                  />
+                  <s-button
+                    disabled={!showDanger}
+                    tone="critical"
+                    type="submit"
+                  >
+                    Reset Local Only
+                  </s-button>
+                </Form>
+              </s-stack>
+            </s-stack>
+          </s-card>
 
-        <s-box padding="base">
-          <Form method="post">
-            <input type="hidden" name="intent" value="dev_billing_reset" />
-            <s-button disabled={!showDanger} tone="critical" type="submit">
-              Reset local billing state only
-            </s-button>
-          </Form>
-        </s-box>
+          <s-card>
+            <s-stack direction="block" gap="base">
+              <s-heading>Billing Ledger (Gift)</s-heading>
+              <s-paragraph>
+                Reset gift to $1.00 or consume it to $0.00 to test paid usage
+                transitions.
+              </s-paragraph>
+              <s-stack direction="inline" gap="small">
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_reset_usage_gift"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Reset Gift to Full
+                  </s-button>
+                </Form>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_consume_usage_gift"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Consume Gift
+                  </s-button>
+                </Form>
+              </s-stack>
+            </s-stack>
+          </s-card>
 
-        <s-box padding="base">
-          <Form method="post">
-            <input type="hidden" name="intent" value="dev_reconcile_billing" />
-            <s-button disabled={!showDanger} tone="critical" type="submit">
-              Waive pending test generation billable events
-            </s-button>
-          </Form>
-          <s-paragraph>
-            Use this if test generation events are stuck in pending after a
-            remove-background flow. This marks them waived in the ledger.
-          </s-paragraph>
-        </s-box>
+          <s-card>
+            <s-stack direction="block" gap="base">
+              <s-heading>Billing Ledger (Paid Spend)</s-heading>
+              <s-paragraph>
+                Reset MTD spend or add fake charges to test cap limits.
+              </s-paragraph>
+              <s-stack direction="inline" gap="small">
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_reset_paid_usage"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Reset Spend to $0
+                  </s-button>
+                </Form>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_add_fake_charge"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Add Fake $9.97
+                  </s-button>
+                </Form>
+              </s-stack>
+            </s-stack>
+          </s-card>
+
+          <s-card>
+            <s-stack direction="block" gap="base">
+              <s-heading>Reconciliation</s-heading>
+              <s-paragraph>
+                Fixes stuck 'pending' generation events by marking them waived.
+              </s-paragraph>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_reconcile_billing"
+                />
+                <s-button disabled={!showDanger} type="submit">
+                  Waive pending events
+                </s-button>
+              </Form>
+            </s-stack>
+          </s-card>
+        </div>
       </s-section>
     </s-page>
   );

@@ -477,6 +477,82 @@ export const recordUsageCharge = async (
   return { created: true, giftAppliedMills, paidUsageMills };
 };
 
+/**
+ * Dev utility to add a fake usage charge to the local ledger.
+ * This is used to test spending limit logic.
+ */
+export const addFakeUsageCharge = async (input: {
+  shopId: string;
+  amountUsd: number;
+}) => {
+  const amountMills = usdToMills(input.amountUsd);
+  const idempotencyKey = `dev_fake_charge:${Date.now()}`;
+
+  return prisma.usageLedgerEntry.create({
+    data: {
+      shop_id: input.shopId,
+      entry_type: UsageLedgerEntryType.paid_usage,
+      amount_cents: Math.round(input.amountUsd * 100),
+      amount_mills: amountMills,
+      currency_code: "USD",
+      idempotency_key: idempotencyKey,
+      description: `Dev fake charge: $${input.amountUsd}`,
+    },
+  });
+};
+
+/**
+ * Dev utility to reset usage gift balance to full.
+ */
+export const resetUsageGift = async (shopId: string) => {
+  return prisma.usageLedgerEntry.deleteMany({
+    where: {
+      shop_id: shopId,
+      entry_type: UsageLedgerEntryType.gift_spend,
+    },
+  });
+};
+
+/**
+ * Dev utility to consume remaining usage gift balance.
+ */
+export const consumeUsageGift = async (shopId: string) => {
+  const summary = await getUsageLedgerSummary({ shopId });
+  const giftBalanceMills = summary.giftBalanceMills;
+
+  if (giftBalanceMills <= 0) {
+    return { created: false, amountMills: 0 };
+  }
+
+  const idempotencyKey = `dev_consume_gift:${Date.now()}`;
+
+  await prisma.usageLedgerEntry.create({
+    data: {
+      shop_id: shopId,
+      entry_type: UsageLedgerEntryType.gift_spend,
+      amount_cents: -millsToCents(giftBalanceMills),
+      amount_mills: -giftBalanceMills,
+      currency_code: "USD",
+      idempotency_key: idempotencyKey,
+      description: "Dev utility: consume remaining gift",
+    },
+  });
+
+  return { created: true, amountMills: giftBalanceMills };
+};
+
+/**
+ * Dev utility to reset paid usage (month to date) to zero.
+ */
+export const resetPaidUsage = async (shopId: string) => {
+  return prisma.usageLedgerEntry.deleteMany({
+    where: {
+      shop_id: shopId,
+      entry_type: UsageLedgerEntryType.paid_usage,
+    },
+  });
+};
+
 type BuildStandardInputArgs = {
   returnUrl: string;
 };

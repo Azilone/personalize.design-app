@@ -63,11 +63,31 @@ const devReconcileBillingSchema = z.object({
   intent: z.literal("dev_reconcile_billing"),
 });
 
+const devAddFakeChargeSchema = z.object({
+  intent: z.literal("dev_add_fake_charge"),
+});
+
+const devResetUsageGiftSchema = z.object({
+  intent: z.literal("dev_reset_usage_gift"),
+});
+
+const devConsumeUsageGiftSchema = z.object({
+  intent: z.literal("dev_consume_usage_gift"),
+});
+
+const devResetPaidUsageSchema = z.object({
+  intent: z.literal("dev_reset_paid_usage"),
+});
+
 export const devBillingActionSchema = z.discriminatedUnion("intent", [
   devBillingResetSchema,
   devCancelSubscriptionSchema,
   devOnboardingResetSchema,
   devReconcileBillingSchema,
+  devAddFakeChargeSchema,
+  devResetUsageGiftSchema,
+  devConsumeUsageGiftSchema,
+  devResetPaidUsageSchema,
 ]);
 
 export type DevBillingActionInput = z.infer<typeof devBillingActionSchema>;
