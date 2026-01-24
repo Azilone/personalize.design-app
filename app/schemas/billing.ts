@@ -16,3 +16,18 @@ export const billingSummarySchema = z.object({
 });
 
 export type BillingSummary = z.infer<typeof billingSummarySchema>;
+
+export const billableEventSchema = z.object({
+  id: z.string(),
+  eventType: z.enum(["generation", "regeneration", "remove_bg", "order_fee"]),
+  status: z.enum(["pending", "confirmed", "failed", "waived"]),
+  amountMills: z.number().int(),
+  amountUsd: z.number(),
+  idempotencyKey: z.string(),
+  description: z.string().nullable(),
+  createdAt: z.string(),
+});
+
+export const billableEventsListSchema = z.array(billableEventSchema);
+
+export type BillableEvent = z.infer<typeof billableEventSchema>;

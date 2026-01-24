@@ -77,3 +77,99 @@ export const trackBillingCapModified = (
     new_cap_cents: input.newCapCents,
   });
 };
+
+// --------------------------------------------------------------------------
+// Billable Event State Transition Events (AC 5, 6, 7, 8)
+// --------------------------------------------------------------------------
+
+type BillableEventCreatedInput = {
+  shopId: string;
+  billableEventId: string;
+  idempotencyKey: string;
+  eventType: string;
+  amountMills: number;
+  sourceId?: string;
+};
+
+export const trackBillableEventCreated = (input: BillableEventCreatedInput) => {
+  captureEvent("billing.event_created", {
+    shop_id: input.shopId,
+    billable_event_id: input.billableEventId,
+    idempotency_key: input.idempotencyKey,
+    event_type: input.eventType,
+    amount_mills: input.amountMills,
+    source_id: input.sourceId ?? null,
+  });
+};
+
+type BillableEventConfirmedInput = {
+  shopId: string;
+  billableEventId: string;
+  idempotencyKey: string;
+  eventType?: string;
+  amountMills?: number;
+};
+
+export const trackBillableEventConfirmed = (
+  input: BillableEventConfirmedInput,
+) => {
+  captureEvent("billing.event_confirmed", {
+    shop_id: input.shopId,
+    billable_event_id: input.billableEventId,
+    idempotency_key: input.idempotencyKey,
+    event_type: input.eventType ?? null,
+    amount_mills: input.amountMills ?? null,
+  });
+};
+
+type ChargeSucceededInput = {
+  shopId: string;
+  billableEventId: string;
+  idempotencyKey: string;
+  totalCostMills: number;
+  giftAppliedMills: number;
+  paidUsageMills: number;
+};
+
+export const trackChargeSucceeded = (input: ChargeSucceededInput) => {
+  captureEvent("billing.charge_succeeded", {
+    shop_id: input.shopId,
+    billable_event_id: input.billableEventId,
+    idempotency_key: input.idempotencyKey,
+    total_cost_mills: input.totalCostMills,
+    gift_applied_mills: input.giftAppliedMills,
+    paid_usage_mills: input.paidUsageMills,
+  });
+};
+
+type ChargeFailedInput = {
+  shopId: string;
+  billableEventId: string;
+  idempotencyKey: string;
+  errorMessage?: string;
+};
+
+export const trackChargeFailed = (input: ChargeFailedInput) => {
+  captureEvent("billing.charge_failed", {
+    shop_id: input.shopId,
+    billable_event_id: input.billableEventId,
+    idempotency_key: input.idempotencyKey,
+    error_message: input.errorMessage ?? null,
+  });
+};
+
+type BillableEventWaivedInput = {
+  shopId: string;
+  billableEventId: string;
+  idempotencyKey: string;
+  errorMessage?: string;
+};
+
+export const trackBillableEventWaived = (input: BillableEventWaivedInput) => {
+  captureEvent("billing.event_waived", {
+    shop_id: input.shopId,
+    billable_event_id: input.billableEventId,
+    idempotency_key: input.idempotencyKey,
+    error_message: input.errorMessage ?? null,
+  });
+};

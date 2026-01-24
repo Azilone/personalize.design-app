@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import prisma from "../../db.server";
 import type { MerchantPreviewStatus } from "@prisma/client";
 
@@ -59,25 +60,23 @@ const normalizeVariableValues = (value: unknown): Record<string, string> => {
   );
 };
 
-const mapMerchantPreview = (
-  record: {
-    id: string;
-    job_id: string;
-    shop_id: string;
-    product_id: string;
-    template_id: string;
-    status: MerchantPreviewStatus;
-    cover_print_area: boolean;
-    test_image_url: string;
-    test_text: string | null;
-    variable_values: unknown;
-    design_url: string | null;
-    mockup_urls: unknown;
-    error_message: string | null;
-    created_at: Date;
-    updated_at: Date;
-  },
-): MerchantPreviewRecord => ({
+const mapMerchantPreview = (record: {
+  id: string;
+  job_id: string;
+  shop_id: string;
+  product_id: string;
+  template_id: string;
+  status: MerchantPreviewStatus;
+  cover_print_area: boolean;
+  test_image_url: string;
+  test_text: string | null;
+  variable_values: unknown;
+  design_url: string | null;
+  mockup_urls: unknown;
+  error_message: string | null;
+  created_at: Date;
+  updated_at: Date;
+}): MerchantPreviewRecord => ({
   id: record.id,
   jobId: record.job_id,
   shopId: record.shop_id,
@@ -110,7 +109,7 @@ export const createMerchantPreview = async (
       test_text: input.testText ?? null,
       variable_values: input.variableValues,
       design_url: null,
-      mockup_urls: null,
+      mockup_urls: Prisma.DbNull,
       error_message: null,
     },
   });

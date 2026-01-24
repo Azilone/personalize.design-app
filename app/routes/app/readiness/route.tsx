@@ -1,4 +1,4 @@
-import type { LoaderFunctionArgs } from "react-router";
+import { data, type LoaderFunctionArgs } from "react-router";
 
 import { authenticate } from "../../../shopify.server";
 import { getShopIdFromSession } from "../../../lib/tenancy";
@@ -30,10 +30,15 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     ...readinessSignals,
   });
 
-  const data: ReadinessLoaderData = {
-    readinessItems,
-    readinessSignals,
-  };
-
-  return data;
+  return data(
+    {
+      readinessItems,
+      readinessSignals,
+    },
+    {
+      headers: {
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 };

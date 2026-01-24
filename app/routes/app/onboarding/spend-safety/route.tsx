@@ -26,12 +26,18 @@ export default function SpendSafetyOnboarding() {
   const setupHref = `/app${embeddedSearch}`;
 
   return (
-    <s-page heading="Spend safety">
+    <s-page heading="Enable paid usage">
       <s-section heading="Review billing before enabling paid usage">
         <s-stack direction="block" gap="base">
+          <s-banner tone="info">
+            <s-text>
+              To use AI generation features, you must{" "}
+              <strong>enable paid usage</strong>. You will only be charged for
+              what you use, up to your monthly spending cap.
+            </s-text>
+          </s-banner>
           <s-paragraph>
-            Review these spend safety details before continuing to
-            configuration.
+            Review these spend safety details before enabling paid usage.
           </s-paragraph>
           <s-card>
             <s-stack direction="block" gap="base">
@@ -59,7 +65,7 @@ export default function SpendSafetyOnboarding() {
                   <strong>Shopify Usage Charges</strong>.
                 </s-list-item>
                 <s-list-item>
-                  You will <strong>not be charged</strong> unless you{" "}
+                  By clicking the button below, you will proceed to{" "}
                   <strong>enable paid usage</strong>.
                 </s-list-item>
                 <s-list-item>
@@ -70,7 +76,9 @@ export default function SpendSafetyOnboarding() {
             </s-stack>
           </s-card>
           <Link to={billingHref}>
-            <s-button variant="primary">Configure spend safety</s-button>
+            <s-button variant="primary">
+              Enable paid usage & configure safety
+            </s-button>
           </Link>
           <Link to={setupHref}>Back to setup</Link>
         </s-stack>

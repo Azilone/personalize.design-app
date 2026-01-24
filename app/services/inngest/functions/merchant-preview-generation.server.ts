@@ -20,6 +20,14 @@ import {
 } from "../../shopify/billing.server";
 import { usdToMills } from "../../shopify/billing-guardrails";
 import { checkBillableActionAllowed } from "../../shopify/billing-guardrails.server";
+import {
+  createBillableEvent,
+  confirmAndCharge,
+  failBillableEvent,
+  buildBillableEventIdempotencyKey,
+  getBillableEventByIdempotencyKey,
+} from "../../shopify/billable-events.server";
+import { BillableEventType } from "@prisma/client";
 import { updateMerchantPreview } from "../../merchant-previews/merchant-previews.server";
 import { getTemplate } from "../../templates/templates.server";
 import { applyPromptVariableValues } from "../../../lib/prompt-variables";
@@ -434,6 +442,23 @@ export const merchantPreviewGenerate = inngest.createFunction(
       }
     });
 
+    // AC 5: Create billable event BEFORE provider call with stable idempotency key
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      "merchant_preview_generation",
+      usageIdempotencyId,
+    );
+
+    await step.run("create-billable-event", async () =>
+      createBillableEvent({
+        shopId: payload.shop_id,
+        eventType: BillableEventType.generation,
+        amountMills: usdToMills(estimatedCostUsd),
+        idempotencyKey: billableEventIdempotencyKey,
+        description: "merchant_preview_generation",
+        sourceId: payload.job_id,
+      }),
+    );
+
     await step.run("mark-generating", async () =>
       updateMerchantPreview({
         jobId: payload.job_id,
@@ -468,15 +493,14 @@ export const merchantPreviewGenerate = inngest.createFunction(
       throw new NonRetriableError("No design generated.");
     }
 
-    await step.run("record-preview-usage-ledger", async () =>
-      recordUsageCharge({
+    // AC 5, 6: Confirm billable event and record usage charge only after
+    // asset is persisted (design generated)
+    await step.run("confirm-billable-event-and-charge", async () =>
+      confirmAndCharge({
         shopId: payload.shop_id,
+        idempotencyKey: billableEventIdempotencyKey,
         totalCostUsd: generationResult.totalCostUsd,
-        idempotencyKey: buildUsageChargeIdempotencyKey(
-          "merchant_preview_generate",
-          usageIdempotencyId,
-        ),
-        description: "merchant_preview_generate",
+        description: "merchant_preview_generation",
       }),
     );
 
@@ -573,7 +597,88 @@ export const merchantPreviewGenerate = inngest.createFunction(
   },
 );
 
+export const merchantPreviewGenerateFailure = inngest.createFunction(
+  { id: "merchant_preview_generate_failure" },
+  { event: "inngest/function.failed" },
+  async ({ event, step }) => {
+    const isPreviewGenerate =
+      event.data.function_id === "merchant_preview_generate";
+
+    if (!isPreviewGenerate) {
+      return { ignored: true };
+    }
+
+    const payload = merchantPreviewGeneratePayloadSchema.safeParse(
+      event.data.event.data,
+    );
+
+    if (!payload.success) {
+      logger.warn(
+        {
+          errors: payload.error.flatten().fieldErrors,
+        },
+        "Missing payload data for merchant preview failure",
+      );
+      return { skipped: true };
+    }
+
+    await step.run("mark-preview-failed", async () =>
+      updateMerchantPreview({
+        jobId: payload.data.job_id,
+        shopId: payload.data.shop_id,
+        status: "failed",
+        errorMessage: event.data.error?.message ?? "Preview generation failed.",
+      }),
+    );
+
+    const usageIdempotencyId =
+      event.data.event.id ?? payload.data.job_id ?? payload.data.template_id;
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      "merchant_preview_generation",
+      usageIdempotencyId,
+    );
+    const existingEvent = await getBillableEventByIdempotencyKey(
+      payload.data.shop_id,
+      billableEventIdempotencyKey,
+    );
+
+    if (!existingEvent) {
+      return { recovered: true, eventMissing: true };
+    }
+
+    const failedStep = event.data.step?.name;
+    const providerCostMayBeIncurred =
+      failedStep === "generate-images" ||
+      failedStep === "confirm-billable-event-and-charge" ||
+      failedStep === "mark-creating-mockups" ||
+      failedStep === "create-temp-product" ||
+      failedStep === "mark-preview-done" ||
+      failedStep === "mark-preview-failed-mockup-error";
+
+    await step.run("fail-billable-event", async () =>
+      failBillableEvent({
+        shopId: payload.data.shop_id,
+        idempotencyKey: billableEventIdempotencyKey,
+        errorMessage: event.data.error?.message,
+        waived: providerCostMayBeIncurred,
+      }),
+    );
+
+    logger.error(
+      {
+        shop_id: payload.data.shop_id,
+        job_id: payload.data.job_id,
+        error: event.data.error?.message,
+      },
+      "Merchant preview generation failed",
+    );
+
+    return { recovered: true };
+  },
+);
+
 export const inngestFunctions = [
   merchantPreviewFakeGenerate,
   merchantPreviewGenerate,
+  merchantPreviewGenerateFailure,
 ];

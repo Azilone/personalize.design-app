@@ -9,6 +9,9 @@ const mockPrisma = vi.hoisted(() => ({
     findMany: vi.fn(),
     aggregate: vi.fn(),
   },
+  shopPlan: {
+    findUnique: vi.fn(),
+  },
   $transaction: vi.fn(),
 }));
 
@@ -21,6 +24,13 @@ vi.mock("../../db.server", () => ({
 vi.mock("../posthog/events", () => ({
   trackUsageGiftGrant: mockTrackUsageGiftGrant,
 }));
+
+vi.mock("./admin.server", () => ({
+  getOfflineShopifyAdmin: vi.fn(async () => ({
+    graphql: vi.fn(async () => new Response(JSON.stringify({ data: {} }))),
+  })),
+}));
+// Import getUsageLedgerSummary to test it
 import {
   buildEarlyAccessSubscriptionInput,
   buildUsageGiftGrantIdempotencyKey,
@@ -29,7 +39,82 @@ import {
   grantUsageGift,
   getSubscriptionStatus,
   recordUsageCharge,
+  getUsageLedgerSummary,
 } from "./billing.server";
+
+// ... previous tests ...
+
+describe("getUsageLedgerSummary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calculates gift balance and MTD paid usage", async () => {
+    // Mock gift entries (findMany)
+    mockPrisma.usageLedgerEntry.findMany.mockResolvedValue([
+      {
+        entry_type: UsageLedgerEntryType.gift_grant,
+        amount_mills: 1000,
+        amount_cents: 100,
+      },
+      {
+        entry_type: UsageLedgerEntryType.gift_spend,
+        amount_mills: -200,
+        amount_cents: -20,
+      },
+    ]);
+
+    // Mock paid usage aggregation (aggregate)
+    mockPrisma.usageLedgerEntry.aggregate.mockResolvedValue({
+      _sum: {
+        amount_mills: 500,
+      },
+    });
+
+    // Use a fixed date: 2024-01-15
+    const now = new Date("2024-01-15T10:00:00Z");
+
+    const result = await getUsageLedgerSummary({
+      shopId: "shop.myshopify.com",
+      now,
+    });
+
+    expect(result).toEqual({
+      giftGrantTotalMills: 1000,
+      giftBalanceMills: 800, // 1000 - 200
+      paidUsageMonthToDateMills: 500,
+    });
+
+    // Verify month boundary query
+    expect(mockPrisma.usageLedgerEntry.aggregate).toHaveBeenCalledWith({
+      where: {
+        shop_id: "shop.myshopify.com",
+        entry_type: UsageLedgerEntryType.paid_usage,
+        created_at: {
+          gte: new Date("2024-01-01T00:00:00.000Z"),
+        },
+      },
+      _sum: {
+        amount_mills: true,
+      },
+    });
+  });
+
+  it("handles missing paid usage (returns 0)", async () => {
+    mockPrisma.usageLedgerEntry.findMany.mockResolvedValue([]);
+    mockPrisma.usageLedgerEntry.aggregate.mockResolvedValue({
+      _sum: {
+        amount_mills: null,
+      },
+    });
+
+    const result = await getUsageLedgerSummary({
+      shopId: "shop.myshopify.com",
+    });
+
+    expect(result.paidUsageMonthToDateMills).toBe(0);
+  });
+});
 
 describe("buildStandardSubscriptionInput", () => {
   it("builds a $19/month subscription with 7-day trial and usage line item", () => {
@@ -90,11 +175,53 @@ describe("recordUsageCharge", () => {
         },
       ]);
     mockPrisma.usageLedgerEntry.create.mockResolvedValue({ id: "entry_1" });
+    mockPrisma.shopPlan.findUnique.mockResolvedValue({
+      shopify_subscription_id: "gid://shopify/AppSubscription/123",
+    });
+    const admin = {
+      graphql: vi.fn(async (query: string | { toString(): string }) => {
+        const queryText = typeof query === "string" ? query : query.toString();
+        if (queryText.includes("usageLineItem")) {
+          return new Response(
+            JSON.stringify({
+              data: {
+                node: {
+                  __typename: "AppSubscription",
+                  id: "gid://shopify/AppSubscription/123",
+                  lineItems: [
+                    {
+                      id: "gid://shopify/AppSubscriptionLineItem/456",
+                      plan: {
+                        pricingDetails: {
+                          __typename: "AppUsagePricing",
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            }),
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            data: {
+              appUsageRecordCreate: {
+                userErrors: [],
+                appUsageRecord: { id: "gid://shopify/AppUsageRecord/789" },
+              },
+            },
+          }),
+        );
+      }),
+    } satisfies Pick<AdminApiContext, "graphql"> as AdminApiContext;
 
     const result = await recordUsageCharge({
       shopId: "shop.myshopify.com",
       totalCostUsd: 0.75,
       idempotencyKey: "usage_charge:test:1",
+      admin,
     });
 
     expect(result).toEqual({
@@ -111,6 +238,7 @@ describe("recordUsageCharge", () => {
         idempotency_key: "usage_charge:test:1:gift_spend",
       }),
     });
+    expect(admin.graphql).toHaveBeenCalled();
   });
 });
 
@@ -203,5 +331,77 @@ describe("calculateGiftBalanceMills", () => {
     ]);
 
     expect(balance).toBe(750);
+  });
+});
+
+describe("getUsageLedgerSummary", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("calculates gift balance and MTD paid usage", async () => {
+    // Mock gift entries (findMany)
+    mockPrisma.usageLedgerEntry.findMany.mockResolvedValue([
+      {
+        entry_type: UsageLedgerEntryType.gift_grant,
+        amount_mills: 1000,
+        amount_cents: 100,
+      },
+      {
+        entry_type: UsageLedgerEntryType.gift_spend,
+        amount_mills: -200,
+        amount_cents: -20,
+      },
+    ]);
+
+    // Mock paid usage aggregation (aggregate)
+    mockPrisma.usageLedgerEntry.aggregate.mockResolvedValue({
+      _sum: {
+        amount_mills: 500,
+      },
+    });
+
+    // Use a fixed date: 2024-01-15
+    const now = new Date("2024-01-15T10:00:00Z");
+
+    const result = await getUsageLedgerSummary({
+      shopId: "shop.myshopify.com",
+      now,
+    });
+
+    expect(result).toEqual({
+      giftGrantTotalMills: 1000,
+      giftBalanceMills: 800, // 1000 - 200
+      paidUsageMonthToDateMills: 500,
+    });
+
+    // Verify month boundary query
+    expect(mockPrisma.usageLedgerEntry.aggregate).toHaveBeenCalledWith({
+      where: {
+        shop_id: "shop.myshopify.com",
+        entry_type: UsageLedgerEntryType.paid_usage,
+        created_at: {
+          gte: new Date("2024-01-01T00:00:00.000Z"),
+        },
+      },
+      _sum: {
+        amount_mills: true,
+      },
+    });
+  });
+
+  it("handles missing paid usage (returns 0)", async () => {
+    mockPrisma.usageLedgerEntry.findMany.mockResolvedValue([]);
+    mockPrisma.usageLedgerEntry.aggregate.mockResolvedValue({
+      _sum: {
+        amount_mills: null,
+      },
+    });
+
+    const result = await getUsageLedgerSummary({
+      shopId: "shop.myshopify.com",
+    });
+
+    expect(result.paidUsageMonthToDateMills).toBe(0);
   });
 });

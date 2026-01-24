@@ -24,7 +24,10 @@ import {
   USAGE_PRICING_ITEMS,
 } from "../../../lib/usage-pricing";
 import { spendSafetyActionSchema } from "../../../schemas/admin";
-import { billingSummarySchema } from "../../../schemas/billing";
+import {
+  billingSummarySchema,
+  billableEventsListSchema,
+} from "../../../schemas/billing";
 import {
   getSpendSafetySettings,
   upsertSpendSafetySettings,
@@ -38,6 +41,11 @@ import {
   getNextMonthResetDate,
   millsToUsd,
 } from "../../../services/shopify/billing-guardrails";
+import { listBillableEvents } from "../../../services/shopify/billable-events.server";
+import {
+  BILLABLE_EVENT_TYPE_LABELS,
+  BILLABLE_EVENT_STATUS_LABELS,
+} from "../../../lib/billable-events";
 
 const DEFAULT_MONTHLY_CAP_CENTS = 1000;
 
@@ -91,6 +99,20 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     const planStatus = plan?.plan_status ?? PlanStatus.none;
     const ledgerSummary = await getUsageLedgerSummary({ shopId });
 
+    // Fetch recent billable events for display
+    const rawBillableEvents = await listBillableEvents({
+      shopId,
+      limit: 50,
+    });
+
+    // Map to serializable format for client
+    const billableEvents = billableEventsListSchema.parse(
+      rawBillableEvents.map((event) => ({
+        ...event,
+        createdAt: event.createdAt.toISOString(),
+      })),
+    );
+
     const summary = billingSummarySchema.parse({
       monthlyCapCents,
       paidUsageConsentAt: settings.paidUsageConsentAt
@@ -102,7 +124,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       planStatus,
     });
 
-    return summary;
+    return { ...summary, billableEvents };
   } catch (error) {
     if (error instanceof Response) {
       if (shouldLogAuthFlow()) {
@@ -284,6 +306,7 @@ export default function BillingSettings() {
     giftBalanceMills,
     paidUsageMonthToDateMills,
     planStatus,
+    billableEvents,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -359,6 +382,8 @@ export default function BillingSettings() {
             <s-paragraph>Free gift issued: ${giftGrantTotalUsd}</s-paragraph>
             <s-paragraph>Free gift remaining: ${giftBalanceUsd}</s-paragraph>
             <s-paragraph>Paid usage month-to-date: ${paidUsageUsd}</s-paragraph>
+            <s-paragraph>Monthly cap: ${monthlyCapUsd}</s-paragraph>
+            <s-paragraph>Remaining capacity: ${remainingCapUsd}</s-paragraph>
           </s-stack>
           <s-stack direction="block" gap="base">
             <s-heading>Pricing</s-heading>
@@ -383,7 +408,7 @@ export default function BillingSettings() {
           ) : null}
         </s-stack>
       </s-section>
-      <s-section heading="Spend safety">
+      <s-section heading="Enable paid usage">
         <s-stack direction="block" gap="base">
           {errorMessage ? (
             <s-banner tone="critical">
@@ -397,9 +422,19 @@ export default function BillingSettings() {
           ) : null}
           {spendSafetyConfigured ? (
             <s-banner tone="success">
-              <s-text>Spend safety is configured.</s-text>
+              <s-text>
+                Paid usage is enabled and spend safety is configured.
+              </s-text>
             </s-banner>
-          ) : null}
+          ) : (
+            <s-banner tone="info">
+              <s-text>
+                To use AI generation features, you must{" "}
+                <strong>enable paid usage</strong>. You will only be charged for
+                what you use, up to your monthly spending cap.
+              </s-text>
+            </s-banner>
+          )}
           {capReached && spendSafetyConfigured ? (
             <s-banner tone="warning">
               <s-text>
@@ -442,7 +477,7 @@ export default function BillingSettings() {
                 />
                 {!hasConsent ? (
                   <s-checkbox
-                    label="I understand paid usage charges will apply after the free gift is used."
+                    label="I confirm that I want to enable paid usage and understand charges will apply after the free gift is used."
                     name="paid_usage_consent"
                   />
                 ) : (
@@ -455,7 +490,7 @@ export default function BillingSettings() {
                   variant="primary"
                   {...(isSubmitting ? { loading: true } : {})}
                 >
-                  Save spend safety
+                  Enable paid usage & set cap
                 </s-button>
               </s-stack>
             </Form>
@@ -466,6 +501,7 @@ export default function BillingSettings() {
             <s-stack direction="block" gap="base">
               {!showModifyForm ? (
                 <s-button
+                  type="button"
                   variant="secondary"
                   onClick={() => setShowModifyForm(true)}
                 >
@@ -518,6 +554,74 @@ export default function BillingSettings() {
           ) : null}
 
           <Link to={setupHref}>Back to setup</Link>
+        </s-stack>
+      </s-section>
+
+      {/* Billable Events Section - AC 2, 3, 4 */}
+      <s-section heading="Billable events">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            Recent billable actions and their status. Each event includes an
+            idempotency key to prevent duplicate charges on retries.
+          </s-paragraph>
+          {billableEvents.length === 0 ? (
+            <s-banner tone="info">
+              <s-text>No billable events yet.</s-text>
+            </s-banner>
+          ) : (
+            <s-stack direction="block" gap="small">
+              {billableEvents.map((event) => {
+                const eventDate = new Intl.DateTimeFormat("en-US", {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                }).format(new Date(event.createdAt));
+                const typeLabel =
+                  BILLABLE_EVENT_TYPE_LABELS[
+                    event.eventType as keyof typeof BILLABLE_EVENT_TYPE_LABELS
+                  ] ?? event.eventType;
+                const statusLabel =
+                  BILLABLE_EVENT_STATUS_LABELS[
+                    event.status as keyof typeof BILLABLE_EVENT_STATUS_LABELS
+                  ] ?? event.status;
+                const isOrderFee = event.eventType === "order_fee";
+                const amountDisplay = `$${formatUsageUsd(event.amountUsd)}`;
+                const statusTone =
+                  event.status === "confirmed"
+                    ? "success"
+                    : event.status === "failed"
+                      ? "critical"
+                      : event.status === "waived"
+                        ? "warning"
+                        : "info";
+                return (
+                  <s-box
+                    key={event.id}
+                    padding="base"
+                    borderWidth="base"
+                    borderRadius="base"
+                  >
+                    <s-stack direction="block" gap="small">
+                      <s-stack direction="inline" gap="small">
+                        <s-badge tone={statusTone}>{statusLabel}</s-badge>
+                        <s-text>
+                          <strong>{typeLabel}</strong>
+                        </s-text>
+                        <s-text>{amountDisplay}</s-text>
+                      </s-stack>
+                      <s-text>{eventDate}</s-text>
+                      {isOrderFee ? (
+                        <s-text>
+                          $0.25 per successful personalized order line (Standard
+                          only)
+                        </s-text>
+                      ) : null}
+                      <s-text>Key: {event.idempotencyKey}</s-text>
+                    </s-stack>
+                  </s-box>
+                );
+              })}
+            </s-stack>
+          )}
         </s-stack>
       </s-section>
     </s-page>

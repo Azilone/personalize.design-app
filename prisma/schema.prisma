@@ -247,3 +247,36 @@ enum UsageLedgerEntryType {
   paid_usage
   adjustment
 }
+
+model BillableEvent {
+  id              String              @id @default(cuid())
+  shop_id         String
+  event_type      BillableEventType
+  status          BillableEventStatus @default(pending)
+  amount_mills    Int
+  currency_code   String              @default("USD")
+  idempotency_key String
+  description     String?
+  source_id       String?
+  error_message   String?
+  created_at      DateTime            @default(now())
+  updated_at      DateTime            @updatedAt
+
+  @@index([shop_id, created_at])
+  @@unique([shop_id, idempotency_key])
+  @@map("billable_events")
+}
+
+enum BillableEventType {
+  generation
+  regeneration
+  remove_bg
+  order_fee
+}
+
+enum BillableEventStatus {
+  pending
+  confirmed
+  failed
+  waived
+}

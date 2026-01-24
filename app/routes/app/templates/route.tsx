@@ -16,15 +16,15 @@ import {
   useRevalidator,
 } from "react-router";
 
-import { authenticate } from "../../../../shopify.server";
-import { getShopIdFromSession } from "../../../../lib/tenancy";
-import { buildEmbeddedSearch } from "../../../../lib/embedded-search";
-import { templateActionSchema } from "../../../../schemas/admin";
+import { authenticate } from "../../../shopify.server";
+import { getShopIdFromSession } from "../../../lib/tenancy";
+import { buildEmbeddedSearch } from "../../../lib/embedded-search";
+import { templateActionSchema } from "../../../schemas/admin";
 import {
   applyPromptVariableValues,
   validateVariableNames,
   validatePromptVariableReferences,
-} from "../../../../lib/prompt-variables";
+} from "../../../lib/prompt-variables";
 import {
   getTemplate,
   updateTemplate,
@@ -32,29 +32,33 @@ import {
   getLatestTestGeneration,
   type DesignTemplateDto,
   type TestGenerationOutput,
-} from "../../../../services/templates/templates.server";
-import { inngest } from "../../../../services/inngest/client.server";
+} from "../../../services/templates/templates.server";
+import { inngest } from "../../../services/inngest/client.server";
 import {
   templateTestFakeGeneratePayloadSchema,
   templateTestGeneratePayloadSchema,
-} from "../../../../services/inngest/types";
-import logger from "../../../../lib/logger";
+} from "../../../services/inngest/types";
+import logger from "../../../lib/logger";
 import {
   MVP_GENERATION_MODEL_ID,
   MVP_GENERATION_MODEL_DISPLAY_NAME,
   MVP_PRICE_USD_PER_GENERATION,
   REMOVE_BG_PRICE_USD,
-} from "../../../../lib/generation-settings";
-import { usdToMills, millsToUsd, centsToUsd } from "../../../../services/shopify/billing-guardrails";
-import { checkBillableActionAllowed } from "../../../../services/shopify/billing-guardrails.server";
-import { getUsageLedgerSummary } from "../../../../services/shopify/billing.server";
-import { getSpendSafetySettings } from "../../../../services/shops/spend-safety.server";
+} from "../../../lib/generation-settings";
+import {
+  usdToMills,
+  millsToUsd,
+  centsToUsd,
+} from "../../../services/shopify/billing-guardrails";
+import { checkBillableActionAllowed } from "../../../services/shopify/billing-guardrails.server";
+import { getUsageLedgerSummary } from "../../../services/shopify/billing.server";
+import { getSpendSafetySettings } from "../../../services/shops/spend-safety.server";
 import {
   DEFAULT_TEMPLATE_ASPECT_RATIO,
   TEMPLATE_ASPECT_RATIO_LABELS,
   TEMPLATE_ASPECT_RATIOS,
   type TemplateAspectRatio,
-} from "../../../../lib/template-aspect-ratios";
+} from "../../../lib/template-aspect-ratios";
 
 export type LoaderData = {
   template: DesignTemplateDto | null;
@@ -94,18 +98,18 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     { templateId, shopId, hasResults: !!testResults },
     "Template loaded",
   );
-  
-  return { 
-    template, 
-    testResults, 
+
+  return {
+    template,
+    testResults,
     pollInterval: 3000,
     usageLedger: {
-        giftBalanceMills: usageLedger.giftBalanceMills,
-        paidUsageMonthToDateMills: usageLedger.paidUsageMonthToDateMills,
+      giftBalanceMills: usageLedger.giftBalanceMills,
+      paidUsageMonthToDateMills: usageLedger.paidUsageMonthToDateMills,
     },
     spendSafety: {
-        monthlyCapCents: spendSafety.monthlyCapCents,
-    }
+      monthlyCapCents: spendSafety.monthlyCapCents,
+    },
   };
 };
 
@@ -569,7 +573,7 @@ export default function TemplateEditPage() {
   const monthlyCap = spendSafety.monthlyCapCents
     ? centsToUsd(spendSafety.monthlyCapCents)
     : 0;
-  
+
   const isCapReached = monthlyCap > 0 && mtdSpend >= monthlyCap;
   const hasGift = giftBalance > 0.01;
   const isBillingBlocked = !fakeGeneration && isCapReached && !hasGift;
@@ -997,22 +1001,33 @@ export default function TemplateEditPage() {
           <s-stack direction="block" gap="base">
             {/* Billing & Usage Display */}
             <s-stack direction="block" gap="small">
-              <s-stack direction="inline" gap="small" align="center" style={{ justifyContent: "space-between" }}>
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "row",
+                  gap: "8px",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                }}
+              >
                 <s-text>
                   <strong>Billing & Usage</strong>
                 </s-text>
-                <Link to={billingHref} style={{ fontSize: "13px" }}>Manage Billing</Link>
-              </s-stack>
-              
+                <Link to={billingHref} style={{ fontSize: "13px" }}>
+                  Manage Billing
+                </Link>
+              </div>
+
               <s-stack direction="inline" gap="small">
-                 <s-text>
-                   Monthly Spend: ${mtdSpend.toFixed(2)} / ${monthlyCap.toFixed(2)} (cap)
-                 </s-text>
-                 {hasGift && (
-                     <s-badge tone="success">
-                        Gift Balance: ${giftBalance.toFixed(2)}
-                     </s-badge>
-                 )}
+                <s-text>
+                  Monthly Spend: ${mtdSpend.toFixed(2)} / $
+                  {monthlyCap.toFixed(2)} (cap)
+                </s-text>
+                {hasGift && (
+                  <s-badge tone="success">
+                    Gift Balance: ${giftBalance.toFixed(2)}
+                  </s-badge>
+                )}
               </s-stack>
 
               <div
@@ -1027,21 +1042,22 @@ export default function TemplateEditPage() {
                   style={{
                     height: "100%",
                     width: `${Math.min(100, monthlyCap > 0 ? (mtdSpend / monthlyCap) * 100 : 0)}%`,
-                    backgroundColor:
-                      isCapReached
-                        ? "#d82c0d" 
-                        : mtdSpend > monthlyCap * 0.9 
-                          ? "#f59e0b"
-                          : "#22c55e",
+                    backgroundColor: isCapReached
+                      ? "#d82c0d"
+                      : mtdSpend > monthlyCap * 0.9
+                        ? "#f59e0b"
+                        : "#22c55e",
                     transition: "width 0.3s ease",
                   }}
                 />
               </div>
-              
+
               {isBillingBlocked && (
                 <s-banner tone="warning">
                   <s-text>
-                    Monthly spending cap reached. Increase your cap in <Link to={billingHref}>Billing</Link> to continue generating.
+                    Monthly spending cap reached. Increase your cap in{" "}
+                    <Link to={billingHref}>Billing</Link> to continue
+                    generating.
                   </s-text>
                 </s-banner>
               )}
@@ -1217,9 +1233,10 @@ export default function TemplateEditPage() {
                 </s-banner>
 
                 <s-banner tone="info">
-                   <s-text>
-                     Generations are billed to your Shopify plan. Check <Link to={billingHref}>Billing</Link> for details and caps.
-                   </s-text>
+                  <s-text>
+                    Generations are billed to your Shopify plan. Check{" "}
+                    <Link to={billingHref}>Billing</Link> for details and caps.
+                  </s-text>
                 </s-banner>
 
                 {/* Generate Button */}
@@ -1397,20 +1414,23 @@ export default function TemplateEditPage() {
                   <Link to={billingHref}>Manage Billing</Link>
                 </s-banner>
               )}
-             
+
             {/* Generic Error */}
             {errorMessage &&
-             actionData &&
-             typeof actionData === "object" &&
-             "error" in actionData &&
-             !["generation_failed", "remove_bg_failed", "billing_cap_exceeded"].includes(
-               (actionData.error as { code?: string })?.code ?? ""
-             ) && (
+              actionData &&
+              typeof actionData === "object" &&
+              "error" in actionData &&
+              ![
+                "generation_failed",
+                "remove_bg_failed",
+                "billing_cap_exceeded",
+              ].includes(
+                (actionData.error as { code?: string })?.code ?? "",
+              ) && (
                 <s-banner tone="warning">
                   <s-text>{errorMessage}</s-text>
                 </s-banner>
-              )
-            }
+              )}
           </s-stack>
         </s-section>
       )}

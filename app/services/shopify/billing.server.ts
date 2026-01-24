@@ -2,8 +2,13 @@ import type { AdminApiContext } from "@shopify/shopify-app-react-router/server";
 import { UsageLedgerEntryType } from "@prisma/client";
 import prisma from "../../db.server";
 import { USAGE_GIFT_CENTS, USAGE_GIFT_MILLS } from "../../lib/usage-pricing";
-import { millsToCents, usdToMills } from "./billing-guardrails";
+import { millsToCents, millsToUsd, usdToMills } from "./billing-guardrails";
 import { trackUsageGiftGrant } from "../posthog/events";
+import {
+  getOfflineShopifyAdmin,
+  type ShopifyAdminGraphql,
+} from "./admin.server";
+import logger from "../../lib/logger";
 
 type MoneyInput = {
   amount: number;
@@ -210,9 +215,135 @@ type UsageChargeInput = {
   idempotencyKey: string;
   description?: string;
   now?: Date;
+  admin?: ShopifyAdminGraphql;
 };
 
 const normalizeUsageMills = (amountUsd: number) => usdToMills(amountUsd);
+
+type UsageLineItemResult = {
+  subscriptionId: string;
+  subscriptionLineItemId: string;
+};
+
+const getUsageLineItemId = async (input: {
+  admin: ShopifyAdminGraphql;
+  shopId: string;
+}): Promise<UsageLineItemResult> => {
+  const plan = await prisma.shopPlan.findUnique({
+    where: { shop_id: input.shopId },
+    select: { shopify_subscription_id: true },
+  });
+
+  if (!plan?.shopify_subscription_id) {
+    throw new Error("Missing Shopify subscription id for usage charge.");
+  }
+
+  const response = await input.admin.graphql(
+    `#graphql
+      query usageLineItem($id: ID!) {
+        node(id: $id) {
+          ... on AppSubscription {
+            id
+            lineItems {
+              id
+              plan {
+                pricingDetails {
+                  __typename
+                  ... on AppUsagePricing {
+                    cappedAmount {
+                      amount
+                      currencyCode
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { variables: { id: plan.shopify_subscription_id } },
+  );
+
+  const responseJson = await response.json();
+  const subscription = responseJson?.data?.node;
+  const lineItems = subscription?.lineItems ?? [];
+  const usageLineItem = lineItems.find(
+    (item: { plan?: { pricingDetails?: { __typename?: string } } }) =>
+      item.plan?.pricingDetails?.__typename === "AppUsagePricing",
+  );
+
+  if (!subscription?.id || !usageLineItem?.id) {
+    throw new Error("Usage line item not found for subscription.");
+  }
+
+  return {
+    subscriptionId: subscription.id,
+    subscriptionLineItemId: usageLineItem.id,
+  };
+};
+
+const createShopifyUsageRecord = async (input: {
+  admin: ShopifyAdminGraphql;
+  subscriptionLineItemId: string;
+  amountUsd: number;
+  description: string;
+  idempotencyKey: string;
+}): Promise<{ usageRecordId: string }> => {
+  const response = await input.admin.graphql(
+    `#graphql
+      mutation createUsageRecord(
+        $subscriptionLineItemId: ID!
+        $price: MoneyInput!
+        $description: String!
+        $idempotencyKey: String!
+      ) {
+        appUsageRecordCreate(
+          subscriptionLineItemId: $subscriptionLineItemId
+          price: $price
+          description: $description
+          idempotencyKey: $idempotencyKey
+        ) {
+          userErrors {
+            field
+            message
+          }
+          appUsageRecord {
+            id
+          }
+        }
+      }
+    `,
+    {
+      variables: {
+        subscriptionLineItemId: input.subscriptionLineItemId,
+        price: {
+          amount: Number(input.amountUsd.toFixed(3)),
+          currencyCode: "USD",
+        },
+        description: input.description,
+        idempotencyKey: input.idempotencyKey,
+      },
+    },
+  );
+
+  const responseJson = await response.json();
+  const payload = responseJson?.data?.appUsageRecordCreate;
+  const userErrors = payload?.userErrors ?? [];
+
+  if (userErrors.length > 0) {
+    const message = userErrors[0]?.message ?? "Unable to create usage charge.";
+    throw new Error(message);
+  }
+
+  const usageRecordId = payload?.appUsageRecord?.id;
+
+  if (!usageRecordId) {
+    throw new Error("Usage charge response was incomplete.");
+  }
+
+  return { usageRecordId };
+};
 
 export const recordUsageCharge = async (
   input: UsageChargeInput,
@@ -225,83 +356,120 @@ export const recordUsageCharge = async (
   const giftIdempotencyKey = `${input.idempotencyKey}:gift_spend`;
   const paidIdempotencyKey = `${input.idempotencyKey}:paid_usage`;
 
-  return prisma.$transaction(async (tx) => {
-    const existingEntries = await tx.usageLedgerEntry.findMany({
-      where: {
-        shop_id: input.shopId,
-        idempotency_key: { in: [giftIdempotencyKey, paidIdempotencyKey] },
-      },
-      select: { entry_type: true, amount_cents: true, amount_mills: true },
-    });
+  const existingEntries = await prisma.usageLedgerEntry.findMany({
+    where: {
+      shop_id: input.shopId,
+      idempotency_key: { in: [giftIdempotencyKey, paidIdempotencyKey] },
+    },
+    select: { entry_type: true, amount_cents: true, amount_mills: true },
+  });
 
-    if (existingEntries.length > 0) {
-      const giftAppliedMills = Math.abs(
-        existingEntries.find(
-          (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
-        )?.amount_mills ??
-          (existingEntries.find(
-            (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
-          )?.amount_cents ?? 0) * 10,
-      );
-      const paidUsageMills =
-        existingEntries.find(
-          (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
-        )?.amount_mills ??
+  if (existingEntries.length > 0) {
+    const giftAppliedMills = Math.abs(
+      existingEntries.find(
+        (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
+      )?.amount_mills ??
         (existingEntries.find(
-          (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
-        )?.amount_cents ?? 0) * 10;
+          (entry) => entry.entry_type === UsageLedgerEntryType.gift_spend,
+        )?.amount_cents ?? 0) * 10,
+    );
+    const paidUsageMills =
+      existingEntries.find(
+        (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
+      )?.amount_mills ??
+      (existingEntries.find(
+        (entry) => entry.entry_type === UsageLedgerEntryType.paid_usage,
+      )?.amount_cents ?? 0) * 10;
 
+    return { created: false, giftAppliedMills, paidUsageMills };
+  }
+
+  const giftEntries = await prisma.usageLedgerEntry.findMany({
+    where: {
+      shop_id: input.shopId,
+      entry_type: { in: giftEntryTypes },
+    },
+    select: { entry_type: true, amount_cents: true, amount_mills: true },
+  });
+
+  const giftBalanceMills = calculateGiftBalanceMills(
+    giftEntries.map((entry) => ({
+      entryType: entry.entry_type,
+      amountMills: entry.amount_mills ?? entry.amount_cents * 10,
+    })),
+  );
+
+  const giftAppliedMills = Math.min(giftBalanceMills, totalCostMills);
+  const paidUsageMills = totalCostMills - giftAppliedMills;
+  const admin = input.admin ?? (await getOfflineShopifyAdmin(input.shopId));
+
+  try {
+    const { subscriptionLineItemId } = await getUsageLineItemId({
+      admin,
+      shopId: input.shopId,
+    });
+    await createShopifyUsageRecord({
+      admin,
+      subscriptionLineItemId,
+      amountUsd: millsToUsd(paidUsageMills),
+      description: input.description ?? "usage_charge",
+      idempotencyKey: input.idempotencyKey,
+    });
+  } catch (error) {
+    logger.error(
+      {
+        shop_id: input.shopId,
+        idempotency_key: input.idempotencyKey,
+        err_message: error instanceof Error ? error.message : String(error),
+      },
+      "Shopify usage charge creation failed",
+    );
+    throw error;
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      if (giftAppliedMills > 0) {
+        await tx.usageLedgerEntry.create({
+          data: {
+            shop_id: input.shopId,
+            entry_type: UsageLedgerEntryType.gift_spend,
+            amount_cents: -millsToCents(giftAppliedMills),
+            amount_mills: -giftAppliedMills,
+            currency_code: "USD",
+            idempotency_key: giftIdempotencyKey,
+            description: input.description ?? "usage_charge",
+          },
+        });
+      }
+
+      if (paidUsageMills > 0) {
+        await tx.usageLedgerEntry.create({
+          data: {
+            shop_id: input.shopId,
+            entry_type: UsageLedgerEntryType.paid_usage,
+            amount_cents: millsToCents(paidUsageMills),
+            amount_mills: paidUsageMills,
+            currency_code: "USD",
+            idempotency_key: paidIdempotencyKey,
+            description: input.description ?? "usage_charge",
+          },
+        });
+      }
+    });
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error as { code?: string }).code === "P2002"
+    ) {
       return { created: false, giftAppliedMills, paidUsageMills };
     }
 
-    const giftEntries = await tx.usageLedgerEntry.findMany({
-      where: {
-        shop_id: input.shopId,
-        entry_type: { in: giftEntryTypes },
-      },
-      select: { entry_type: true, amount_cents: true, amount_mills: true },
-    });
+    throw error;
+  }
 
-    const giftBalanceMills = calculateGiftBalanceMills(
-      giftEntries.map((entry) => ({
-        entryType: entry.entry_type,
-        amountMills: entry.amount_mills ?? entry.amount_cents * 10,
-      })),
-    );
-
-    const giftAppliedMills = Math.min(giftBalanceMills, totalCostMills);
-    const paidUsageMills = totalCostMills - giftAppliedMills;
-
-    if (giftAppliedMills > 0) {
-      await tx.usageLedgerEntry.create({
-        data: {
-          shop_id: input.shopId,
-          entry_type: UsageLedgerEntryType.gift_spend,
-          amount_cents: -millsToCents(giftAppliedMills),
-          amount_mills: -giftAppliedMills,
-          currency_code: "USD",
-          idempotency_key: giftIdempotencyKey,
-          description: input.description ?? "usage_charge",
-        },
-      });
-    }
-
-    if (paidUsageMills > 0) {
-      await tx.usageLedgerEntry.create({
-        data: {
-          shop_id: input.shopId,
-          entry_type: UsageLedgerEntryType.paid_usage,
-          amount_cents: millsToCents(paidUsageMills),
-          amount_mills: paidUsageMills,
-          currency_code: "USD",
-          idempotency_key: paidIdempotencyKey,
-          description: input.description ?? "usage_charge",
-        },
-      });
-    }
-
-    return { created: true, giftAppliedMills, paidUsageMills };
-  });
+  return { created: true, giftAppliedMills, paidUsageMills };
 };
 
 type BuildStandardInputArgs = {

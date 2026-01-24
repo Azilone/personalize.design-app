@@ -21,12 +21,15 @@ import {
   recordTestGeneration,
   releaseTestGenerationQuota,
 } from "../../templates/templates.server";
-import {
-  buildUsageChargeIdempotencyKey,
-  recordUsageCharge,
-} from "../../shopify/billing.server";
 import { usdToMills } from "../../shopify/billing-guardrails";
 import { checkBillableActionAllowed } from "../../shopify/billing-guardrails.server";
+import {
+  createBillableEvent,
+  confirmAndCharge,
+  failBillableEvent,
+  buildBillableEventIdempotencyKey,
+} from "../../shopify/billable-events.server";
+import { BillableEventType } from "@prisma/client";
 import logger from "../../../lib/logger";
 import type { GenerationOutput } from "../../fal/types";
 
@@ -162,6 +165,21 @@ export const templateTestFakeGenerate = inngest.createFunction(
       placeholderUrl,
     );
     const mappedResult = mapGenerationResult(fakeResult);
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      "template_test_fake_generate",
+      usageIdempotencyId,
+    );
+
+    await step.run("create-billable-event", async () =>
+      createBillableEvent({
+        shopId: payload.shop_id,
+        eventType: BillableEventType.generation,
+        amountMills: usdToMills(fakeResult.totalCostUsd),
+        idempotencyKey: billableEventIdempotencyKey,
+        description: "template_test_fake_generate",
+        sourceId: payload.template_id,
+      }),
+    );
 
     await step.run("record-test-generation", async () =>
       recordTestGeneration({
@@ -178,14 +196,11 @@ export const templateTestFakeGenerate = inngest.createFunction(
       }),
     );
 
-    await step.run("record-test-usage-ledger", async () =>
-      recordUsageCharge({
+    await step.run("confirm-billable-event-and-charge", async () =>
+      confirmAndCharge({
         shopId: payload.shop_id,
+        idempotencyKey: billableEventIdempotencyKey,
         totalCostUsd: fakeResult.totalCostUsd,
-        idempotencyKey: buildUsageChargeIdempotencyKey(
-          "template_test_fake_generate",
-          usageIdempotencyId,
-        ),
         description: "template_test_fake_generate",
       }),
     );
@@ -259,6 +274,23 @@ export const templateTestGenerate = inngest.createFunction(
       }
     });
 
+    // AC 5: Create billable event BEFORE provider call with stable idempotency key
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      "template_test_generation",
+      usageIdempotencyId,
+    );
+
+    await step.run("create-billable-event", async () =>
+      createBillableEvent({
+        shopId: payload.shop_id,
+        eventType: BillableEventType.generation,
+        amountMills: usdToMills(estimatedCostUsd),
+        idempotencyKey: billableEventIdempotencyKey,
+        description: "template_test_generation",
+        sourceId: payload.template_id,
+      }),
+    );
+
     const generationResult = await step.run("generate-images", async () =>
       generateImages({
         modelId: payload.generation_model_identifier,
@@ -289,15 +321,14 @@ export const templateTestGenerate = inngest.createFunction(
         }),
       );
 
-      await step.run("record-test-usage-ledger", async () =>
-        recordUsageCharge({
+      // AC 5, 6: Confirm billable event and record usage charge only after
+      // asset is persisted (recordTestGeneration above)
+      await step.run("confirm-billable-event-and-charge", async () =>
+        confirmAndCharge({
           shopId: payload.shop_id,
+          idempotencyKey: billableEventIdempotencyKey,
           totalCostUsd: generationResult.totalCostUsd,
-          idempotencyKey: buildUsageChargeIdempotencyKey(
-            "template_test_generate",
-            usageIdempotencyId,
-          ),
-          description: "template_test_generate",
+          description: "template_test_generation",
         }),
       );
 
@@ -388,6 +419,23 @@ export const templateTestRemoveBackground = inngest.createFunction(
       }
     });
 
+    // AC 5: Create billable event BEFORE provider call with stable idempotency key
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      "template_test_remove_background",
+      usageIdempotencyId,
+    );
+
+    await step.run("create-billable-event", async () =>
+      createBillableEvent({
+        shopId: payload.shop_id,
+        eventType: BillableEventType.remove_bg,
+        amountMills: usdToMills(estimatedRemoveBgCostUsd),
+        idempotencyKey: billableEventIdempotencyKey,
+        description: "template_test_remove_background",
+        sourceId: payload.template_id,
+      }),
+    );
+
     const removeBgResults = await step.run("remove-background", async () =>
       Promise.all(
         payload.generated_images.map(async (image) => {
@@ -434,14 +482,13 @@ export const templateTestRemoveBackground = inngest.createFunction(
       }),
     );
 
-    await step.run("record-test-usage-ledger", async () =>
-      recordUsageCharge({
+    // AC 5, 6: Confirm billable event and record usage charge only after
+    // asset is persisted (recordTestGeneration above)
+    await step.run("confirm-billable-event-and-charge", async () =>
+      confirmAndCharge({
         shopId: payload.shop_id,
+        idempotencyKey: billableEventIdempotencyKey,
         totalCostUsd: finalResult.total_cost_usd,
-        idempotencyKey: buildUsageChargeIdempotencyKey(
-          "template_test_remove_background",
-          usageIdempotencyId,
-        ),
         description: "template_test_remove_background",
       }),
     );
@@ -509,6 +556,38 @@ export const templateTestGenerateFailure = inngest.createFunction(
         totalTimeSeconds: 0,
         success: false,
         errorMessage: event.data.error?.message,
+      }),
+    );
+
+    // AC 7, 8: Fail billable event - determine if provider cost was incurred
+    // Based on which step failed, we can infer if provider cost was incurred:
+    // - If failed before/during "generate-images" or "remove-background": provider cost MAY be incurred
+    // - If failed after generation but before persistence: mark as waived (cost incurred, not persisted)
+    // - If failed before generation: mark as failed (no cost incurred)
+    const failedStep = event.data.step?.name;
+    const providerCostMayBeIncurred =
+      failedStep === "generate-images" ||
+      failedStep === "remove-background" ||
+      failedStep === "record-test-generation";
+
+    const eventType = isRemoveBg
+      ? "template_test_remove_background"
+      : "template_test_generation";
+    const usageIdempotencyId =
+      event.data.event.id ??
+      `${payload.data.shop_id}:${payload.data.template_id}`;
+    const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
+      eventType,
+      usageIdempotencyId,
+    );
+
+    await step.run("fail-billable-event", async () =>
+      failBillableEvent({
+        shopId: payload.data.shop_id,
+        idempotencyKey: billableEventIdempotencyKey,
+        errorMessage: event.data.error?.message,
+        // AC 7: failed if no provider cost; AC 8: waived if provider cost incurred but not persisted
+        waived: providerCostMayBeIncurred,
       }),
     );
 
