@@ -72,7 +72,7 @@ development_status:
   5-2-spend-safety-setup-monthly-cap-paid-usage-consent: done
   5-3-monthly-cap-enforcement-explicit-cap-increase-flow: done
   5-4-usage-visibility-auditable-billing-events: done
-  5-5-enforce-generation-limits-per-product-per-session-reset-window: backlog
+  5-5-enforce-generation-limits-per-product-per-session-reset-window: ready-for-dev
   epic-5-retrospective: optional
 
   epic-6: backlog

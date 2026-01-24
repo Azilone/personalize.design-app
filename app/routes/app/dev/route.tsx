@@ -279,12 +279,8 @@ export default function DevToolsBilling() {
             gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))",
           }}
         >
-          <s-card>
-            <s-stack direction="block" gap="base">
-              <s-heading>Onboarding</s-heading>
-              <s-paragraph>
-                Resets spend safety, storefront, and Printify completion.
-              </s-paragraph>
+          <s-card title="Onboarding">
+            <s-box padding="base">
               <Form method="post">
                 <input
                   type="hidden"
@@ -295,117 +291,98 @@ export default function DevToolsBilling() {
                   Reset onboarding state
                 </s-button>
               </Form>
-            </s-stack>
+              <s-paragraph>
+                Resets spend safety, storefront, and Printify completion.
+              </s-paragraph>
+            </s-box>
           </s-card>
 
-          <s-card>
-            <s-stack direction="block" gap="base">
-              <s-heading>Subscription</s-heading>
+          <s-card title="Subscription">
+            <s-box padding="base">
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_cancel_subscription"
+                />
+                <s-button disabled={!showDanger} tone="critical" type="submit">
+                  Cancel subscription & reset plan
+                </s-button>
+              </Form>
               <s-paragraph>
                 Cancels Shopify subscription and resets local plan to 'none'.
               </s-paragraph>
-              <s-stack direction="inline" gap="small">
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_cancel_subscription"
-                  />
-                  <s-button
-                    disabled={!showDanger}
-                    tone="critical"
-                    type="submit"
-                  >
-                    Cancel & Reset
-                  </s-button>
-                </Form>
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_billing_reset"
-                  />
-                  <s-button
-                    disabled={!showDanger}
-                    tone="critical"
-                    type="submit"
-                  >
-                    Reset Local Only
-                  </s-button>
-                </Form>
-              </s-stack>
-            </s-stack>
+            </s-box>
+
+            <s-box padding="base">
+              <Form method="post">
+                <input type="hidden" name="intent" value="dev_billing_reset" />
+                <s-button disabled={!showDanger} tone="critical" type="submit">
+                  Reset local billing state only
+                </s-button>
+              </Form>
+            </s-box>
           </s-card>
 
-          <s-card>
-            <s-stack direction="block" gap="base">
-              <s-heading>Billing Ledger (Gift)</s-heading>
-              <s-paragraph>
-                Reset gift to $1.00 or consume it to $0.00 to test paid usage
-                transitions.
-              </s-paragraph>
-              <s-stack direction="inline" gap="small">
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_reset_usage_gift"
-                  />
-                  <s-button disabled={!showDanger} type="submit">
-                    Reset Gift to Full
-                  </s-button>
-                </Form>
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_consume_usage_gift"
-                  />
-                  <s-button disabled={!showDanger} type="submit">
-                    Consume Gift
-                  </s-button>
-                </Form>
-              </s-stack>
-            </s-stack>
+          <s-card title="Billing Ledger (Gift)">
+            <s-box padding="base" style={{ display: "flex", gap: "0.5rem" }}>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_reset_usage_gift"
+                />
+                <s-button disabled={!showDanger} type="submit">
+                  Reset Gift to Full
+                </s-button>
+              </Form>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_consume_usage_gift"
+                />
+                <s-button disabled={!showDanger} type="submit">
+                  Consume Gift
+                </s-button>
+              </Form>
+            </s-box>
+            <s-paragraph>
+              Reset gift to $1.00 or consume it to $0.00 to test paid usage
+              transitions.
+            </s-paragraph>
           </s-card>
 
-          <s-card>
-            <s-stack direction="block" gap="base">
-              <s-heading>Billing Ledger (Paid Spend)</s-heading>
-              <s-paragraph>
-                Reset MTD spend or add fake charges to test cap limits.
-              </s-paragraph>
-              <s-stack direction="inline" gap="small">
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_reset_paid_usage"
-                  />
-                  <s-button disabled={!showDanger} type="submit">
-                    Reset Spend to $0
-                  </s-button>
-                </Form>
-                <Form method="post">
-                  <input
-                    type="hidden"
-                    name="intent"
-                    value="dev_add_fake_charge"
-                  />
-                  <s-button disabled={!showDanger} type="submit">
-                    Add Fake $9.97
-                  </s-button>
-                </Form>
-              </s-stack>
-            </s-stack>
+          <s-card title="Billing Ledger (Paid Spend)">
+            <s-box padding="base" style={{ display: "flex", gap: "0.5rem" }}>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_reset_paid_usage"
+                />
+                <s-button disabled={!showDanger} type="submit">
+                  Reset Spend to $0
+                </s-button>
+              </Form>
+              <Form method="post">
+                <input
+                  type="hidden"
+                  name="intent"
+                  value="dev_add_fake_charge"
+                />
+                <s-button disabled={!showDanger} type="submit">
+                  Add Fake $9.97
+                </s-button>
+              </Form>
+            </s-box>
+            <s-paragraph>
+              Reset MTD spend or add fake charges to test cap limits.
+            </s-paragraph>
           </s-card>
 
-          <s-card>
-            <s-stack direction="block" gap="base">
-              <s-heading>Reconciliation</s-heading>
-              <s-paragraph>
-                Fixes stuck 'pending' generation events by marking them waived.
-              </s-paragraph>
+          <s-card title="Reconciliation">
+            <s-box padding="base">
               <Form method="post">
                 <input
                   type="hidden"
@@ -416,7 +393,10 @@ export default function DevToolsBilling() {
                   Waive pending events
                 </s-button>
               </Form>
-            </s-stack>
+              <s-paragraph>
+                Fixes stuck 'pending' generation events by marking them waived.
+              </s-paragraph>
+            </s-box>
           </s-card>
         </div>
       </s-section>
