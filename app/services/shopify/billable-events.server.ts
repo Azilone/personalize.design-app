@@ -376,6 +376,65 @@ export const countBillableEvents = async (shopId: string): Promise<number> => {
 };
 
 // --------------------------------------------------------------------------
+// Dev Utilities
+// --------------------------------------------------------------------------
+
+export const waivePendingTemplateTestGenerationEvents = async (
+  shopId: string,
+): Promise<{ updated: number }> => {
+  if (process.env.NODE_ENV !== "development") {
+    logger.warn(
+      { shop_id: shopId },
+      "Attempted to run dev-only billing waiver in non-dev environment",
+    );
+    throw new Error("This operation is only allowed in development mode.");
+  }
+
+  const pendingEvents = await prisma.billableEvent.findMany({
+    where: {
+      shop_id: shopId,
+      status: BillableEventStatus.pending,
+      event_type: BillableEventType.generation,
+      description: "template_test_generation",
+    },
+    select: { id: true, idempotency_key: true },
+  });
+
+  if (pendingEvents.length === 0) {
+    return { updated: 0 };
+  }
+
+  const updated = await prisma.billableEvent.updateMany({
+    where: {
+      id: { in: pendingEvents.map((event: { id: string }) => event.id) },
+    },
+    data: {
+      status: BillableEventStatus.waived,
+      error_message: "reconciled_after_remove_bg_charge",
+    },
+  });
+
+  pendingEvents.forEach((event: { id: string; idempotency_key: string }) => {
+    trackBillableEventWaived({
+      shopId,
+      billableEventId: event.id,
+      idempotencyKey: event.idempotency_key,
+      errorMessage: "reconciled_after_remove_bg_charge",
+    });
+  });
+
+  logger.warn(
+    {
+      shop_id: shopId,
+      updated_count: updated.count,
+    },
+    "Dev utility waived pending template test generation events",
+  );
+
+  return { updated: updated.count };
+};
+
+// --------------------------------------------------------------------------
 // Integration: Confirm Event and Record Usage Charge
 // --------------------------------------------------------------------------
 

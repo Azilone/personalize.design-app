@@ -403,28 +403,33 @@ export const recordUsageCharge = async (
   const paidUsageMills = totalCostMills - giftAppliedMills;
   const admin = input.admin ?? (await getOfflineShopifyAdmin(input.shopId));
 
-  try {
-    const { subscriptionLineItemId } = await getUsageLineItemId({
-      admin,
-      shopId: input.shopId,
-    });
-    await createShopifyUsageRecord({
-      admin,
-      subscriptionLineItemId,
-      amountUsd: millsToUsd(paidUsageMills),
-      description: input.description ?? "usage_charge",
-      idempotencyKey: input.idempotencyKey,
-    });
-  } catch (error) {
-    logger.error(
-      {
-        shop_id: input.shopId,
-        idempotency_key: input.idempotencyKey,
-        err_message: error instanceof Error ? error.message : String(error),
-      },
-      "Shopify usage charge creation failed",
-    );
-    throw error;
+  // Only create Shopify Usage Record if there is a payable amount.
+  // Shopify API requires usage records to have a positive amount (> 0).
+  // Full cost covered by gift balance is tracked only in our internal ledger below.
+  if (paidUsageMills > 0) {
+    try {
+      const { subscriptionLineItemId } = await getUsageLineItemId({
+        admin,
+        shopId: input.shopId,
+      });
+      await createShopifyUsageRecord({
+        admin,
+        subscriptionLineItemId,
+        amountUsd: millsToUsd(paidUsageMills),
+        description: input.description ?? "usage_charge",
+        idempotencyKey: input.idempotencyKey,
+      });
+    } catch (error) {
+      logger.error(
+        {
+          shop_id: input.shopId,
+          idempotency_key: input.idempotencyKey,
+          err_message: error instanceof Error ? error.message : String(error),
+        },
+        "Shopify usage charge creation failed",
+      );
+      throw error;
+    }
   }
 
   try {

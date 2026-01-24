@@ -30,6 +30,7 @@ export const templateTestGeneratePayloadSchema = z
 export const templateTestRemoveBackgroundPayloadSchema = z.object({
   shop_id: z.string().min(1),
   template_id: z.string().min(1),
+  usage_idempotency_id: z.string().min(1).optional(),
   num_images: z.number().int().min(1).max(4),
   generation_total_cost_usd: z.number().nonnegative(),
   generation_total_time_seconds: z.number().nonnegative(),

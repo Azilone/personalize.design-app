@@ -9,6 +9,7 @@ import {
   data,
   Link,
   useActionData,
+  useLoaderData,
   useLocation,
   useNavigate,
   useNavigation,
@@ -23,6 +24,7 @@ import {
   validatePromptVariableReferences,
 } from "../../../../lib/prompt-variables";
 import { createTemplate } from "../../../../services/templates/templates.server";
+import { getAllModelConfigs } from "../../../../services/fal/registry";
 import {
   MVP_GENERATION_MODEL_ID,
   MVP_PRICE_USD_PER_GENERATION,
@@ -38,9 +40,12 @@ import logger from "../../../../lib/logger";
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
 
+  const modelConfigs = getAllModelConfigs();
+
   return {
     mode: "create" as const,
     template: null,
+    modelConfigs,
   };
 };
 
@@ -81,6 +86,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     prompt,
     variable_names_json,
     aspect_ratio,
+    generation_model_identifier,
+    price_usd_per_generation,
   } = parsed.data;
 
   // Parse variable names from JSON
@@ -137,8 +144,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       photoRequired: true,
       textInputEnabled: text_input_enabled === "true",
       prompt: prompt || null,
-      generationModelIdentifier: MVP_GENERATION_MODEL_ID,
-      priceUsdPerGeneration: MVP_PRICE_USD_PER_GENERATION,
+      generationModelIdentifier:
+        generation_model_identifier ?? MVP_GENERATION_MODEL_ID,
+      priceUsdPerGeneration:
+        price_usd_per_generation ?? MVP_PRICE_USD_PER_GENERATION,
       aspectRatio: aspect_ratio,
       variableNames,
     });
@@ -171,6 +180,17 @@ export const headers: HeadersFunction = () => {
 };
 
 export default function TemplateNewPage() {
+  const loaderData = useLoaderData<typeof loader>();
+  // Use a type assertion if TS complains about missing modelConfigs in the generic type inference
+  // because useLoaderData infers from the loader return type which might be implicit
+  const { modelConfigs } = loaderData as unknown as {
+    modelConfigs: {
+      modelId: string;
+      displayName: string;
+      pricePerImage: number;
+    }[];
+  };
+
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
   const navigation = useNavigation();
@@ -209,12 +229,27 @@ export default function TemplateNewPage() {
   // State for form fields
   const [templateName, setTemplateName] = useState("");
   const [textInputEnabled, setTextInputEnabled] = useState(false);
-  const [aspectRatio, setAspectRatio] = useState(
-    DEFAULT_TEMPLATE_ASPECT_RATIO,
-  );
+  const [aspectRatio, setAspectRatio] = useState(DEFAULT_TEMPLATE_ASPECT_RATIO);
   const [prompt, setPrompt] = useState("");
   const [variableNames, setVariableNames] = useState<string[]>([]);
   const [variableInput, setVariableInput] = useState("");
+
+  // Generation settings
+  const [generationModel, setGenerationModel] = useState(
+    MVP_GENERATION_MODEL_ID,
+  );
+  const [generationPrice, setGenerationPrice] = useState(
+    MVP_PRICE_USD_PER_GENERATION,
+  );
+
+  // Update price when model changes
+  const handleModelChange = (newModelId: string) => {
+    setGenerationModel(newModelId);
+    const config = modelConfigs.find((c) => c.modelId === newModelId);
+    if (config) {
+      setGenerationPrice(config.pricePerImage);
+    }
+  };
 
   // Serialize variable names to JSON for form submission
   const variableNamesJson = JSON.stringify(variableNames);
@@ -275,6 +310,16 @@ export default function TemplateNewPage() {
               name="variable_names_json"
               value={variableNamesJson}
             />
+            <input
+              type="hidden"
+              name="generation_model_identifier"
+              value={generationModel}
+            />
+            <input
+              type="hidden"
+              name="price_usd_per_generation"
+              value={generationPrice}
+            />
 
             <s-stack direction="block" gap="base">
               <s-text-field
@@ -331,7 +376,8 @@ export default function TemplateNewPage() {
                   </span>
                 </div>
                 <s-text color="subdued">
-                  Used when "Cover entire print area" is disabled in previews.
+                  Used when &quot;Cover entire print area&quot; is disabled in
+                  previews.
                 </s-text>
               </s-stack>
 
@@ -403,6 +449,47 @@ export default function TemplateNewPage() {
               </s-stack>
 
               <s-divider />
+
+              <s-stack direction="block" gap="small">
+                <label htmlFor="generation_model">
+                  <strong>Model</strong>
+                </label>
+                <div style={{ position: "relative" }}>
+                  <select
+                    id="generation_model"
+                    value={generationModel}
+                    onChange={(e) => handleModelChange(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px 32px 8px 12px",
+                      border: "1px solid #ccc",
+                      borderRadius: "4px",
+                      fontFamily: "inherit",
+                      fontSize: "inherit",
+                      appearance: "none",
+                    }}
+                  >
+                    {modelConfigs.map((config) => (
+                      <option key={config.modelId} value={config.modelId}>
+                        {config.displayName}
+                      </option>
+                    ))}
+                  </select>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      position: "absolute",
+                      right: "12px",
+                      top: "50%",
+                      transform: "translateY(-50%)",
+                      pointerEvents: "none",
+                      color: "#666",
+                    }}
+                  >
+                    ▼
+                  </span>
+                </div>
+              </s-stack>
 
               <s-stack direction="block" gap="small">
                 <label htmlFor="prompt">

@@ -1,7 +1,10 @@
 import { z } from "zod";
 import {
   MVP_GENERATION_MODEL_ID,
+  ALLOWED_GENERATION_MODEL_IDS,
   MVP_PRICE_USD_PER_GENERATION,
+  MODEL_PRICES,
+  type GenerationModelId,
 } from "../lib/generation-settings";
 import {
   DEFAULT_TEMPLATE_ASPECT_RATIO,
@@ -56,10 +59,15 @@ const devOnboardingResetSchema = z.object({
   intent: z.literal("dev_onboarding_reset"),
 });
 
+const devReconcileBillingSchema = z.object({
+  intent: z.literal("dev_reconcile_billing"),
+});
+
 export const devBillingActionSchema = z.discriminatedUnion("intent", [
   devBillingResetSchema,
   devCancelSubscriptionSchema,
   devOnboardingResetSchema,
+  devReconcileBillingSchema,
 ]);
 
 export type DevBillingActionInput = z.infer<typeof devBillingActionSchema>;
@@ -173,63 +181,77 @@ export type FinishOnboardingActionInput = z.infer<
  * Template variable_names is sent as JSON string to avoid FormData array issues
  * with Object.fromEntries. Parse and validate in the route action.
  */
-const templateCreateSchema = z.object({
-  intent: z.literal("template_create"),
-  template_name: z.string().min(1, "Template name is required"),
-  text_input_enabled: z.enum(["true", "false"]).default("false"),
-  aspect_ratio: z
-    .enum(TEMPLATE_ASPECT_RATIOS)
-    .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
-  prompt: z
-    .string()
-    .max(5000, "Prompt must be less than 5000 characters")
-    .optional(),
-  // Variable names as JSON array string (FormData workaround)
-  variable_names_json: z.string().default("[]"),
-  // Generation settings (MVP: single allowed model)
-  generation_model_identifier: z
-    .literal(MVP_GENERATION_MODEL_ID, {
-      message: `Model must be ${MVP_GENERATION_MODEL_ID}`,
-    })
-    .optional(),
-  price_usd_per_generation: z.coerce
-    .number()
-    .refine((val) => val === MVP_PRICE_USD_PER_GENERATION, {
-      message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
-    })
-    .optional(),
-  // Remove background setting
-  remove_background_enabled: z.enum(["true", "false"]).default("false"),
-});
+const templateCreateSchema = z
+  .object({
+    intent: z.literal("template_create"),
+    template_name: z.string().min(1, "Template name is required"),
+    text_input_enabled: z.enum(["true", "false"]).default("false"),
+    aspect_ratio: z
+      .enum(TEMPLATE_ASPECT_RATIOS)
+      .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
+    prompt: z
+      .string()
+      .max(5000, "Prompt must be less than 5000 characters")
+      .optional(),
+    // Variable names as JSON array string (FormData workaround)
+    variable_names_json: z.string().default("[]"),
+    // Generation settings
+    generation_model_identifier: z
+      .enum(ALLOWED_GENERATION_MODEL_IDS)
+      .optional(),
+    price_usd_per_generation: z.coerce.number().positive().optional(),
+    // Remove background setting
+    remove_background_enabled: z.enum(["true", "false"]).default("false"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.generation_model_identifier && data.price_usd_per_generation) {
+      const expectedPrice =
+        MODEL_PRICES[data.generation_model_identifier as GenerationModelId];
+      if (data.price_usd_per_generation !== expectedPrice) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Price must be ${expectedPrice} for model ${data.generation_model_identifier}`,
+          path: ["price_usd_per_generation"],
+        });
+      }
+    }
+  });
 
-const templateUpdateSchema = z.object({
-  intent: z.literal("template_update"),
-  template_id: z.string().min(1, "Template ID is required"),
-  template_name: z.string().min(1, "Template name is required"),
-  text_input_enabled: z.enum(["true", "false"]).default("false"),
-  aspect_ratio: z
-    .enum(TEMPLATE_ASPECT_RATIOS)
-    .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
-  prompt: z
-    .string()
-    .max(5000, "Prompt must be less than 5000 characters")
-    .optional(),
-  variable_names_json: z.string().default("[]"),
-  // Generation settings (MVP: single allowed model)
-  generation_model_identifier: z
-    .literal(MVP_GENERATION_MODEL_ID, {
-      message: `Model must be ${MVP_GENERATION_MODEL_ID}`,
-    })
-    .optional(),
-  price_usd_per_generation: z.coerce
-    .number()
-    .refine((val) => val === MVP_PRICE_USD_PER_GENERATION, {
-      message: `Price must be ${MVP_PRICE_USD_PER_GENERATION}`,
-    })
-    .optional(),
-  // Remove background setting
-  remove_background_enabled: z.enum(["true", "false"]).default("false"),
-});
+const templateUpdateSchema = z
+  .object({
+    intent: z.literal("template_update"),
+    template_id: z.string().min(1, "Template ID is required"),
+    template_name: z.string().min(1, "Template name is required"),
+    text_input_enabled: z.enum(["true", "false"]).default("false"),
+    aspect_ratio: z
+      .enum(TEMPLATE_ASPECT_RATIOS)
+      .default(DEFAULT_TEMPLATE_ASPECT_RATIO),
+    prompt: z
+      .string()
+      .max(5000, "Prompt must be less than 5000 characters")
+      .optional(),
+    variable_names_json: z.string().default("[]"),
+    // Generation settings
+    generation_model_identifier: z
+      .enum(ALLOWED_GENERATION_MODEL_IDS)
+      .optional(),
+    price_usd_per_generation: z.coerce.number().positive().optional(),
+    // Remove background setting
+    remove_background_enabled: z.enum(["true", "false"]).default("false"),
+  })
+  .superRefine((data, ctx) => {
+    if (data.generation_model_identifier && data.price_usd_per_generation) {
+      const expectedPrice =
+        MODEL_PRICES[data.generation_model_identifier as GenerationModelId];
+      if (data.price_usd_per_generation !== expectedPrice) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Price must be ${expectedPrice} for model ${data.generation_model_identifier}`,
+          path: ["price_usd_per_generation"],
+        });
+      }
+    }
+  });
 
 const templateDeleteSchema = z.object({
   intent: z.literal("template_delete"),

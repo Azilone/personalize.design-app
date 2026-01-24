@@ -257,16 +257,18 @@ export const templateTestGenerate = inngest.createFunction(
     });
 
     // Check billing guardrails before incurring costs
-    const estimatedCostUsd =
-      MVP_PRICE_USD_PER_GENERATION * payload.num_images +
-      (payload.remove_background_enabled
-        ? REMOVE_BG_PRICE_USD * payload.num_images
-        : 0);
+    const estimatedGenerationCostUsd =
+      MVP_PRICE_USD_PER_GENERATION * payload.num_images;
+    const estimatedRemoveBgCostUsd = payload.remove_background_enabled
+      ? REMOVE_BG_PRICE_USD * payload.num_images
+      : 0;
+    const estimatedTotalCostUsd =
+      estimatedGenerationCostUsd + estimatedRemoveBgCostUsd;
 
     await step.run("check-billing-guardrails", async () => {
       const check = await checkBillableActionAllowed({
         shopId: payload.shop_id,
-        costMills: usdToMills(estimatedCostUsd),
+        costMills: usdToMills(estimatedTotalCostUsd),
       });
 
       if (!check.allowed) {
@@ -284,7 +286,7 @@ export const templateTestGenerate = inngest.createFunction(
       createBillableEvent({
         shopId: payload.shop_id,
         eventType: BillableEventType.generation,
-        amountMills: usdToMills(estimatedCostUsd),
+        amountMills: usdToMills(estimatedGenerationCostUsd),
         idempotencyKey: billableEventIdempotencyKey,
         description: "template_test_generation",
         sourceId: payload.template_id,
@@ -347,6 +349,7 @@ export const templateTestGenerate = inngest.createFunction(
     const nextPayload = templateTestRemoveBackgroundPayloadSchema.parse({
       shop_id: payload.shop_id,
       template_id: payload.template_id,
+      usage_idempotency_id: usageIdempotencyId,
       num_images: payload.num_images,
       generation_total_cost_usd: generationResult.totalCostUsd,
       generation_total_time_seconds: generationResult.totalTimeSeconds,
@@ -402,7 +405,9 @@ export const templateTestRemoveBackground = inngest.createFunction(
 
     const payload = parsed.data;
     const usageIdempotencyId =
-      event.id ?? `${payload.shop_id}:${payload.template_id}`;
+      payload.usage_idempotency_id ??
+      event.id ??
+      `${payload.shop_id}:${payload.template_id}`;
 
     // Check billing guardrails before incurring costs
     const estimatedRemoveBgCostUsd =
@@ -484,11 +489,23 @@ export const templateTestRemoveBackground = inngest.createFunction(
 
     // AC 5, 6: Confirm billable event and record usage charge only after
     // asset is persisted (recordTestGeneration above)
+    await step.run("confirm-generation-billable-event-and-charge", async () =>
+      confirmAndCharge({
+        shopId: payload.shop_id,
+        idempotencyKey: buildBillableEventIdempotencyKey(
+          "template_test_generation",
+          usageIdempotencyId,
+        ),
+        totalCostUsd: payload.generation_total_cost_usd,
+        description: "template_test_generation",
+      }),
+    );
+
     await step.run("confirm-billable-event-and-charge", async () =>
       confirmAndCharge({
         shopId: payload.shop_id,
         idempotencyKey: billableEventIdempotencyKey,
-        totalCostUsd: finalResult.total_cost_usd,
+        totalCostUsd: removeBgTotalCost,
         description: "template_test_remove_background",
       }),
     );
@@ -573,9 +590,19 @@ export const templateTestGenerateFailure = inngest.createFunction(
     const eventType = isRemoveBg
       ? "template_test_remove_background"
       : "template_test_generation";
-    const usageIdempotencyId =
+    const removeBgPayload = isRemoveBg
+      ? (payload.data as TemplateTestRemoveBackgroundPayload)
+      : null;
+
+    const defaultIdempotencyId =
       event.data.event.id ??
       `${payload.data.shop_id}:${payload.data.template_id}`;
+
+    const usageIdempotencyId =
+      isRemoveBg && removeBgPayload?.usage_idempotency_id
+        ? removeBgPayload.usage_idempotency_id
+        : defaultIdempotencyId;
+
     const billableEventIdempotencyKey = buildBillableEventIdempotencyKey(
       eventType,
       usageIdempotencyId,

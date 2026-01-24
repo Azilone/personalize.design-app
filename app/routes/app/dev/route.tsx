@@ -21,6 +21,7 @@ import {
 } from "../../../services/shops/plan.server";
 import { cancelSubscription } from "../../../services/shopify/billing.server";
 import { resetOnboardingForDev } from "../../../services/shops/onboarding-reset.server";
+import { waivePendingTemplateTestGenerationEvents } from "../../../services/shopify/billable-events.server";
 import logger from "../../../lib/logger";
 import { captureEvent } from "../../../lib/posthog.server";
 import type { AppLoaderData } from "../route";
@@ -128,6 +129,20 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return redirect(buildEmbeddedRedirectPath(request, "/app"));
   }
 
+  if (parsed.data.intent === "dev_reconcile_billing") {
+    const result = await waivePendingTemplateTestGenerationEvents(shopId);
+    captureEvent("dev.billing_reconcile", {
+      shop_id: shopId,
+      updated_count: result.updated,
+    });
+    return data({
+      success: {
+        code: "billing_reconciled",
+        message: `Waived ${result.updated} pending test generation events.`,
+      },
+    });
+  }
+
   return data(
     { error: { code: "unsupported_intent", message: "Unsupported action." } },
     { status: 400 },
@@ -149,6 +164,10 @@ export default function DevToolsBilling() {
   const planStatus = appData?.planStatus ?? null;
   const subscriptionId = appData?.subscriptionId ?? null;
   const subscriptionStatus = appData?.subscriptionStatus ?? null;
+  const actionError =
+    actionData && "error" in actionData ? actionData.error : null;
+  const actionSuccess =
+    actionData && "success" in actionData ? actionData.success : null;
 
   return (
     <s-page heading="Dev tools (dev)">
@@ -168,9 +187,14 @@ export default function DevToolsBilling() {
       </s-section>
 
       <s-section heading="Actions">
-        {actionData?.error ? (
+        {actionError ? (
           <s-banner tone="critical">
-            <s-text>{actionData.error.message}</s-text>
+            <s-text>{actionError.message}</s-text>
+          </s-banner>
+        ) : null}
+        {actionSuccess ? (
+          <s-banner tone="success">
+            <s-text>{actionSuccess.message}</s-text>
           </s-banner>
         ) : null}
 
@@ -229,6 +253,19 @@ export default function DevToolsBilling() {
               Reset local billing state only
             </s-button>
           </Form>
+        </s-box>
+
+        <s-box padding="base">
+          <Form method="post">
+            <input type="hidden" name="intent" value="dev_reconcile_billing" />
+            <s-button disabled={!showDanger} tone="critical" type="submit">
+              Waive pending test generation billable events
+            </s-button>
+          </Form>
+          <s-paragraph>
+            Use this if test generation events are stuck in pending after a
+            remove-background flow. This marks them waived in the ledger.
+          </s-paragraph>
         </s-box>
       </s-section>
     </s-page>

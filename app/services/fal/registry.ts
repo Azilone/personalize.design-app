@@ -8,6 +8,7 @@
 import type { ModelAdapter, ModelConfig } from "./types";
 import { GenerationError } from "./types";
 import { seedreamV4EditAdapter } from "./models/seedream-v4-edit";
+import { reveFastRemixAdapter } from "./models/reve-fast-remix";
 
 /**
  * Registry of all available model adapters.
@@ -15,6 +16,7 @@ import { seedreamV4EditAdapter } from "./models/seedream-v4-edit";
  */
 const modelRegistry: Map<string, ModelAdapter> = new Map([
   [seedreamV4EditAdapter.config.modelId, seedreamV4EditAdapter],
+  [reveFastRemixAdapter.config.modelId, reveFastRemixAdapter],
 ]);
 
 /**

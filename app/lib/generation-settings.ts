@@ -16,6 +16,16 @@ export const MVP_GENERATION_MODEL_ID = "fal-ai/bytedance/seedream/v4/edit";
 export const MVP_GENERATION_MODEL_DISPLAY_NAME = "Seedream v4 Edit (fal.ai)";
 
 /**
+ * Reve Fast Remix model ID.
+ */
+export const REVE_FAST_REMIX_MODEL_ID = "fal-ai/reve/fast/remix";
+
+/**
+ * Display name for Reve Fast Remix.
+ */
+export const REVE_FAST_REMIX_DISPLAY_NAME = "Reve Fast Remix (fal.ai)";
+
+/**
  * Price per generated image in USD.
  * Applies to: generate, regenerate, remove background.
  * NOT billed: Printify mockups.
@@ -26,12 +36,23 @@ export const MVP_PRICE_USD_PER_GENERATION = 0.05;
 /**
  * Allowed model identifiers for validation (MVP: single model).
  */
-export const ALLOWED_GENERATION_MODEL_IDS = [MVP_GENERATION_MODEL_ID] as const;
+export const ALLOWED_GENERATION_MODEL_IDS = [
+  MVP_GENERATION_MODEL_ID,
+  REVE_FAST_REMIX_MODEL_ID,
+] as const;
 
 /**
  * Type for allowed generation model identifiers.
  */
 export type GenerationModelId = (typeof ALLOWED_GENERATION_MODEL_IDS)[number];
+
+/**
+ * Mapping of model IDs to their price per generation in USD.
+ */
+export const MODEL_PRICES: Record<GenerationModelId, number> = {
+  [MVP_GENERATION_MODEL_ID]: MVP_PRICE_USD_PER_GENERATION,
+  [REVE_FAST_REMIX_MODEL_ID]: MVP_PRICE_USD_PER_GENERATION,
+};
 
 /**
  * Validates that a model identifier is in the allowed list.
@@ -52,4 +73,3 @@ export const TEMPLATE_TEST_LIMIT_PER_MONTH = 50;
  * BiRefNet v2 on fal.ai
  */
 export const REMOVE_BG_PRICE_USD = 0.025;
-

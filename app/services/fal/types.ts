@@ -22,6 +22,8 @@ export interface GenerationInput {
   seed?: number;
   /** Optional target image size for generation */
   imageSize?: { width: number; height: number };
+  /** Optional aspect ratio for generation (used by Reve model) */
+  aspectRatio?: "16:9" | "9:16" | "3:2" | "2:3" | "4:3" | "3:4" | "1:1";
 }
 
 /**
