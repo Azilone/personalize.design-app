@@ -20,16 +20,32 @@ if (mount) {
   // Read data attributes
   const shopDomain = mount.dataset.shopDomain;
   const productId = mount.dataset.productId;
-  const templateId = mount.dataset.templateId;
+  const productTitle = mount.dataset.productTitle;
+  const variantTitle = mount.dataset.variantTitle;
+  const productImageUrl = mount.dataset.productImage;
+  const templateIdRaw = mount.dataset.templateId;
+  const templateId = templateIdRaw ? templateIdRaw : undefined;
+  const personalizationEnabledRaw = mount.dataset.personalizationEnabled;
   const personalizationEnabled =
-    mount.dataset.personalizationEnabled === "true";
+    personalizationEnabledRaw === undefined || personalizationEnabledRaw === ""
+      ? undefined
+      : personalizationEnabledRaw === "true";
+  const textEnabledRaw = mount.dataset.textEnabled;
+  const textEnabled =
+    textEnabledRaw === undefined || textEnabledRaw === ""
+      ? undefined
+      : textEnabledRaw === "true";
 
   // Initialize store
   useStepperStore.getState().setConfig({
     shopDomain,
     productId,
+    productTitle,
+    variantTitle,
+    productImageUrl,
     templateId,
     personalizationEnabled,
+    textEnabled,
   });
 
   createRoot(mount).render(<StepperApp />);

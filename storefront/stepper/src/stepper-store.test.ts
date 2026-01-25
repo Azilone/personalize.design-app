@@ -50,9 +50,25 @@ describe("useStepperStore", () => {
       productId: "1",
       templateId: "t1",
       personalizationEnabled: true,
+      textEnabled: false,
     };
     const { setConfig } = useStepperStore.getState();
     setConfig(config);
     expect(useStepperStore.getState().config).toEqual(config);
+  });
+
+  it("manages input state", () => {
+    const { setFile, setTextInput, resetInputs } = useStepperStore.getState();
+    const file = new File(["test"], "test.png", { type: "image/png" });
+
+    setFile(file);
+    expect(useStepperStore.getState().file).toBe(file);
+
+    setTextInput("Hello");
+    expect(useStepperStore.getState().textInput).toBe("Hello");
+
+    resetInputs();
+    expect(useStepperStore.getState().file).toBeNull();
+    expect(useStepperStore.getState().textInput).toBe("");
   });
 });
