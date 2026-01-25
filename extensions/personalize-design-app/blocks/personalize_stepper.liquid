@@ -9,7 +9,10 @@
   data-pd-stepper
   data-shop-domain="{{ shop.permanent_domain }}"
   data-product-id="{{ product.id }}"
-  {% if pd_config %}
+  {% if pd_config.value %}
+    data-template-id="{{ pd_config.value.template_id }}"
+    data-personalization-enabled="{{ pd_config.value.personalization_enabled }}"
+  {% elsif pd_config %}
     data-template-id="{{ pd_config.template_id }}"
     data-personalization-enabled="{{ pd_config.personalization_enabled }}"
   {% endif %}
