@@ -1,6 +1,6 @@
 import { BillableEventStatus, BillableEventType } from "@prisma/client";
 import prisma from "../../db.server";
-import { millsToUsd, usdToMills } from "./billing-guardrails";
+import { millsToUsd } from "./billing-guardrails";
 import {
   trackBillableEventCreated,
   trackBillableEventConfirmed,

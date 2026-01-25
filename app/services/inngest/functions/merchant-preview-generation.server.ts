@@ -14,10 +14,6 @@ import {
   REMOVE_BG_PRICE_USD,
 } from "../../../lib/generation-settings";
 import logger from "../../../lib/logger";
-import {
-  buildUsageChargeIdempotencyKey,
-  recordUsageCharge,
-} from "../../shopify/billing.server";
 import { usdToMills } from "../../shopify/billing-guardrails";
 import { checkBillableActionAllowed } from "../../shopify/billing-guardrails.server";
 import {

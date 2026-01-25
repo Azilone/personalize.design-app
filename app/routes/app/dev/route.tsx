@@ -310,7 +310,8 @@ export default function DevToolsBilling() {
                 </s-button>
               </Form>
               <s-paragraph>
-                Cancels Shopify subscription and resets local plan to 'none'.
+                Cancels Shopify subscription and resets local plan to
+                &apos;none&apos;.
               </s-paragraph>
             </s-box>
 
@@ -394,7 +395,8 @@ export default function DevToolsBilling() {
                 </s-button>
               </Form>
               <s-paragraph>
-                Fixes stuck 'pending' generation events by marking them waived.
+                Fixes stuck &apos;pending&apos; generation events by marking
+                them waived.
               </s-paragraph>
             </s-box>
           </s-card>

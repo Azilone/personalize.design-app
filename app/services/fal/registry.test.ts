@@ -48,7 +48,7 @@ describe("fal.ai registry", () => {
     it("should return array of all registered model configs", () => {
       const configs = getAllModelConfigs();
 
-      expect(configs).toHaveLength(1);
+      expect(configs).toHaveLength(2);
       expect(configs[0].modelId).toBe(MODEL_ID);
       expect(configs[0].displayName).toContain("Seedream");
       expect(configs[0].pricePerImage).toBeGreaterThan(0);
@@ -60,7 +60,7 @@ describe("fal.ai registry", () => {
     it("should return count of registered models", () => {
       const count = getRegisteredModelCount();
 
-      expect(count).toBe(1);
+      expect(count).toBe(2);
     });
   });
 });

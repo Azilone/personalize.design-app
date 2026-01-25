@@ -1,0 +1,37 @@
+import path from "node:path";
+
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+const rootDir = __dirname;
+
+export default defineConfig({
+  root: rootDir,
+  plugins: [tailwindcss()],
+  build: {
+    outDir: path.resolve(
+      rootDir,
+      "../../extensions/personalize-design-app/assets",
+    ),
+    emptyOutDir: false,
+    assetsDir: ".",
+    cssCodeSplit: false,
+    rollupOptions: {
+      input: {
+        "personalize-stepper": path.resolve(
+          rootDir,
+          "src/personalize-stepper.tsx",
+        ),
+      },
+      output: {
+        entryFileNames: "[name].js",
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name && assetInfo.name.endsWith(".css")) {
+            return "personalize-stepper.css";
+          }
+          return "[name][extname]";
+        },
+      },
+    },
+  },
+});

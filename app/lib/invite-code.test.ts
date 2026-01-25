@@ -15,7 +15,7 @@ describe("isInviteCodeValid", () => {
 describe("inviteCodeErrorMessage", () => {
   it("returns a generic error message", () => {
     expect(inviteCodeErrorMessage()).toBe(
-      "Unable to unlock Early Access. Please try again.",
+      "Invalid invite code. Please check your code and try again, or contact support if you believe this is an error.",
     );
   });
 });

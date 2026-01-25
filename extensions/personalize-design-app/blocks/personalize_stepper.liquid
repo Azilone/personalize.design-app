@@ -1,0 +1,14 @@
+{% comment %}Personalize Stepper block{% endcomment %}
+{{ 'personalize-stepper.css' | asset_url | stylesheet_tag }}
+<script src="{{ 'personalize-stepper.js' | asset_url }}" defer></script>
+
+<div id="pd-stepper-root" data-pd-stepper></div>
+
+{% schema %}
+{
+  "name": "Personalize Stepper",
+  "target": "section",
+  "templates": ["product"],
+  "settings": []
+}
+{% endschema %}

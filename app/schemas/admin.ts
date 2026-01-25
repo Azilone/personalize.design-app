@@ -1,8 +1,6 @@
 import { z } from "zod";
 import {
-  MVP_GENERATION_MODEL_ID,
   ALLOWED_GENERATION_MODEL_IDS,
-  MVP_PRICE_USD_PER_GENERATION,
   MODEL_PRICES,
   type GenerationModelId,
 } from "../lib/generation-settings";

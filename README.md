@@ -28,6 +28,16 @@ shopify app init --template=https://github.com/Shopify/shopify-app-template-reac
 shopify app dev
 ```
 
+### Theme App Extension Assets
+
+The personalization stepper assets are built with Vite into
+`extensions/personalize-design-app/assets/`.
+
+```shell
+pnpm run dev
+pnpm run build:extension
+```
+
 Press P to open the URL to your app. Once you click install, you can start development.
 
 Local development is powered by [the Shopify CLI](https://shopify.dev/docs/apps/tools/cli). It logs into your account, connects to an app, provides environment variables, updates remote config, creates a tunnel and provides commands to generate extensions.

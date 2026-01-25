@@ -43,7 +43,6 @@ import logger from "../../../../lib/logger";
 import { uploadFileAndGetReadUrl } from "../../../../services/supabase/storage";
 import {
   MVP_GENERATION_MODEL_ID,
-  MVP_GENERATION_MODEL_DISPLAY_NAME,
   MVP_PRICE_USD_PER_GENERATION,
   REMOVE_BG_PRICE_USD,
 } from "../../../../lib/generation-settings";
@@ -583,7 +582,7 @@ export const headers: HeadersFunction = () => {
 };
 
 export default function TemplateEditPage() {
-  const { template, testResults, pollInterval, billing, modelConfigs } =
+  const { template, testResults, pollInterval, billing } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -661,21 +660,12 @@ export default function TemplateEditPage() {
   const isDev = process.env.NODE_ENV === "development";
 
   // Generation settings (MVP: use constants, read persisted from template)
-  const [generationModel, setGenerationModel] = useState(
+  const [generationModel] = useState(
     template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
   );
-  const [generationPrice, setGenerationPrice] = useState(
+  const [generationPrice] = useState(
     template?.priceUsdPerGeneration ?? MVP_PRICE_USD_PER_GENERATION,
   );
-
-  // Update price when model changes
-  const handleModelChange = (newModelId: string) => {
-    setGenerationModel(newModelId);
-    const config = modelConfigs.find((c) => c.modelId === newModelId);
-    if (config) {
-      setGenerationPrice(config.pricePerImage);
-    }
-  };
 
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
@@ -1052,9 +1042,8 @@ export default function TemplateEditPage() {
                 <div style={{ position: "relative" }}>
                   <select
                     id="generation_model"
-                    name="generation_model_identifier"
                     value={generationModel}
-                    onChange={(e) => handleModelChange(e.target.value)}
+                    disabled
                     style={{
                       width: "100%",
                       padding: "8px 32px 8px 12px",
@@ -1062,14 +1051,12 @@ export default function TemplateEditPage() {
                       borderRadius: "4px",
                       fontFamily: "inherit",
                       fontSize: "inherit",
+                      backgroundColor: "#f5f5f5",
+                      cursor: "not-allowed",
                       appearance: "none",
                     }}
                   >
-                    {modelConfigs.map((config) => (
-                      <option key={config.modelId} value={config.modelId}>
-                        {config.displayName}
-                      </option>
-                    ))}
+                    <option value={MVP_GENERATION_MODEL_ID}>Flux (MVP)</option>
                   </select>
                   <span
                     aria-hidden="true"

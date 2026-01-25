@@ -1,6 +1,6 @@
 # Story 6.0: Setup Extension Build Pipeline (Tailwind + Zustand + Vite)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -21,15 +21,15 @@ so that the personalization hub UI can be authored in modern UI primitives and r
 
 ## Tasks / Subtasks
 
-- [ ] Define the personalization hub extension entrypoints and asset outputs (AC: 1, 2, 5)
-  - [ ] Add/create the Liquid block for the storefront stepper mount
-  - [ ] Create JS/CSS entrypoints for the storefront bundle
-- [ ] Configure Tailwind + shadcn-style tokens for the extension bundle (AC: 3)
-  - [ ] Scope Tailwind build to extension assets only
-- [ ] Add Zustand to the storefront bundle entrypoint and ensure isolation from admin app (AC: 4)
-- [ ] Update Vite build pipeline to build extension assets alongside app build (AC: 2, 5, 6)
-  - [ ] Confirm dev workflow for building extension assets locally
-- [ ] Add minimal verification notes (manual) and usage instructions (AC: 6)
+- [x] Define the personalization hub extension entrypoints and asset outputs (AC: 1, 2, 5)
+  - [x] Add/create the Liquid block for the storefront stepper mount
+  - [x] Create JS/CSS entrypoints for the storefront bundle
+- [x] Configure Tailwind + shadcn-style tokens for the extension bundle (AC: 3)
+  - [x] Scope Tailwind build to extension assets only
+- [x] Add Zustand to the storefront bundle entrypoint and ensure isolation from admin app (AC: 4)
+- [x] Update Vite build pipeline to build extension assets alongside app build (AC: 2, 5, 6)
+  - [x] Confirm dev workflow for building extension assets locally
+- [x] Add minimal verification notes (manual) and usage instructions (AC: 6)
 
 ## Dev Notes
 
@@ -60,6 +60,40 @@ OpenCode (model version unknown)
 
 ### Debug Log References
 
+- pnpm test (pass)
+- pnpm lint (pass)
+
 ### Completion Notes List
 
+- Added theme app extension block to mount personalization stepper assets with deferred script loading.
+- Moved storefront stepper source to `storefront/stepper` to keep theme extension directories clean.
+- Added dev script to run Shopify dev server with extension asset watch.
+- Tests: pnpm test, pnpm lint.
+
 ### File List
+
+- \_bmad-output/implementation-artifacts/sprint-status.yaml
+- extensions/personalize-design-app/blocks/personalize_stepper.liquid
+- shopify.app.toml
+- app/routes/app-proxy/route.tsx
+- package.json
+- pnpm-lock.yaml
+- README.md
+- scripts/dev.mjs
+- storefront/stepper/src/personalize-stepper.css
+- storefront/stepper/src/personalize-stepper.tsx
+- storefront/stepper/src/stepper-store.test.ts
+- storefront/stepper/src/stepper-store.ts
+- storefront/stepper/tailwind.config.cjs
+- storefront/stepper/vite.config.ts
+- vite.config.ts
+- extensions/personalize-design-app/src/personalize-stepper.css (removed)
+- extensions/personalize-design-app/src/personalize-stepper.tsx (removed)
+- extensions/personalize-design-app/src/stepper-store.test.ts (removed)
+- extensions/personalize-design-app/src/stepper-store.ts (removed)
+- extensions/personalize-design-app/tailwind.config.cjs (removed)
+- extensions/personalize-design-app/vite.config.ts (removed)
+
+### Change Log
+
+- 2026-01-25: Add storefront extension build pipeline and dev workflow.

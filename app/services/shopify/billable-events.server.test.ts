@@ -46,7 +46,6 @@ import {
   confirmAndCharge,
   listBillableEvents,
   mapDescriptionToEventType,
-  getBillableEventByIdempotencyKey,
 } from "./billable-events.server";
 
 describe("createBillableEvent", () => {

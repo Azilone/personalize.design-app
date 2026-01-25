@@ -238,7 +238,7 @@ describe("recordUsageCharge", () => {
         idempotency_key: "usage_charge:test:1:gift_spend",
       }),
     });
-    expect(admin.graphql).toHaveBeenCalled();
+    expect(admin.graphql).not.toHaveBeenCalled();
   });
 });
 

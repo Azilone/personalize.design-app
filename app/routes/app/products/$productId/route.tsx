@@ -595,48 +595,6 @@ export default function ProductConfigurationPage() {
   const [previewJobId, setPreviewJobId] = useState<string | null>(null);
   const previewPollTimeoutRef = useRef<number | null>(null);
 
-  useEffect(() => {
-    if (isError) {
-      setSelectedTemplateId("");
-      setPersonalizationEnabled(false);
-      return;
-    }
-
-    setSelectedTemplateId(assignment?.templateId ?? noTemplateValue);
-    setPersonalizationEnabled(assignment?.personalizationEnabled ?? false);
-  }, [
-    assignment?.templateId,
-    assignment?.personalizationEnabled,
-    isError,
-    noTemplateValue,
-  ]);
-
-  if (isError || !product) {
-    return (
-      <s-page heading="Product configuration">
-        <s-section heading="Error">
-          <s-stack direction="block" gap="base">
-            <s-banner tone="critical">
-              <s-text>
-                {isError
-                  ? loaderData.error.message
-                  : "Product configuration could not be loaded."}
-              </s-text>
-            </s-banner>
-            <s-button
-              variant="secondary"
-              onClick={() => {
-                navigate(`/app/products${embeddedSearch}`);
-              }}
-            >
-              Back to products
-            </s-button>
-          </s-stack>
-        </s-section>
-      </s-page>
-    );
-  }
-
   const assignedTemplateName = assignment
     ? (templates.find((template) => template.id === assignment.templateId)
         ?.templateName ?? "Unpublished template")
@@ -719,7 +677,33 @@ export default function ProductConfigurationPage() {
         previewPollTimeoutRef.current = null;
       }
     };
-  }, [previewJobId, previewStatus, embeddedSearch]);
+  }, [previewJobId, previewStatus, embeddedSearch, previewFetcher]);
+
+  if (isError || !product) {
+    return (
+      <s-page heading="Product configuration">
+        <s-section heading="Error">
+          <s-stack direction="block" gap="base">
+            <s-banner tone="critical">
+              <s-text>
+                {isError
+                  ? loaderData.error.message
+                  : "Product configuration could not be loaded."}
+              </s-text>
+            </s-banner>
+            <s-button
+              variant="secondary"
+              onClick={() => {
+                navigate(`/app/products${embeddedSearch}`);
+              }}
+            >
+              Back to products
+            </s-button>
+          </s-stack>
+        </s-section>
+      </s-page>
+    );
+  }
 
   return (
     <s-page heading="Product configuration">
@@ -974,34 +958,29 @@ function SimulatorPanel({
       if (fileName && fileName.length > 0) {
         return fileName;
       }
-    } catch (error) {
+    } catch {
       // Error parsing URL - fallback to filename
     }
     return fallback;
   };
 
   const downloadFile = async (url: string, fallbackName: string) => {
-    try {
-      const response = await fetch(url);
-      if (!response.ok) {
-        throw new Error(`Download failed with ${response.status}`);
-      }
-
-      const blob = await response.blob();
-      const objectUrl = window.URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = objectUrl;
-      anchor.download = getDownloadName(url, fallbackName);
-      anchor.rel = "noopener";
-      anchor.style.display = "none";
-      document.body.appendChild(anchor);
-      anchor.click();
-      document.body.removeChild(anchor);
-      window.URL.revokeObjectURL(objectUrl);
-    } catch (error) {
-      // Download failed - error is handled by UI error banner
-      throw error;
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`Download failed with ${response.status}`);
     }
+
+    const blob = await response.blob();
+    const objectUrl = window.URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = objectUrl;
+    anchor.download = getDownloadName(url, fallbackName);
+    anchor.rel = "noopener";
+    anchor.style.display = "none";
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
+    window.URL.revokeObjectURL(objectUrl);
   };
 
   const handleDownloadDesign = async () => {

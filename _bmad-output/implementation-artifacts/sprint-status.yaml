@@ -75,7 +75,7 @@ development_status:
   epic-5-retrospective: optional
 
   epic-6: in-progress
-  6-0-setup-extension-build-pipeline-tailwind-zustand-vite: backlog
+  6-0-setup-extension-build-pipeline-tailwind-zustand-vite: review
   6-1-storefront-trigger-button-and-modal-shell-portal: backlog
   6-2-storefront-input-step-photo-upload-text-validation: backlog
   6-3-generate-raw-design-display-loading-states: backlog

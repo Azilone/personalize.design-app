@@ -548,7 +548,6 @@ export default function TemplateEditPage() {
 
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
-  const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [testVariableValues, setTestVariableValues] = useState<
     Record<string, string>
   >({});
@@ -793,7 +792,8 @@ export default function TemplateEditPage() {
                   </span>
                 </div>
                 <s-text color="subdued">
-                  Used when "Cover entire print area" is disabled in previews.
+                  Used when &quot;Cover entire print area&quot; is disabled in
+                  previews.
                 </s-text>
               </s-stack>
 
@@ -1214,7 +1214,7 @@ export default function TemplateEditPage() {
                     </s-text>
                     {!fakeGeneration && (
                       <s-text color="subdued">
-                        Generation: ${generationPrice.toFixed(2)} ×{" "}
+                        Generation: ${generationPrice.toFixed(2)} &times;{" "}
                         {numImagesToGenerate} = $
                         {estimatedGenerationCost.toFixed(2)}
                         {removeBackgroundEnabled && (
@@ -1223,7 +1223,7 @@ export default function TemplateEditPage() {
                             Remove Background: ${REMOVE_BG_PRICE_USD.toFixed(
                               3,
                             )}{" "}
-                            × {numImagesToGenerate} = $
+                            &times; {numImagesToGenerate} = $
                             {estimatedRemoveBgCost.toFixed(2)}
                           </>
                         )}
