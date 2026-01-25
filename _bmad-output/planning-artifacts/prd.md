@@ -18,7 +18,7 @@ documentCounts:
   researchCount: 0
   brainstormingCount: 1
   projectDocsCount: 0
-workflowType: 'prd'
+workflowType: "prd"
 lastStep: 10
 project_name: personalize-design-app
 author: Kevin
@@ -59,7 +59,7 @@ Printify is the initial supplier integration for the MVP; the longer-term vision
 
 **Merchant (POD seller)**
 
-- **Time-to-first-value:** A merchant can install, set up, and validate a first *sellable* design template in **≤ 30 minutes**.
+- **Time-to-first-value:** A merchant can install, set up, and validate a first _sellable_ design template in **≤ 30 minutes**.
 - **Design quality (merchant signal):** Track **thumbs up/down** on generated outputs.
   - Target: **TBD** thumbs-up rate (start with baseline; iterate).
 - **Iteration efficiency:** Median **≤ 5 generations** before a merchant validates a final design template (hypothesis to validate).
@@ -170,27 +170,31 @@ Sarah is buying a gift (or something for herself). She wants a distinctive, cust
 
 **Rising Action**
 
-- On the product page, she sees the personalization block with a simple flow: upload photo (+ optional text).
-- She generates a preview on the product mockup.
-- If the first result doesn’t feel right, she regenerates (within limits) until it looks great.
+- On the product page, she clicks **"Personalize & Order"** which opens a focused **Modal** (or full-screen experience on mobile).
+- She uploads her photo (+ optional text) and clicks "Generate".
+- While she waits (~10-15s), the interface keeps her engaged.
+- She sees the **Raw Generated Design** first. It looks cool.
+- She clicks "Preview on Product" (or the system auto-triggers it). The system generates real mockups in the background.
+- She views the **Real Product Mockups** (generated asynchronously) to confirm it looks great on the actual item.
 
 **Climax**
 
-She reaches a moment of pride/confidence: “Yes — this looks premium and true to what I want.”
+She reaches a moment of pride/confidence: "Yes — this looks premium and true to what I want."
 
 **Resolution**
 
-She adds to cart and checks out, expecting the delivered product to match what she saw.
+She clicks **"Add to Cart"** _inside the modal_, which adds the specific variation to her cart and closes the experience.
 
 **Where it can fail / recovery**
 
 - Slow generation: impatience → drop-off.
+- Mockup generation delay: user might drop off if waiting too long for the "on-product" view.
 - Preview mismatch: complaint/refund risk.
 - Confusing limits: frustration; needs clear “you have X tries” messaging.
 
 **This journey reveals requirements for**
 
-Fast UX, clear states, preview fidelity, regeneration limits + messaging, cart metadata, post-purchase traceability.
+Fast UX (Modal/Portal), clear states (Input -> Generating -> Result -> Mockup), regeneration limits + messaging, cart metadata, post-purchase traceability.
 
 ---
 
@@ -239,6 +243,7 @@ A support/ops person (either the merchant’s team or your internal ops for earl
 **Climax**
 
 They must resolve the case with minimal back-and-forth:
+
 - either trigger a re-generation within policy
 - or route to a manual designer workflow
 - or issue a refund/partial refund
@@ -268,14 +273,14 @@ Across these journeys, the system needs capabilities in:
 
 ### Detected Innovation Areas
 
-1) **Lightweight creation vs heavy editors (MVP)**
-Instead of a complex layer-based editor/personalization engine, the product aims to let merchants produce a premium, sellable design for any POD product quickly using guided, opinionated **design templates** and fast iteration.
+1. **Lightweight creation vs heavy editors (MVP)**
+   Instead of a complex layer-based editor/personalization engine, the product aims to let merchants produce a premium, sellable design for any POD product quickly using guided, opinionated **design templates** and fast iteration.
 
-2) **Workflow automation for merchant viability**
-The innovation is not only generation, but making the end-to-end workflow viable for merchants: fast time-to-value, predictable cost, reliable fulfillment automation, and clear quality signals.
+2. **Workflow automation for merchant viability**
+   The innovation is not only generation, but making the end-to-end workflow viable for merchants: fast time-to-value, predictable cost, reliable fulfillment automation, and clear quality signals.
 
-3) **AI agents + assisted commerce workflows (Future)**
-Future opportunity includes AI agents that assist sellers (automation of repetitive setup/ops), plus features like “style from inspiration”, multi-platform personalization (e.g., Etsy), and automated copyright checks.
+3. **AI agents + assisted commerce workflows (Future)**
+   Future opportunity includes AI agents that assist sellers (automation of repetitive setup/ops), plus features like “style from inspiration”, multi-platform personalization (e.g., Etsy), and automated copyright checks.
 
 ### Market Context & Competitive Landscape
 
@@ -302,6 +307,7 @@ Incumbent approaches often rely on heavy personalization engines and complex con
 ### Project-Type Overview
 
 personalize-design-app is a B2B SaaS-style Shopify app (multi-tenant) with:
+
 - a merchant admin to configure design templates, products, and spend controls
 - a storefront product-page app block for buyer personalization
 - backend workflows for generation + fulfillment automation + billing
@@ -492,15 +498,15 @@ Billing & safety
 
 ### Storefront Personalization (Buyer)
 
-- FR14: Buyer can open the personalization experience on a product page where the app is enabled.
+- FR14: Buyer can open the personalization experience via a **"Personalize & Order"** trigger (Modal on Desktop; Full-screen on Mobile).
 - FR15: Buyer can upload a photo as part of personalization.
 - FR16: Buyer can optionally provide text input when enabled by the selected design template.
 - FR17: Buyer can select a design template when multiple are available for the product.
-- FR18: Buyer can request generation and receive a generated design image.
+- FR18: Buyer can request generation and receive a generated design image (Raw Design).
 - FR19: System can generate and provide secure access to generated images for buyer preview during the session.
-- FR20: Buyer can preview the generated design on a product mockup.
+- FR20: Buyer can preview the generated design on **Real Product Mockups** (generated asynchronously via backend service/Printify).
 - FR21: Buyer can regenerate a design within merchant-configured limits.
-- FR22: Buyer can add the product to cart with personalization metadata attached to the line item.
+- FR22: Buyer can add the product to cart **directly from the modal** with personalization metadata attached to the line item.
 - FR23: Buyer can see clear messaging when they reach limits or when billing/spend policies affect further generations.
 
 ### Storefront Enablement & Controls
