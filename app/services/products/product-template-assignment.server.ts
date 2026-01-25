@@ -25,6 +25,81 @@ export type ProductTemplateAssignmentSummary = {
   personalizationEnabled: boolean;
 };
 
+export const updateProductPersonalizationMetafield = async (input: {
+  admin: any; // GraphQL client
+  productId: string;
+  templateId: string | null;
+  personalizationEnabled: boolean;
+}) => {
+  const value = input.templateId
+    ? JSON.stringify({
+        template_id: input.templateId,
+        personalization_enabled: input.personalizationEnabled,
+      })
+    : null;
+
+  // If no template, we might want to delete the metafield or set it to null/empty
+  // Setting it to null in the mutation deletes it.
+
+  const productGid = input.productId.startsWith("gid://")
+    ? input.productId
+    : `gid://shopify/Product/${input.productId}`;
+
+  const query = `#graphql
+    mutation updateProductMetafield($input: ProductInput!) {
+      productUpdate(input: $input) {
+        product {
+          id
+          metafields(first: 1) {
+            edges {
+              node {
+                namespace
+                key
+                value
+              }
+            }
+          }
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }`;
+
+  const variables = {
+    input: {
+      id: productGid,
+      metafields: [
+        {
+          namespace: "personalize_design",
+          key: "config",
+          type: "json",
+          value: value,
+        },
+      ],
+    },
+  };
+
+  let data;
+  if (input.admin.graphql) {
+    const response = await input.admin.graphql(query, { variables });
+    data = await response.json();
+  } else {
+    const response = await input.admin.request(query, { variables });
+    data = response;
+  }
+  if (data.data?.productUpdate?.userErrors?.length > 0) {
+    console.error(
+      "Metafield update failed",
+      data.data.productUpdate.userErrors,
+    );
+    throw new Error(data.data.productUpdate.userErrors[0].message);
+  }
+
+  return data.data?.productUpdate?.product;
+};
+
 export const mapProductTemplateAssignmentRecord = (
   record: ProductTemplateAssignment,
 ): ProductTemplateAssignmentDto => {

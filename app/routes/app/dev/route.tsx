@@ -326,27 +326,29 @@ export default function DevToolsBilling() {
           </s-card>
 
           <s-card title="Billing Ledger (Gift)">
-            <s-box padding="base" style={{ display: "flex", gap: "0.5rem" }}>
-              <Form method="post">
-                <input
-                  type="hidden"
-                  name="intent"
-                  value="dev_reset_usage_gift"
-                />
-                <s-button disabled={!showDanger} type="submit">
-                  Reset Gift to Full
-                </s-button>
-              </Form>
-              <Form method="post">
-                <input
-                  type="hidden"
-                  name="intent"
-                  value="dev_consume_usage_gift"
-                />
-                <s-button disabled={!showDanger} type="submit">
-                  Consume Gift
-                </s-button>
-              </Form>
+            <s-box padding="base">
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_reset_usage_gift"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Reset Gift to Full
+                  </s-button>
+                </Form>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_consume_usage_gift"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Consume Gift
+                  </s-button>
+                </Form>
+              </div>
             </s-box>
             <s-paragraph>
               Reset gift to $1.00 or consume it to $0.00 to test paid usage
@@ -355,27 +357,29 @@ export default function DevToolsBilling() {
           </s-card>
 
           <s-card title="Billing Ledger (Paid Spend)">
-            <s-box padding="base" style={{ display: "flex", gap: "0.5rem" }}>
-              <Form method="post">
-                <input
-                  type="hidden"
-                  name="intent"
-                  value="dev_reset_paid_usage"
-                />
-                <s-button disabled={!showDanger} type="submit">
-                  Reset Spend to $0
-                </s-button>
-              </Form>
-              <Form method="post">
-                <input
-                  type="hidden"
-                  name="intent"
-                  value="dev_add_fake_charge"
-                />
-                <s-button disabled={!showDanger} type="submit">
-                  Add Fake $9.97
-                </s-button>
-              </Form>
+            <s-box padding="base">
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_reset_paid_usage"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Reset Spend to $0
+                  </s-button>
+                </Form>
+                <Form method="post">
+                  <input
+                    type="hidden"
+                    name="intent"
+                    value="dev_add_fake_charge"
+                  />
+                  <s-button disabled={!showDanger} type="submit">
+                    Add Fake $9.97
+                  </s-button>
+                </Form>
+              </div>
             </s-box>
             <s-paragraph>
               Reset MTD spend or add fake charges to test cap limits.
