@@ -32,6 +32,7 @@ import {
   clearProductTemplateAssignment,
   getProductTemplateAssignment,
   saveProductTemplateAssignment,
+  updateProductPersonalizationMetafield,
 } from "../../../../services/products/product-template-assignment.server";
 import { createMerchantPreview } from "../../../../services/merchant-previews/merchant-previews.server";
 import {
@@ -116,7 +117,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request, params }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
+  const { session, admin } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
   const formData = await request.formData();
   const parsed = productTemplateAssignmentActionSchema.safeParse(
@@ -466,6 +467,21 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (!templateId) {
     await clearProductTemplateAssignment({ shopId, productId });
 
+    try {
+      await updateProductPersonalizationMetafield({
+        admin,
+        productId,
+        templateId: null,
+        personalizationEnabled: false,
+      });
+    } catch (error) {
+      logger.error(
+        { shop_id: shopId, product_id: productId, err: error },
+        "Failed to clear personalization metafield",
+      );
+      // We don't block the UI success for this, but we log it.
+    }
+
     captureEvent("product_template.assignment_saved", {
       shop_id: shopId,
       product_id: productId,
@@ -497,6 +513,30 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     templateId,
     personalizationEnabled: personalizationRequested,
   });
+
+  try {
+    await updateProductPersonalizationMetafield({
+      admin,
+      productId,
+      templateId,
+      personalizationEnabled: personalizationRequested,
+    });
+  } catch (error) {
+    logger.error(
+      { shop_id: shopId, product_id: productId, err: error },
+      "Failed to update personalization metafield",
+    );
+    return data(
+      {
+        error: {
+          code: "metafield_update_failed",
+          message:
+            "Assignment saved locally but failed to sync to Shopify. Please retry.",
+        },
+      },
+      { status: 500 },
+    );
+  }
 
   logger.info(
     {

@@ -2,7 +2,18 @@
 {{ 'personalize-stepper.css' | asset_url | stylesheet_tag }}
 <script src="{{ 'personalize-stepper.js' | asset_url }}" defer></script>
 
-<div id="pd-stepper-root" data-pd-stepper></div>
+{% assign pd_config = product.metafields.personalize_design.config %}
+
+<div 
+  id="pd-stepper-root" 
+  data-pd-stepper
+  data-shop-domain="{{ shop.permanent_domain }}"
+  data-product-id="{{ product.id }}"
+  {% if pd_config %}
+    data-template-id="{{ pd_config.template_id }}"
+    data-personalization-enabled="{{ pd_config.personalization_enabled }}"
+  {% endif %}
+></div>
 
 {% schema %}
 {

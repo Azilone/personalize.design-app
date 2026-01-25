@@ -1,8 +1,19 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
+@theme {
+  --font-display:
+    "Fraunces", "Iowan Old Style", "Palatino", "Times New Roman", serif;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+}
+
+#pd-stepper-root {
   --background: 0 0% 100%;
   --foreground: 222.2 84% 4.9%;
   --primary: 220 90% 56%;
@@ -11,9 +22,19 @@
   --muted-foreground: 215.4 16.3% 46.9%;
   --border: 214.3 31.8% 91.4%;
   --radius: 0.75rem;
+
+  font-family: var(--font-display);
 }
 
-.pd-stepper-shell {
-  font-family:
-    "Fraunces", "Iowan Old Style", "Palatino", "Times New Roman", serif;
+#pd-stepper-root {
+  --background: 0 0% 100%;
+  --foreground: 222.2 84% 4.9%;
+  --primary: 220 90% 56%;
+  --primary-foreground: 210 40% 98%;
+  --muted: 210 40% 96%;
+  --muted-foreground: 215.4 16.3% 46.9%;
+  --border: 214.3 31.8% 91.4%;
+  --radius: 0.75rem;
+
+  font-family: var(--font-display);
 }

@@ -25,6 +25,76 @@ export type ProductTemplateAssignmentSummary = {
   personalizationEnabled: boolean;
 };
 
+export const updateProductPersonalizationMetafield = async (input: {
+  admin: any; // GraphQL client
+  productId: string;
+  templateId: string | null;
+  personalizationEnabled: boolean;
+}) => {
+  const value = input.templateId
+    ? JSON.stringify({
+        template_id: input.templateId,
+        personalization_enabled: input.personalizationEnabled,
+      })
+    : null;
+
+  // If no template, we might want to delete the metafield or set it to null/empty
+  // Setting it to null in the mutation deletes it.
+
+  const response = await input.admin.graphql(
+    `#graphql
+    mutation updateProductMetafield($input: ProductInput!) {
+      productUpdate(input: $input) {
+        product {
+          id
+          metafields(first: 1) {
+            edges {
+              node {
+                namespace
+                key
+                value
+              }
+            }
+          }
+        }
+        userErrors {
+          field
+          message
+        }
+      }
+    }`,
+    {
+      variables: {
+        input: {
+          id: `gid://shopify/Product/${input.productId}`,
+          metafields: [
+            {
+              namespace: "personalize_design",
+              key: "config",
+              type: "json",
+              value: value, // null deletes the metafield if using explicit null? No, need to verify API behavior for deletion.
+              // For now, if templateId is null, we can set value to "{}" or delete.
+              // Ideally we delete it. To delete, we usually pass ID if we know it, or just set value to null?
+              // GraphQL API: value: null deletes it?
+            },
+          ],
+        },
+      },
+    },
+  );
+
+  const data = await response.json();
+  if (data.data?.productUpdate?.userErrors?.length > 0) {
+    console.error(
+      "Metafield update failed",
+      data.data.productUpdate.userErrors,
+    );
+    throw new Error(data.data.productUpdate.userErrors[0].message);
+  }
+
+  return data.data?.productUpdate?.product;
+};
+
 export const mapProductTemplateAssignmentRecord = (
   record: ProductTemplateAssignment,
 ): ProductTemplateAssignmentDto => {

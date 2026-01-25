@@ -32,4 +32,27 @@ describe("useStepperStore", () => {
 
     expect(useStepperStore.getState().step).toBe(1);
   });
+
+  it("manages isOpen state", () => {
+    const { open, close } = useStepperStore.getState();
+    expect(useStepperStore.getState().isOpen).toBe(false);
+
+    open();
+    expect(useStepperStore.getState().isOpen).toBe(true);
+
+    close();
+    expect(useStepperStore.getState().isOpen).toBe(false);
+  });
+
+  it("updates config", () => {
+    const config = {
+      shopDomain: "test",
+      productId: "1",
+      templateId: "t1",
+      personalizationEnabled: true,
+    };
+    const { setConfig } = useStepperStore.getState();
+    setConfig(config);
+    expect(useStepperStore.getState().config).toEqual(config);
+  });
 });
