@@ -78,7 +78,7 @@ development_status:
   6-0-setup-extension-build-pipeline-tailwind-zustand-vite: done
   6-1-storefront-trigger-button-and-modal-shell-portal: done
   6-2-storefront-input-step-photo-upload-text-validation: done
-  6-3-generate-raw-design-display-loading-states: backlog
+  6-3-generate-raw-design-display-loading-states: ready-for-dev
   6-4-async-mockup-generation-trigger-polling-display: backlog
   6-5-regenerate-flow-limits-cost-messaging: backlog
   6-6-add-to-cart-action-from-modal-metadata: backlog

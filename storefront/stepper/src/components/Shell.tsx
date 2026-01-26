@@ -37,30 +37,16 @@ const PLACEHOLDER_IMAGE_URL =
   "https://placehold.co/600x400?text=Heretext+Hello+World";
 
 export const Shell = () => {
-  const {
-    isOpen,
-    close,
-    file,
-    graphicFile,
-    textInput,
-    setFile,
-    setGraphicFile,
-    setTextInput,
-    config,
-  } = useStepperStore();
+  const { isOpen, close, file, textInput, setFile, setTextInput, config } =
+    useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
-  const [graphicPreviewUrl, setGraphicPreviewUrl] = useState<string | null>(
-    null,
-  );
   const [modalState, setModalState] = useState<ModalState>("editing");
   const [progress, setProgress] = useState(0);
   const [selectedMockupIndex, setSelectedMockupIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
-  const graphicInputRef = useRef<HTMLInputElement>(null);
   const logoUrlRef = useRef<string | null>(null);
-  const graphicUrlRef = useRef<string | null>(null);
   const maxNameLength = 15;
 
   useEffect(() => {
@@ -83,27 +69,6 @@ export const Shell = () => {
       logoUrlRef.current = null;
     }
   }, [file]);
-
-  useEffect(() => {
-    if (graphicFile) {
-      const url = URL.createObjectURL(graphicFile);
-      setGraphicPreviewUrl(url);
-      if (graphicUrlRef.current) {
-        URL.revokeObjectURL(graphicUrlRef.current);
-      }
-      graphicUrlRef.current = url;
-
-      return () => {
-        URL.revokeObjectURL(url);
-        graphicUrlRef.current = null;
-      };
-    }
-    setGraphicPreviewUrl(null);
-    if (graphicUrlRef.current) {
-      URL.revokeObjectURL(graphicUrlRef.current);
-      graphicUrlRef.current = null;
-    }
-  }, [graphicFile]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -137,7 +102,7 @@ export const Shell = () => {
       ? `Personalizing - ${config.productTitle}`
       : "Personalizing";
   const productImageUrl = config.productImageUrl || PLACEHOLDER_IMAGE_URL;
-  const scratchSize = isDesktop ? 400 : 280;
+  const scratchSize = isDesktop ? 500 : 280;
 
   const mockupImages = useMemo(
     () => [
@@ -166,15 +131,8 @@ export const Shell = () => {
           label: textInput || "Name",
           isVisible: textInput.length > 0,
         },
-        {
-          id: 3,
-          type: "image",
-          icon: ImageIcon,
-          label: graphicFile?.name || "Logo",
-          isVisible: Boolean(graphicFile),
-        },
       ].filter((item) => item.isVisible),
-    [file, graphicFile, textInput],
+    [file, textInput],
   );
 
   const handleImageUpload = async (
@@ -190,11 +148,8 @@ export const Shell = () => {
       return;
     }
     setError(null);
-    if (target === "logo") {
-      setFile(selectedFile);
-    } else {
-      setGraphicFile(selectedFile);
-    }
+    // Always set to file since we only have one upload now
+    setFile(selectedFile);
   };
 
   const handleGenerate = () => {
@@ -231,55 +186,55 @@ export const Shell = () => {
   const DescriptionComponent = isDesktop ? DialogDescription : SheetDescription;
 
   const content = (
-    <div className="flex h-full flex-col">
-      <div className="flex items-center justify-between border-b border-border px-6 py-4">
+    <div className="flex h-full flex-col font-['Helvetica',_'Arial',_sans-serif]">
+      <div className="flex items-center justify-between border-b border-border px-[32px] py-[24px]">
         <div className="min-w-0">
-          <TitleComponent className="text-2xl font-bold text-foreground">
+          <TitleComponent className="text-[30px] font-bold text-foreground">
             {title}
           </TitleComponent>
           <DescriptionComponent className="sr-only">
             Customize your product with AI
           </DescriptionComponent>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-[12px]">
           <button
             type="button"
             onClick={close}
-            className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            className="rounded-[2px] opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
             aria-label="Close personalization dialog"
           >
-            <X className="h-5 w-5" />
+            <X className="h-[24px] w-[24px]" />
           </button>
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
         <div className="flex w-full flex-1 flex-col border-b border-border lg:w-3/4 lg:border-b-0 lg:border-r">
-          <div className="flex items-center justify-between px-6 pt-4">
-            <span className="text-base text-muted-foreground">
+          <div className="flex items-center justify-between px-[32px] pt-[24px]">
+            <span className="text-[18px] text-muted-foreground">
               {modalState === "review"
                 ? mockupImages[selectedMockupIndex]?.label
                 : "Front"}
             </span>
           </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center p-6">
+          <div className="flex min-h-0 flex-1 items-center justify-center p-[32px]">
             {modalState === "generating" ? (
-              <div className="flex flex-col items-center justify-center gap-4">
+              <div className="flex flex-col items-center justify-center gap-[24px]">
                 <AnimatedCircularProgressBar
                   value={progress}
                   max={100}
                   min={0}
                   gaugePrimaryColor="#1a3a4a"
                   gaugeSecondaryColor="rgba(26, 58, 74, 0.2)"
-                  className="size-48"
+                  className="size-[160px]"
                   displayValue={`${progress}%`}
                 />
-                <p className="text-base text-muted-foreground">
+                <p className="text-[18px] text-muted-foreground">
                   Generating your design...
                 </p>
               </div>
             ) : modalState === "reveal" ? (
-              <div className="flex flex-col items-center justify-center gap-4">
-                <p className="text-base text-muted-foreground">
+              <div className="flex flex-col items-center justify-center gap-[24px]">
+                <p className="text-[18px] text-muted-foreground">
                   Scratch to reveal your design!
                 </p>
                 <ScratchToReveal
@@ -300,8 +255,8 @@ export const Shell = () => {
                 </ScratchToReveal>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-3 text-muted-foreground">
-                <div className="relative h-full w-full max-w-2xl">
+              <div className="flex flex-col items-center gap-[16px] text-muted-foreground">
+                <div className="relative h-full w-full max-w-[800px]">
                   <img
                     src={
                       modalState === "review"
@@ -317,14 +272,17 @@ export const Shell = () => {
             )}
           </div>
           {modalState === "review" && (
-            <div className="px-6 pb-6">
+            <div className="px-[32px] pb-[32px]">
               <Carousel
                 opts={{ align: "start" }}
-                className="mx-auto w-full max-w-xl"
+                className="mx-auto w-full max-w-[672px]"
               >
-                <CarouselContent className="-ml-2">
+                <CarouselContent className="-ml-[8px]">
                   {mockupImages.map((mockup, index) => (
-                    <CarouselItem key={mockup.id} className="basis-1/4 pl-2">
+                    <CarouselItem
+                      key={mockup.id}
+                      className="basis-1/4 pl-[8px]"
+                    >
                       <button
                         type="button"
                         onClick={() => setSelectedMockupIndex(index)}
@@ -338,10 +296,10 @@ export const Shell = () => {
                         <img
                           src={mockup.url || PLACEHOLDER_IMAGE_URL}
                           alt={mockup.label}
-                          className="h-full w-full object-contain p-1"
+                          className="h-full w-full object-contain p-[4px]"
                         />
                       </button>
-                      <p className="mt-1 truncate text-center text-sm text-muted-foreground">
+                      <p className="mt-[4px] truncate text-center text-[14px] text-muted-foreground">
                         {mockup.label}
                       </p>
                     </CarouselItem>
@@ -356,19 +314,19 @@ export const Shell = () => {
         <div className="flex h-full w-full flex-col lg:w-1/4">
           {modalState === "editing" && (
             <>
-              <div className="flex-1 overflow-y-auto p-6">
-                <div className="mb-6">
-                  <h3 className="mb-4 text-lg font-semibold text-foreground">
+              <div className="flex-1 overflow-y-auto p-[32px]">
+                <div className="mb-[32px]">
+                  <h3 className="mb-[24px] text-[20px] font-semibold text-foreground">
                     Images
                   </h3>
-                  <div className="mb-4">
-                    <Label className="text-base font-medium text-foreground">
+                  <div className="mb-[24px]">
+                    <Label className="text-[18px] font-medium text-foreground">
                       Your Logo
                     </Label>
-                    <p className="mb-2 text-sm text-muted-foreground">
+                    <p className="mb-[12px] text-[16px] text-muted-foreground">
                       Add your company name
                     </p>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-[16px]">
                       <input
                         ref={logoInputRef}
                         type="file"
@@ -379,16 +337,16 @@ export const Shell = () => {
                       <button
                         type="button"
                         onClick={() => logoInputRef.current?.click()}
-                        className="flex h-16 w-16 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors hover:border-primary/50 hover:bg-muted/50"
+                        className="flex h-[80px] w-[80px] flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors hover:border-primary/50 hover:bg-muted/50"
                       >
-                        <Plus className="size-4 text-muted-foreground" />
-                        <span className="mt-1 text-sm text-muted-foreground">
+                        <Plus className="size-[24px] text-muted-foreground" />
+                        <span className="mt-[4px] text-[14px] text-muted-foreground">
                           Image
                         </span>
                       </button>
                       {logoPreviewUrl && (
                         <div className="relative">
-                          <div className="h-16 w-16 overflow-hidden rounded-lg border-2 border-primary/50 bg-muted">
+                          <div className="h-[80px] w-[80px] overflow-hidden rounded-lg border-2 border-primary/50 bg-muted">
                             <img
                               src={logoPreviewUrl}
                               alt="Logo preview"
@@ -398,59 +356,10 @@ export const Shell = () => {
                           <button
                             type="button"
                             onClick={() => setFile(null)}
-                            className="absolute -right-2 -top-2 rounded-full bg-primary p-0.5 text-primary-foreground transition-colors hover:bg-primary/80"
+                            className="absolute -right-[8px] -top-[8px] rounded-full bg-primary p-[2px] text-primary-foreground transition-colors hover:bg-primary/80"
                             aria-label="Remove logo"
                           >
-                            <X className="size-3" />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="mb-4">
-                    <Label className="text-base font-medium text-foreground">
-                      Logo
-                    </Label>
-                    <p className="mb-2 text-sm text-muted-foreground">
-                      Add your custom graphic
-                    </p>
-                    <div className="flex items-center gap-3">
-                      <input
-                        ref={graphicInputRef}
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) =>
-                          handleImageUpload(event, "graphic")
-                        }
-                        className="hidden"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => graphicInputRef.current?.click()}
-                        className="flex h-16 w-16 flex-col items-center justify-center rounded-lg border-2 border-dashed border-border transition-colors hover:border-primary/50 hover:bg-muted/50"
-                      >
-                        <Plus className="size-4 text-muted-foreground" />
-                        <span className="mt-1 text-sm text-muted-foreground">
-                          Image
-                        </span>
-                      </button>
-                      {graphicPreviewUrl && (
-                        <div className="relative">
-                          <div className="h-16 w-16 overflow-hidden rounded-lg border-2 border-primary/50 bg-muted">
-                            <img
-                              src={graphicPreviewUrl}
-                              alt="Custom graphic preview"
-                              className="h-full w-full object-cover"
-                            />
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => setGraphicFile(null)}
-                            className="absolute -right-2 -top-2 rounded-full bg-primary p-0.5 text-primary-foreground transition-colors hover:bg-primary/80"
-                            aria-label="Remove custom graphic"
-                          >
-                            <X className="size-3" />
+                            <X className="size-[16px]" />
                           </button>
                         </div>
                       )}
@@ -459,17 +368,17 @@ export const Shell = () => {
                 </div>
 
                 <div>
-                  <h3 className="mb-4 text-lg font-semibold text-foreground">
+                  <h3 className="mb-[24px] text-[20px] font-semibold text-foreground">
                     Text
                   </h3>
                   <div>
                     <Label
                       htmlFor="animal-name"
-                      className="text-base font-medium text-foreground"
+                      className="text-[18px] font-medium text-foreground"
                     >
                       Name
                     </Label>
-                    <p className="mb-2 text-sm text-muted-foreground">
+                    <p className="mb-[12px] text-[16px] text-muted-foreground">
                       Name of your animal
                     </p>
                     <div className="relative">
@@ -482,9 +391,9 @@ export const Shell = () => {
                           )
                         }
                         placeholder="Enter name"
-                        className="pr-12"
+                        className="h-[48px] px-[16px] text-[18px] pr-[56px] text-[18px]"
                       />
-                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+                      <span className="absolute right-[16px] top-1/2 -translate-y-1/2 text-[16px] text-muted-foreground">
                         {textInput.length}/{maxNameLength}
                       </span>
                     </div>
@@ -492,20 +401,20 @@ export const Shell = () => {
                 </div>
               </div>
 
-              <div className="space-y-3 border-t border-border p-6">
+              <div className="space-y-[16px] border-t border-border p-[32px]">
                 {error && (
-                  <p className="text-xs font-medium text-destructive">
+                  <p className="text-[12px] font-medium text-destructive">
                     {error}
                   </p>
                 )}
                 <Button
                   onClick={handleGenerate}
-                  className="w-full bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90"
+                  className="w-full bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90 h-[56px] text-[18px]"
                   size="lg"
                 >
                   Generate
                 </Button>
-                <p className="text-center text-sm text-muted-foreground">
+                <p className="text-center text-[14px] text-muted-foreground">
                   By continuing you agree to the{" "}
                   <a
                     href="/policies/terms-of-service"
@@ -519,22 +428,22 @@ export const Shell = () => {
           )}
 
           {modalState === "generating" && (
-            <div className="flex flex-1 flex-col items-center justify-center p-6">
-              <p className="mb-2 text-base font-semibold text-foreground">
+            <div className="flex flex-1 flex-col items-center justify-center p-[24px]">
+              <p className="mb-[8px] text-[16px] font-semibold text-foreground">
                 Creating your design
               </p>
-              <p className="text-center text-base text-muted-foreground">
+              <p className="text-center text-[16px] text-muted-foreground">
                 Please wait while we generate your personalized product...
               </p>
             </div>
           )}
 
           {modalState === "reveal" && (
-            <div className="flex flex-1 flex-col items-center justify-center p-6">
-              <p className="mb-2 text-base font-semibold text-foreground">
+            <div className="flex flex-1 flex-col items-center justify-center p-[24px]">
+              <p className="mb-[8px] text-[16px] font-semibold text-foreground">
                 Your design is ready!
               </p>
-              <p className="text-center text-base text-muted-foreground">
+              <p className="text-center text-[16px] text-muted-foreground">
                 Scratch the image to reveal your personalized design.
               </p>
             </div>
@@ -542,27 +451,27 @@ export const Shell = () => {
 
           {modalState === "preview" && (
             <>
-              <div className="flex flex-1 flex-col items-center justify-center p-6">
-                <p className="mb-2 text-base font-semibold text-foreground">
+              <div className="flex flex-1 flex-col items-center justify-center p-[24px]">
+                <p className="mb-[8px] text-[16px] font-semibold text-foreground">
                   Design Generated!
                 </p>
-                <p className="text-center text-base text-muted-foreground">
+                <p className="text-center text-[16px] text-muted-foreground">
                   Click Preview to see your design on different mockups.
                 </p>
               </div>
-              <div className="space-y-3 border-t border-border p-6">
+              <div className="space-y-[12px] border-t border-border p-[24px]">
                 <Button
                   onClick={handlePreview}
                   variant="outline"
-                  className="w-full bg-transparent"
+                  className="w-full bg-transparent h-[48px] text-[16px]"
                   size="lg"
                 >
-                  <Eye className="mr-2 size-4" />
+                  <Eye className="mr-[8px] size-[16px]" />
                   Preview
                 </Button>
                 <Button
                   onClick={handleSaveDesign}
-                  className="w-full bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90"
+                  className="w-full bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90 h-[48px] text-[16px]"
                   size="lg"
                 >
                   Save design
@@ -573,50 +482,50 @@ export const Shell = () => {
 
           {modalState === "review" && (
             <>
-              <div className="flex-1 overflow-y-auto p-6">
-                <h3 className="mb-2 text-2xl font-bold text-foreground">
+              <div className="flex-1 overflow-y-auto p-[32px]">
+                <h3 className="mb-[8px] text-[24px] font-bold text-foreground">
                   Review your design
                 </h3>
-                <p className="mb-6 text-base text-muted-foreground">
+                <p className="mb-[24px] text-[16px] text-muted-foreground">
                   Personalization
                 </p>
-                <div className="space-y-2">
+                <div className="space-y-[8px]">
                   {personalizationItems.length > 0 ? (
                     personalizationItems.map((item) => (
                       <button
                         key={item.id}
                         type="button"
-                        className="flex w-full items-center justify-between rounded-lg border border-border p-3 text-left transition-colors hover:bg-muted/50"
+                        className="flex w-full items-center justify-between rounded-lg border border-border p-[12px] text-left transition-colors hover:bg-muted/50"
                       >
-                        <div className="flex items-center gap-3">
-                          <item.icon className="size-5 text-muted-foreground" />
-                          <span className="text-base text-foreground">
+                        <div className="flex items-center gap-[12px]">
+                          <item.icon className="size-[20px] text-muted-foreground" />
+                          <span className="text-[16px] text-foreground">
                             {item.label}
                           </span>
                         </div>
-                        <ChevronRight className="size-4 text-muted-foreground" />
+                        <ChevronRight className="size-[16px] text-muted-foreground" />
                       </button>
                     ))
                   ) : (
-                    <p className="py-4 text-center text-base text-muted-foreground">
+                    <p className="py-[16px] text-center text-[16px] text-muted-foreground">
                       No personalizations added yet.
                     </p>
                   )}
                 </div>
               </div>
-              <div className="border-t border-border p-6">
-                <div className="flex gap-3">
+              <div className="border-t border-border p-[24px]">
+                <div className="flex gap-[12px]">
                   <Button
                     onClick={handleBack}
                     variant="outline"
-                    className="flex-1 bg-transparent"
+                    className="flex-1 bg-transparent h-[48px] text-[16px]"
                     size="lg"
                   >
                     Back
                   </Button>
                   <Button
                     onClick={handleSaveDesign}
-                    className="flex-1 bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90"
+                    className="flex-1 bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90 h-[48px] text-[16px]"
                     size="lg"
                   >
                     Save design

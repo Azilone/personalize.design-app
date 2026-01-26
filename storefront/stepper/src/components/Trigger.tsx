@@ -22,7 +22,7 @@ export const Trigger = () => {
     return (
       <Button
         disabled
-        className="pd-trigger-button h-12 px-8 text-base font-semibold"
+        className="pd-trigger-button w-full h-[47px] rounded-[3px] px-8 text-[15px] font-normal tracking-[1px] font-['Helvetica',_'Arial',_sans-serif]"
       >
         Personalize
       </Button>
@@ -37,7 +37,7 @@ export const Trigger = () => {
     <Button
       ref={triggerRef}
       onClick={open}
-      className="pd-trigger-button h-12 px-8 text-base font-semibold"
+      className="pd-trigger-button w-full h-[47px] rounded-[3px] px-8 text-[15px] font-normal tracking-[1px] font-['Helvetica',_'Arial',_sans-serif]"
       aria-label="Personalize this product"
     >
       Personalize
