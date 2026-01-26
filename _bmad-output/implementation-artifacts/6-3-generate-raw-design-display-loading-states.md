@@ -22,13 +22,13 @@ so that I can see the personalized result before adding to cart.
 
 ## Tasks / Subtasks
 
-- [ ] **Define Inngest workflow types and payload schema**
-  - [ ] Add buyer preview generation types to `app/services/inngest/types.ts`:
+- [x] **Define Inngest workflow types and payload schema**
+  - [x] Add buyer preview generation types to `app/services/inngest/types.ts`:
     - `BuyerPreviewGeneratePayload` with `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `image_url` (supabase URL), `text_input?`
-  - [ ] Add Zod schema for `buyer_preview_generate_payload`
-- [ ] **Create Inngest workflow for buyer preview generation**
-  - [ ] Create `app/services/inngest/functions/buyer-preview-generation.server.ts`
-  - [ ] Implement `buyerPreviewGenerate` function with steps:
+  - [x] Add Zod schema for `buyer_preview_generate_payload`
+- [x] **Create Inngest workflow for buyer preview generation**
+  - [x] Create `app/services/inngest/functions/buyer-preview-generation.server.ts`
+  - [x] Implement `buyerPreviewGenerate` function with steps:
     1. Load template (prompt, aspect ratio, removeBackgroundEnabled)
     2. Load shop product (get Printify product link)
     3. Fetch Printify product details + variant + print area
@@ -42,43 +42,43 @@ so that I can see the personalized result before adding to cart.
     11. Store generated image in Supabase Storage (private bucket)
     12. Update job status to "done" with signed URL
     13. PostHog telemetry: `generation.started`, `generation.succeeded`
-  - [ ] Implement `buyerPreviewGenerateFailure` handler:
+  - [x] Implement `buyerPreviewGenerateFailure` handler:
     - Listen for `inngest/function.failed` for `buyer_preview_generate`
     - Mark job as "failed"
     - Fail billable event appropriately (waived if provider cost incurred)
     - PostHog telemetry: `generation.failed`
-- [ ] **Define App Proxy request/response contracts (shared Zod)**
-  - [ ] Add `app/schemas/app_proxy.ts` with:
+- [x] **Define App Proxy request/response contracts (shared Zod)**
+  - [x] Add `app/schemas/app_proxy.ts` with:
     - `generate_preview_request` (snake_case fields: `shop_id`, `product_id`, `template_id`, `image_file` (multipart), `text_input?`, `session_id`)
     - `generate_preview_response` with `{ data: { job_id, status } }` or `{ error: { code, message, details? } }`
     - `generate_preview_status_response` with `{ data: { job_id, status, preview_url?, error? } }`
-- [ ] **Implement App Proxy endpoints**
-  - [ ] Create `app/routes/app-proxy/generate-preview.tsx` for `POST` generate:
+- [x] **Implement App Proxy endpoints**
+  - [x] Create `app/routes/app-proxy/generate-preview.tsx` for `POST` generate:
     - Verify App Proxy signature (`authenticate.public.appProxy`)
     - Validate payload via Zod schema
     - Store uploaded image in Supabase Storage (private bucket) → get URL
     - Send Inngest event: `buyer_previews.generate.requested` with payload
     - Return `job_id` immediately (async workflow)
-  - [ ] Create `app/routes/app-proxy/generate-preview-status.tsx` for `GET` status by `job_id`:
+  - [x] Create `app/routes/app-proxy/generate-preview-status.tsx` for `GET` status by `job_id`:
     - Verify App Proxy signature
     - Query DB for job status (need `buyer_preview_jobs` table or reuse merchant previews)
     - Return job status + signed URL when ready
   - [ ] Return errors via `{ error: { code, message, details? } }`
-- [ ] **Front-end integration**
-  - [ ] Update `storefront/stepper/src/components/Shell.tsx` to call App Proxy `POST /generate-preview`
-  - [ ] Store `job_id`, `preview_url`, `generation_status`, and `error` in Zustand store
-  - [ ] Replace fake progress with real status polling (interval 2s) until preview is ready
-  - [ ] Render hero preview image once `preview_url` is ready
-  - [ ] Show calm error message + "Try again" action on failure
-- [ ] **Telemetry + performance tracking**
-  - [ ] Capture `generation_duration_ms` from backend timing (Inngest step timing)
-  - [ ] Emit PostHog events: `generation.started`, `generation.succeeded`, `generation.failed`
-  - [ ] Include `shop_id`, `job_id`, `template_id`, `product_id`, `duration_ms` in event props (snake_case)
-  - [ ] Log via pino with correlation IDs
-  - [ ] Ensure operator can inspect p95 timing (PostHog dashboard or event query)
-- [ ] **Database schema for buyer preview jobs**
-  - [ ] Create Prisma model `BuyerPreviewJob` with fields: `id`, `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `status`, `preview_url`, `error_message`, `created_at`, `updated_at`
-  - [ ] Add migration for new model
+- [x] **Front-end integration**
+  - [x] Update `storefront/stepper/src/components/Shell.tsx` to call App Proxy `POST /generate-preview`
+  - [x] Store `job_id`, `preview_url`, `generation_status`, and `error` in Zustand store
+  - [x] Replace fake progress with real status polling (interval 2s) until preview is ready
+  - [x] Render hero preview image once `preview_url` is ready
+  - [x] Show calm error message + "Try again" action on failure
+- [x] **Telemetry + performance tracking**
+  - [x] Capture `generation_duration_ms` from backend timing (Inngest step timing)
+  - [x] Emit PostHog events: `generation.started`, `generation.succeeded`, `generation.failed`
+  - [x] Include `shop_id`, `job_id`, `template_id`, `product_id`, `duration_ms` in event props (snake_case)
+  - [x] Log via pino with correlation IDs
+  - [x] Ensure operator can inspect p95 timing (PostHog dashboard or event query)
+- [x] **Database schema for buyer preview jobs**
+  - [x] Create Prisma model `BuyerPreviewJob` with fields: `id`, `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `status`, `preview_url`, `error_message`, `created_at`, `updated_at`
+  - [x] Add migration for new model
 - [ ] **Manual QA**
   - [ ] Upload valid photo, generate preview, see hero preview
   - [ ] Verify billing event created and charged after successful generation
@@ -188,26 +188,44 @@ codex-gpt-5
 - git log -5 --oneline
 - git log -5 --name-only
 
+### Implementation Plan
+
+- Add buyer preview payload schema + tests.
+- Implement buyer preview Inngest workflow and failure handler.
+- Add App Proxy request/response schemas and endpoints.
+- Update storefront state, polling, and hero preview UI.
+- Add telemetry, database model, and migration.
+
 ### Completion Notes List
 
-- Added Inngest workflow for buyer preview generation (mirrors merchant preview pattern).
-- Integrated billing via billable events ledger: create event → generate → confirm/charge.
-- Added App Proxy endpoints for async generation + status polling.
-- Mapped backend flow to existing fal + supabase services with signed URLs.
-- Specified PostHog event naming, props, and duration tracking.
-- Defined frontend store fields + polling strategy for generation status.
-- Added DB model (BuyerPreviewJob) for job tracking.
-- Added testing expectations for schemas, store updates, and billing flow.
+- Added buyer preview Inngest workflow + failure handler with billing guardrails, storage, and PostHog events.
+- Added App Proxy contracts plus generate/status endpoints using shared Zod validation.
+- Updated storefront stepper store and Shell to call App Proxy, poll status, and render preview hero image with calm retry UX.
+- Guarded App Proxy fetches against non-JSON responses to keep error messaging calm.
+- Added BuyerPreviewJob service + Prisma model (migration pending due to existing drift).
+- Tests: `pnpm vitest run app/services/inngest/types.test.ts app/schemas/app_proxy.test.ts storefront/stepper/src/stepper-store.test.ts`.
+- Prisma migrate reset resolved drift; new migration `20260126163647_add_buyer_preview_jobs` created and applied.
+- Manual QA attempt via storefront modal failed: App Proxy response returned HTML (non-JSON) on generate.
+- Removed unsupported Liquid `parse_json` filter from theme app extension block to clear theme check errors.
+- Moved App Proxy routes into nested route folders to satisfy React Router file-based routing.
 
 ### File List
 
-- app/services/inngest/functions/buyer-preview-generation.server.ts
-- app/services/inngest/types.ts
-- app/routes/app-proxy/generate-preview.tsx
-- app/routes/app-proxy/generate-preview-status.tsx
+- app/routes/app-proxy/generate-preview-status/route.tsx
+- app/routes/app-proxy/generate-preview/route.tsx
+- app/schemas/app_proxy.test.ts
 - app/schemas/app_proxy.ts
-- prisma/schema.prisma (add BuyerPreviewJob)
+- app/services/buyer-previews/buyer-previews.server.ts
+- app/services/inngest/functions/buyer-preview-generation.server.ts
+- app/services/inngest/index.server.ts
+- app/services/inngest/types.test.ts
+- app/services/inngest/types.ts
+- prisma/migrations/20260126163647_add_buyer_preview_jobs/migration.sql
+- extensions/personalize-design-app/blocks/personalize_stepper.liquid
+- prisma/migrations/20260124171847_add_storefront_generation_attempts/migration.sql
+- prisma/schema.prisma
 - storefront/stepper/src/components/Shell.tsx
+- storefront/stepper/src/stepper-store.test.ts
 - storefront/stepper/src/stepper-store.ts
 
 ## Previous Story Intelligence

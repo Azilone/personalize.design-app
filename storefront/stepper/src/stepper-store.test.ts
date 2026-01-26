@@ -76,17 +76,50 @@ describe("useStepperStore", () => {
   });
 
   it("manages input state", () => {
-    const { setFile, setTextInput, resetInputs } = useStepperStore.getState();
+    const { setFile, setVariableValue, resetInputs } =
+      useStepperStore.getState();
     const file = new File(["test"], "test.png", { type: "image/png" });
 
     setFile(file);
     expect(useStepperStore.getState().file).toBe(file);
 
-    setTextInput("Hello");
-    expect(useStepperStore.getState().textInput).toBe("Hello");
+    setVariableValue("name", "Hello");
+    expect(useStepperStore.getState().variableValues).toEqual({
+      name: "Hello",
+    });
 
     resetInputs();
     expect(useStepperStore.getState().file).toBeNull();
-    expect(useStepperStore.getState().textInput).toBe("");
+    expect(useStepperStore.getState().variableValues).toEqual({});
+  });
+
+  it("tracks preview generation state", () => {
+    const {
+      setPreviewJobId,
+      setGenerationStatus,
+      setPreviewUrl,
+      setGenerationError,
+      resetPreview,
+    } = useStepperStore.getState();
+
+    setPreviewJobId("job-123");
+    setGenerationStatus("processing");
+    setPreviewUrl("https://example.com/preview.png");
+    setGenerationError("Something went wrong");
+
+    expect(useStepperStore.getState().previewJobId).toBe("job-123");
+    expect(useStepperStore.getState().generationStatus).toBe("processing");
+    expect(useStepperStore.getState().previewUrl).toBe(
+      "https://example.com/preview.png",
+    );
+    expect(useStepperStore.getState().generationError).toBe(
+      "Something went wrong",
+    );
+
+    resetPreview();
+    expect(useStepperStore.getState().previewJobId).toBeNull();
+    expect(useStepperStore.getState().generationStatus).toBe("idle");
+    expect(useStepperStore.getState().previewUrl).toBeNull();
+    expect(useStepperStore.getState().generationError).toBeNull();
   });
 });

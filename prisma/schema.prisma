@@ -196,6 +196,25 @@ model MerchantPreview {
   @@map("merchant_previews")
 }
 
+model BuyerPreviewJob {
+  id               String            @id
+  shop_id          String
+  product_id       String
+  template_id      String
+  buyer_session_id String
+  status           BuyerPreviewStatus @default(pending)
+  preview_url      String?
+  error_message    String?
+  created_at       DateTime          @default(now())
+  updated_at       DateTime          @updatedAt
+
+  @@unique([shop_id, id])
+  @@index([shop_id])
+  @@index([product_id])
+  @@index([template_id])
+  @@map("buyer_preview_jobs")
+}
+
 model UsageLedgerEntry {
   id              String               @id @default(cuid())
   shop_id         String
@@ -238,6 +257,13 @@ enum MerchantPreviewStatus {
   generating
   creating_mockups
   done
+  failed
+}
+
+enum BuyerPreviewStatus {
+  pending
+  processing
+  succeeded
   failed
 }
 

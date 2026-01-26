@@ -84,12 +84,26 @@ export const merchantPreviewFakeGeneratePayloadSchema = z.object({
   variable_values: z.record(z.string(), z.string()),
 });
 
+export const buyerPreviewGeneratePayloadSchema = z.object({
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+  template_id: z.string().min(1),
+  buyer_session_id: z.string().min(1),
+  image_url: z.string().url(),
+  text_input: z.string().optional(),
+  variable_values: z.record(z.string(), z.string()),
+});
+
 export type MerchantPreviewGeneratePayload = z.infer<
   typeof merchantPreviewGeneratePayloadSchema
 >;
 
 export type MerchantPreviewFakeGeneratePayload = z.infer<
   typeof merchantPreviewFakeGeneratePayloadSchema
+>;
+
+export type BuyerPreviewGeneratePayload = z.infer<
+  typeof buyerPreviewGeneratePayloadSchema
 >;
 
 export const productsSyncPayloadSchema = z.object({

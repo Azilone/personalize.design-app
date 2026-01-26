@@ -13,9 +13,7 @@
     {% assign pd_config_obj = pd_config %}
   {% endif %}
 
-  {% if pd_config_obj and pd_config_obj contains '{' %}
-    {% assign pd_config_obj = pd_config_obj | parse_json %}
-  {% endif %}
+  {% assign pd_config_obj = pd_config_obj %}
 
   <div
     id="pd-stepper-root"

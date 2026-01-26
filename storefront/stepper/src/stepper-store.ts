@@ -14,9 +14,20 @@ type StepperState = {
     personalizationEnabled?: boolean;
     textEnabled?: boolean;
   };
+  templateConfig: {
+    templateId: string;
+    templateName: string;
+    photoRequired: boolean;
+    textInputEnabled: boolean;
+    variables: Array<{ id: string; name: string }>;
+  } | null;
   file: File | null;
   graphicFile: File | null;
-  textInput: string;
+  variableValues: Record<string, string>;
+  previewJobId: string | null;
+  generationStatus: "idle" | "pending" | "processing" | "succeeded" | "failed";
+  previewUrl: string | null;
+  generationError: string | null;
   triggerRef: React.MutableRefObject<HTMLButtonElement | null> | null;
   setStep: (step: number) => void;
   next: () => void;
@@ -24,10 +35,17 @@ type StepperState = {
   open: () => void;
   close: () => void;
   setConfig: (config: StepperState["config"]) => void;
+  setTemplateConfig: (config: StepperState["templateConfig"]) => void;
   setFile: (file: File | null) => void;
   setGraphicFile: (file: File | null) => void;
-  setTextInput: (text: string) => void;
+  setVariableValue: (name: string, value: string) => void;
+  setVariableValues: (values: Record<string, string>) => void;
   resetInputs: () => void;
+  setPreviewJobId: (jobId: string | null) => void;
+  setGenerationStatus: (status: StepperState["generationStatus"]) => void;
+  setPreviewUrl: (url: string | null) => void;
+  setGenerationError: (error: string | null) => void;
+  resetPreview: () => void;
   setTriggerRef: (
     ref: React.MutableRefObject<HTMLButtonElement | null>,
   ) => void;
@@ -38,9 +56,14 @@ export const useStepperStore = create<StepperState>((set) => ({
   totalSteps: 3,
   isOpen: false,
   config: {},
+  templateConfig: null,
   file: null,
   graphicFile: null,
-  textInput: "",
+  variableValues: {},
+  previewJobId: null,
+  generationStatus: "idle",
+  previewUrl: null,
+  generationError: null,
   triggerRef: null,
   setStep: (step) => set({ step }),
   next: () =>
@@ -60,9 +83,28 @@ export const useStepperStore = create<StepperState>((set) => ({
       return { isOpen: false };
     }),
   setConfig: (config) => set({ config }),
+  setTemplateConfig: (templateConfig) => set({ templateConfig }),
   setFile: (file) => set({ file }),
   setGraphicFile: (graphicFile) => set({ graphicFile }),
-  setTextInput: (textInput) => set({ textInput }),
-  resetInputs: () => set({ file: null, graphicFile: null, textInput: "" }),
+  setVariableValue: (name, value) =>
+    set((state) => ({
+      variableValues: {
+        ...state.variableValues,
+        [name]: value,
+      },
+    })),
+  setVariableValues: (values) => set({ variableValues: values }),
+  resetInputs: () => set({ file: null, graphicFile: null, variableValues: {} }),
+  setPreviewJobId: (previewJobId) => set({ previewJobId }),
+  setGenerationStatus: (generationStatus) => set({ generationStatus }),
+  setPreviewUrl: (previewUrl) => set({ previewUrl }),
+  setGenerationError: (generationError) => set({ generationError }),
+  resetPreview: () =>
+    set({
+      previewJobId: null,
+      generationStatus: "idle",
+      previewUrl: null,
+      generationError: null,
+    }),
   setTriggerRef: (ref) => set({ triggerRef: ref }),
 }));

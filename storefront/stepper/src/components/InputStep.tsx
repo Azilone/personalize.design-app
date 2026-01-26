@@ -4,7 +4,7 @@ import { useStepperStore } from "../stepper-store";
 import { Label } from "./ui/label";
 import { Input } from "./ui/input";
 import { Button } from "./ui/button";
-import { cn } from "../lib/utils";
+import { cn, formatVariableLabel } from "../lib/utils";
 import { validateFile, ALLOWED_TYPES } from "../lib/validation";
 
 type InputStepProps = {
@@ -12,8 +12,15 @@ type InputStepProps = {
 };
 
 export const InputStep = ({ previewUrl }: InputStepProps) => {
-  const { file, textInput, setFile, setTextInput, next, config } =
-    useStepperStore();
+  const {
+    file,
+    setFile,
+    next,
+    templateConfig,
+    variableValues,
+    setVariableValue,
+  } = useStepperStore();
+  const templateVariables = templateConfig?.variables ?? [];
   const [dragActive, setDragActive] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputId = useId();
@@ -71,7 +78,7 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
   };
 
   return (
-    <div className="flex h-full flex-col justify-between">
+    <div className="flex h-full flex-col j ustify-between">
       <div className="space-y-8">
         {/* Images Section */}
         <div className="space-y-4">
@@ -87,10 +94,12 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
           <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-sm font-medium text-foreground">
-                Your Logo
+                {templateConfig?.photoRequired ? "Reference image" : "Image"}
               </Label>
               <p className="text-xs text-muted-foreground">
-                Add your company name
+                {templateConfig?.templateName
+                  ? `Add an image for ${templateConfig.templateName}.`
+                  : "Add an image to personalize your product."}
               </p>
 
               <div className="flex flex-wrap items-center gap-3">
@@ -166,39 +175,40 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
         </div>
 
         {/* Text Section */}
-        <div className="space-y-4">
-          <div>
-            <h3 className="text-lg font-bold leading-tight text-foreground">
-              Text
-            </h3>
-          </div>
-          <div className="space-y-3">
-            <div className="space-y-1">
-              <Label
-                htmlFor="custom-text"
-                className="text-sm font-medium text-foreground"
-              >
-                Name
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Add the employee name
-              </p>
+        {templateVariables.length > 0 && (
+          <div className="space-y-4">
+            <div>
+              <h3 className="text-lg font-bold leading-tight text-foreground">
+                Text
+              </h3>
             </div>
-            <div className="relative">
-              <Input
-                id="custom-text"
-                placeholder="Charles"
-                value={textInput}
-                onChange={(e) => setTextInput(e.target.value)}
-                maxLength={15}
-                className="pr-12"
-              />
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                {textInput.length}/15
-              </span>
+            <div className="space-y-3">
+              {templateVariables.map((variable) => {
+                const label = formatVariableLabel(variable.name);
+                return (
+                  <div key={variable.id} className="space-y-1">
+                    <Label
+                      htmlFor={`variable-${variable.id}`}
+                      className="text-sm font-medium text-foreground"
+                    >
+                      {label}
+                    </Label>
+                    <div className="relative">
+                      <Input
+                        id={`variable-${variable.id}`}
+                        placeholder={`Enter ${label.toLowerCase()}`}
+                        value={variableValues[variable.name] ?? ""}
+                        onChange={(e) =>
+                          setVariableValue(variable.name, e.target.value)
+                        }
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       <div className="pt-6">
