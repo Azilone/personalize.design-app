@@ -80,7 +80,7 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
               Images
             </h3>
             <p className="text-sm text-muted-foreground">
-              Add your logo or artwork.
+              Add your logo or artwork..
             </p>
           </div>
 
