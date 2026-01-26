@@ -20,13 +20,14 @@
     data-pd-stepper
     data-shop-domain="{{ shop.permanent_domain }}"
     data-product-id="{{ product.id }}"
+    data-product-gid="{{ product.admin_graphql_api_id }}"
     data-product-title="{{ product.title | escape }}"
     data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
     {% if product.featured_image %}
       data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
     {% endif %}
     {% if pd_config_obj %}
-      data-template-id="{{ pd_config_obj.template_id }}"
+      data-template-id="{{ pd_config_obj.template_id | default: pd_config_obj.templateId }}"
       data-personalization-enabled="{{ pd_config_obj.personalization_enabled }}"
       data-text-enabled="{{ pd_config_obj.text_enabled | default: pd_config_obj.textEnabled }}"
     {% endif %}

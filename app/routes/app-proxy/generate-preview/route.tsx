@@ -31,6 +31,16 @@ const parseVariableValues = (value?: string | null): Record<string, string> => {
   }
 };
 
+const normalizeProductId = (value: string): string => {
+  if (value.startsWith("gid://shopify/Product/")) {
+    return value;
+  }
+  if (/^\d+$/.test(value)) {
+    return `gid://shopify/Product/${value}`;
+  }
+  return value;
+};
+
 export const action = async ({ request }: ActionFunctionArgs) => {
   await authenticate.public.appProxy(request);
   const formData = await request.formData();
@@ -60,6 +70,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     text_input,
     variable_values_json,
   } = parsed.data;
+  const normalizedProductId = normalizeProductId(product_id);
 
   if (image_file.size === 0) {
     return data<GeneratePreviewResponse>(
@@ -103,14 +114,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     await createBuyerPreviewJob({
       jobId,
       shopId: shop_id,
-      productId: product_id,
+      productId: normalizedProductId,
       templateId: template_id,
       buyerSessionId: session_id,
     });
 
     const payload = buyerPreviewGeneratePayloadSchema.parse({
       shop_id,
-      product_id,
+      product_id: normalizedProductId,
       template_id,
       buyer_session_id: session_id,
       image_url: uploadResult.readUrl,

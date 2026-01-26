@@ -397,7 +397,16 @@ export const Shell = () => {
       return;
     }
     if (!config.shopDomain || !config.productId || !config.templateId) {
-      setError("Missing product configuration for preview generation.");
+      const missing = [
+        !config.shopDomain ? "shop_domain" : null,
+        !config.productId ? "product_id" : null,
+        !config.templateId ? "template_id" : null,
+      ].filter(Boolean);
+      setError(
+        `Missing product configuration for preview generation (${missing.join(
+          ", ",
+        )}).`,
+      );
       return;
     }
 

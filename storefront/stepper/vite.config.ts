@@ -33,6 +33,12 @@ export default defineConfig({
           return "[name][extname]";
         },
       },
+      onwarn(warning, warn) {
+        if (warning.code === "MODULE_LEVEL_DIRECTIVE") {
+          return;
+        }
+        warn(warning);
+      },
     },
   },
 });
