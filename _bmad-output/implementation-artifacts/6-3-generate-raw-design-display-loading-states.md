@@ -7,7 +7,7 @@ Status: ready-for-dev
 ## Story
 
 As a buyer,
-I want to generate a preview image from my inputs,
+I want to generate a stylized image from my inputs,
 so that I can see the personalized result before adding to cart.
 
 ## Acceptance Criteria
@@ -22,36 +22,67 @@ so that I can see the personalized result before adding to cart.
 
 ## Tasks / Subtasks
 
-- [ ] **Define request/response contracts (shared Zod)**
-  - [ ] Add `app/schemas/app_proxy.ts` (or extend existing shared schema module) with:
-    - `generate_preview_request` (snake_case fields)
-    - `generate_preview_response` with `{ data: { job_id, preview_url?, status } }` or `{ error: { code, message, details? } }`
-    - `generate_preview_status_response` for polling
+- [ ] **Define Inngest workflow types and payload schema**
+  - [ ] Add buyer preview generation types to `app/services/inngest/types.ts`:
+    - `BuyerPreviewGeneratePayload` with `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `image_url` (supabase URL), `text_input?`
+  - [ ] Add Zod schema for `buyer_preview_generate_payload`
+- [ ] **Create Inngest workflow for buyer preview generation**
+  - [ ] Create `app/services/inngest/functions/buyer-preview-generation.server.ts`
+  - [ ] Implement `buyerPreviewGenerate` function with steps:
+    1. Load template (prompt, aspect ratio, removeBackgroundEnabled)
+    2. Load shop product (get Printify product link)
+    3. Fetch Printify product details + variant + print area
+    4. Calculate fal image size based on template aspect ratio
+    5. Build prompt from buyer photo + optional text + template prompt
+    6. Check billing guardrails (`checkBillableActionAllowed`)
+    7. **Create billable event** with idempotency key (BEFORE fal call)
+    8. Update job status to "generating"
+    9. Generate images via fal.ai (`generateImages`)
+    10. **Confirm billable event and charge** (AFTER image is stored)
+    11. Store generated image in Supabase Storage (private bucket)
+    12. Update job status to "done" with signed URL
+    13. PostHog telemetry: `generation.started`, `generation.succeeded`
+  - [ ] Implement `buyerPreviewGenerateFailure` handler:
+    - Listen for `inngest/function.failed` for `buyer_preview_generate`
+    - Mark job as "failed"
+    - Fail billable event appropriately (waived if provider cost incurred)
+    - PostHog telemetry: `generation.failed`
+- [ ] **Define App Proxy request/response contracts (shared Zod)**
+  - [ ] Add `app/schemas/app_proxy.ts` with:
+    - `generate_preview_request` (snake_case fields: `shop_id`, `product_id`, `template_id`, `image_file` (multipart), `text_input?`, `session_id`)
+    - `generate_preview_response` with `{ data: { job_id, status } }` or `{ error: { code, message, details? } }`
+    - `generate_preview_status_response` with `{ data: { job_id, status, preview_url?, error? } }`
 - [ ] **Implement App Proxy endpoints**
-  - [ ] Create `app/routes/app-proxy/generate-preview.tsx` (or equivalent React Router file-based route) for `POST` generate
-  - [ ] Create `app/routes/app-proxy/generate-preview-status.tsx` (or similar) for `GET` status by `job_id`
-  - [ ] Use `authenticate.public.appProxy(request)` on all proxy routes
-  - [ ] Validate payloads via shared Zod schemas
+  - [ ] Create `app/routes/app-proxy/generate-preview.tsx` for `POST` generate:
+    - Verify App Proxy signature (`authenticate.public.appProxy`)
+    - Validate payload via Zod schema
+    - Store uploaded image in Supabase Storage (private bucket) → get URL
+    - Send Inngest event: `buyer_previews.generate.requested` with payload
+    - Return `job_id` immediately (async workflow)
+  - [ ] Create `app/routes/app-proxy/generate-preview-status.tsx` for `GET` status by `job_id`:
+    - Verify App Proxy signature
+    - Query DB for job status (need `buyer_preview_jobs` table or reuse merchant previews)
+    - Return job status + signed URL when ready
   - [ ] Return errors via `{ error: { code, message, details? } }`
-- [ ] **Generation workflow**
-  - [ ] Store uploaded image in Supabase Storage (private bucket)
-  - [ ] Call `app/services/fal/generate.server.ts` to generate image
-  - [ ] Persist preview output and return signed URL
-  - [ ] Emit PostHog events: `generation.started`, `generation.succeeded`, `generation.failed`
-  - [ ] Include `shop_id`, `job_id`, `template_id`, `product_id`, `duration_ms` in event props (snake_case)
 - [ ] **Front-end integration**
-  - [ ] Update `storefront/stepper/src/components/Shell.tsx` to call the App Proxy `POST` on Generate
-  - [ ] Store `job_id`, `preview_url`, `generation_status`, and `error` in Zustand
+  - [ ] Update `storefront/stepper/src/components/Shell.tsx` to call App Proxy `POST /generate-preview`
+  - [ ] Store `job_id`, `preview_url`, `generation_status`, and `error` in Zustand store
   - [ ] Replace fake progress with real status polling (interval 2s) until preview is ready
   - [ ] Render hero preview image once `preview_url` is ready
-  - [ ] Show calm error message + “Try again” action on failure
+  - [ ] Show calm error message + "Try again" action on failure
 - [ ] **Telemetry + performance tracking**
-  - [ ] Capture `generation_duration_ms` from backend timing
-  - [ ] Emit PostHog events and log via pino with correlation IDs
+  - [ ] Capture `generation_duration_ms` from backend timing (Inngest step timing)
+  - [ ] Emit PostHog events: `generation.started`, `generation.succeeded`, `generation.failed`
+  - [ ] Include `shop_id`, `job_id`, `template_id`, `product_id`, `duration_ms` in event props (snake_case)
+  - [ ] Log via pino with correlation IDs
   - [ ] Ensure operator can inspect p95 timing (PostHog dashboard or event query)
+- [ ] **Database schema for buyer preview jobs**
+  - [ ] Create Prisma model `BuyerPreviewJob` with fields: `id`, `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `status`, `preview_url`, `error_message`, `created_at`, `updated_at`
+  - [ ] Add migration for new model
 - [ ] **Manual QA**
-  - [ ] Upload valid photo, generate preview, and see hero preview
-  - [ ] Simulate generation failure (mock fal error) and verify error UX
+  - [ ] Upload valid photo, generate preview, see hero preview
+  - [ ] Verify billing event created and charged after successful generation
+  - [ ] Simulate generation failure (mock fal error) and verify error UX + billable event failed (not charged)
   - [ ] Verify signed URL access works and is time-limited
 
 ## Dev Notes
@@ -61,7 +92,14 @@ so that I can see the personalized result before adding to cart.
 - **App Proxy:** All production storefront calls must go through App Proxy; dev-only non-proxy path is not allowed here.
 - **Signed URLs:** Use Supabase Storage signed URLs (private bucket). No public access or service role key on client.
 - **Event naming:** Use PostHog `domain.action` and `snake_case` props.
-- **Billing:** Do not charge here; billing occurs only after image is generated and stored (per architecture rules).
+- **Billing:** Charge the shop that owns the product. Follow the merchant preview pattern:
+  - Create billable event BEFORE fal call (with idempotency key)
+  - Confirm/charge AFTER image is generated and stored
+  - Fail billable event on workflow failure (waived if provider cost incurred)
+- **Inngest workflow:** Mirror the merchant preview generation workflow (`merchantPreviewGenerate`) but adapted for buyers:
+  - Buyer inputs (photo + text) instead of template variables
+  - Skip mockup generation (Printify temp product not needed for buyer previews)
+  - Same billing guardrails, same fal generation, same storage approach
 
 ### Developer Context
 
@@ -72,6 +110,11 @@ so that I can see the personalized result before adding to cart.
 
 ### Technical Requirements
 
+- **Inngest workflow:**
+  - Event: `buyer_previews.generate.requested`
+  - Idempotency key: `buyer_preview_generation:{job_id}` or `:{event.id}`
+  - Steps: load template → build prompt → check billing → create billable event → generate → confirm/charge → store in Supabase → update status
+  - Failure handler: mark job failed, fail billable event appropriately
 - **Request contract (snake_case):**
   - `shop_id`, `product_id`, `template_id`, `text_input` (optional), `session_id` (if available), `image_file` (multipart)
 - **Response contract (snake_case):**
@@ -79,6 +122,7 @@ so that I can see the personalized result before adding to cart.
 - **Error envelope:** `{ error: { code, message, details? } }`
 - **Telemetry:** PostHog events with `shop_id`, `job_id`, `template_id`, `product_id`, `duration_ms`
 - **Performance:** Track and surface p95 generation time < 15s
+- **Billing:** Charge the shop that owns the product; use billable events ledger with idempotency key to prevent double charges
 
 ### Architecture Compliance
 
@@ -87,21 +131,26 @@ so that I can see the personalized result before adding to cart.
 - Keep API payloads `snake_case`; map to internal `camelCase`.
 - Store all assets in private Supabase Storage and serve via signed URLs.
 - Use `authenticate.public.appProxy(request)` to verify App Proxy signature on every request.
+- Use Inngest for async workflows with billing integration; follow merchant preview pattern.
+- Billing must use billable events ledger with idempotency keys; charge only after image generation succeeds.
 - Log with pino JSON to stdout; do not log PII or secrets.
 
 ### Library / Framework Requirements
 
 - `react`, `zustand`
 - `@shopify/shopify-app-react-router`
-- `inngest`
+- `inngest` (already installed, reuse existing client)
 - `posthog-js` / `posthog-node` (server-side events)
 - `zod`
 
 ### File Structure Requirements
 
+- `app/services/inngest/functions/buyer-preview-generation.server.ts` (new)
+- `app/services/inngest/types.ts` (extend with buyer preview types)
 - `app/routes/app-proxy/generate-preview.tsx` (new)
 - `app/routes/app-proxy/generate-preview-status.tsx` (new)
 - `app/schemas/app_proxy.ts` (new or extend shared schema module)
+- `prisma/schema.prisma` (add BuyerPreviewJob model)
 - `app/services/supabase/storage.ts` (reuse)
 - `app/services/fal/generate.server.ts` (reuse)
 - `app/services/posthog/events.ts` (reuse)
@@ -122,10 +171,11 @@ so that I can see the personalized result before adding to cart.
 
 ### References
 
-- _bmad-output/planning-artifacts/epics.md#Story 6.3: Generate Preview + Secure Access + Performance Tracking
-- _bmad-output/planning-artifacts/prd.md#Non-Functional Requirements
-- _bmad-output/planning-artifacts/architecture.md#Frontend Architecture
-- _bmad-output/project-context.md
+- \_bmad-output/planning-artifacts/epics.md#Story 6.3: Generate Preview + Secure Access + Performance Tracking
+- \_bmad-output/planning-artifacts/prd.md#Non-Functional Requirements
+- \_bmad-output/planning-artifacts/architecture.md#Frontend Architecture
+- \_bmad-output/project-context.md
+- app/services/inngest/functions/merchant-preview-generation.server.ts (reference pattern for buyer preview workflow)
 
 ## Dev Agent Record
 
@@ -140,17 +190,23 @@ codex-gpt-5
 
 ### Completion Notes List
 
-- Added detailed API contracts and required Zod schemas for App Proxy generate + status.
+- Added Inngest workflow for buyer preview generation (mirrors merchant preview pattern).
+- Integrated billing via billable events ledger: create event → generate → confirm/charge.
+- Added App Proxy endpoints for async generation + status polling.
 - Mapped backend flow to existing fal + supabase services with signed URLs.
 - Specified PostHog event naming, props, and duration tracking.
 - Defined frontend store fields + polling strategy for generation status.
-- Added testing expectations for schemas and store updates.
+- Added DB model (BuyerPreviewJob) for job tracking.
+- Added testing expectations for schemas, store updates, and billing flow.
 
 ### File List
 
+- app/services/inngest/functions/buyer-preview-generation.server.ts
+- app/services/inngest/types.ts
 - app/routes/app-proxy/generate-preview.tsx
 - app/routes/app-proxy/generate-preview-status.tsx
 - app/schemas/app_proxy.ts
+- prisma/schema.prisma (add BuyerPreviewJob)
 - storefront/stepper/src/components/Shell.tsx
 - storefront/stepper/src/stepper-store.ts
 
@@ -173,7 +229,7 @@ codex-gpt-5
 
 ## Project Context Reference
 
-- _bmad-output/project-context.md
+- \_bmad-output/project-context.md
 
 ## Story Completion Status
 

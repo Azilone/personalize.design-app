@@ -391,7 +391,7 @@ export const Shell = () => {
                           )
                         }
                         placeholder="Enter name"
-                        className="flex w-full rounded-md border border-input bg-transparent py-1 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:text-base h-[48px] px-[16px] pr-[56px] text-[18px]"
+                        className="flex w-full rounded-md border border-input bg-transparent py-1 shadow-sm transition-colors file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 h-[48px] px-[16px] pr-[56px]"
                       />
                       <span className="absolute right-[16px] top-1/2 -translate-y-1/2 text-[16px] text-muted-foreground">
                         {textInput.length}/{maxNameLength}
