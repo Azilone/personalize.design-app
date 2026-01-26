@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Image as ImageIcon } from "lucide-react";
 import { useStepperStore } from "../stepper-store";
 import { useMediaQuery } from "../hooks/use-media-query";
@@ -22,14 +22,30 @@ export const Shell = () => {
   const { isOpen, close, step, totalSteps, file, config } = useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const previousUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (file) {
       const url = URL.createObjectURL(file);
       setPreviewUrl(url);
-      return () => URL.revokeObjectURL(url);
+
+      // Revoke previous URL to prevent memory leak
+      if (previousUrlRef.current) {
+        URL.revokeObjectURL(previousUrlRef.current);
+      }
+      previousUrlRef.current = url;
+
+      return () => {
+        URL.revokeObjectURL(url);
+        previousUrlRef.current = null;
+      };
     }
     setPreviewUrl(null);
+    // Revoke previous URL when file is cleared
+    if (previousUrlRef.current) {
+      URL.revokeObjectURL(previousUrlRef.current);
+      previousUrlRef.current = null;
+    }
   }, [file]);
 
   const title = config.variantTitle

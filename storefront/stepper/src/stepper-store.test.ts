@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useStepperStore } from "./stepper-store";
 
@@ -55,6 +55,24 @@ describe("useStepperStore", () => {
     const { setConfig } = useStepperStore.getState();
     setConfig(config);
     expect(useStepperStore.getState().config).toEqual(config);
+  });
+
+  it("returns focus to trigger on close", () => {
+    const mockFocus = vi.fn();
+    const mockElement = {
+      focus: mockFocus,
+    } as unknown as HTMLButtonElement;
+
+    const mockRef = { current: mockElement };
+    const { open, close, setTriggerRef } = useStepperStore.getState();
+
+    setTriggerRef(mockRef);
+    open();
+    expect(useStepperStore.getState().isOpen).toBe(true);
+
+    close();
+    expect(useStepperStore.getState().isOpen).toBe(false);
+    expect(mockFocus).toHaveBeenCalledTimes(1);
   });
 
   it("manages input state", () => {

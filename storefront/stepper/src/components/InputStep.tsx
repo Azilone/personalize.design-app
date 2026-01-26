@@ -19,15 +19,15 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleFile = (file: File) => {
-    const errorMsg = validateFile(file);
+  const handleFile = useCallback(async (file: File) => {
+    const errorMsg = await validateFile(file);
     if (errorMsg) {
       setError(errorMsg);
       return;
     }
     setError(null);
     setFile(file);
-  };
+  }, []);
 
   const onDrag = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -39,22 +39,28 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
     }
   }, []);
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-      handleFile(e.dataTransfer.files[0]);
-    }
-  }, []);
+  const onDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setDragActive(false);
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        await handleFile(e.dataTransfer.files[0]);
+      }
+    },
+    [handleFile],
+  );
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    e.preventDefault();
-    if (e.target.files && e.target.files[0]) {
-      handleFile(e.target.files[0]);
-    }
-    e.target.value = "";
-  };
+  const handleChange = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      if (e.target.files && e.target.files[0]) {
+        await handleFile(e.target.files[0]);
+      }
+      e.target.value = "";
+    },
+    [handleFile],
+  );
 
   const handleGenerate = () => {
     if (!file) {

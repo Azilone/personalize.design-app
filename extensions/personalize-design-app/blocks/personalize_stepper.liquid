@@ -3,32 +3,37 @@
 <script src="{{ 'personalize-stepper.js' | asset_url }}" defer></script>
 
 {% assign pd_config = product.metafields.personalize_design.config %}
-{% assign pd_config_value = pd_config.value %}
-{% assign pd_config_obj = pd_config_value %}
-{% unless pd_config_value.template_id or pd_config_value.personalization_enabled or pd_config_value.text_enabled or pd_config_value.textEnabled %}
-  {% assign pd_config_obj = pd_config_value | parse_json %}
-{% endunless %}
 
-<div 
-  id="pd-stepper-root" 
-  data-pd-stepper
-  data-shop-domain="{{ shop.permanent_domain }}"
-  data-product-id="{{ product.id }}"
-  data-product-title="{{ product.title | escape }}"
-  data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
-  {% if product.featured_image %}
-    data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
-  {% endif %}
+{% if pd_config %}
   {% if pd_config.value %}
-    data-template-id="{{ pd_config_obj.template_id }}"
-    data-personalization-enabled="{{ pd_config_obj.personalization_enabled }}"
-    data-text-enabled="{{ pd_config_obj.text_enabled | default: pd_config_obj.textEnabled }}"
+    {% assign pd_config_value = pd_config.value %}
+    {% assign pd_config_obj = pd_config_value %}
   {% elsif pd_config.template_id %}
-    data-template-id="{{ pd_config.template_id }}"
-    data-personalization-enabled="{{ pd_config.personalization_enabled }}"
-    data-text-enabled="{{ pd_config.text_enabled | default: pd_config.textEnabled }}"
+    {% assign pd_config_value = pd_config %}
+    {% assign pd_config_obj = pd_config %}
   {% endif %}
-></div>
+
+  {% if pd_config_obj and pd_config_obj contains '{' %}
+    {% assign pd_config_obj = pd_config_obj | parse_json %}
+  {% endif %}
+
+  <div
+    id="pd-stepper-root"
+    data-pd-stepper
+    data-shop-domain="{{ shop.permanent_domain }}"
+    data-product-id="{{ product.id }}"
+    data-product-title="{{ product.title | escape }}"
+    data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+    {% if product.featured_image %}
+      data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
+    {% endif %}
+    {% if pd_config_obj %}
+      data-template-id="{{ pd_config_obj.template_id }}"
+      data-personalization-enabled="{{ pd_config_obj.personalization_enabled }}"
+      data-text-enabled="{{ pd_config_obj.text_enabled | default: pd_config_obj.textEnabled }}"
+    {% endif %}
+  ></div>
+{% endif %}
 
 {% schema %}
 {

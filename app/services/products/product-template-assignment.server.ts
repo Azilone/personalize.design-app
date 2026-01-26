@@ -1,6 +1,28 @@
 import type { ProductTemplateAssignment } from "@prisma/client";
 import prisma from "../../db.server";
 
+/**
+ * Shopify Admin GraphQL client interface.
+ * Shopify may provide either a .graphql() or .request() method depending on client version.
+ */
+export interface ShopifyAdminClient {
+  /**
+   * GraphQL method that returns a Response object (newer versions)
+   */
+  graphql?: (
+    query: string,
+    options: { variables: Record<string, unknown> },
+  ) => Promise<Response>;
+
+  /**
+   * Request method that directly returns data (older versions)
+   */
+  request?: (
+    query: string,
+    options: { variables: Record<string, unknown> },
+  ) => Promise<unknown>;
+}
+
 export type ProductTemplateAssignmentDto = {
   id: string;
   shopId: string;
@@ -26,7 +48,7 @@ export type ProductTemplateAssignmentSummary = {
 };
 
 export const updateProductPersonalizationMetafield = async (input: {
-  admin: any; // GraphQL client
+  admin: ShopifyAdminClient;
   productId: string;
   templateId: string | null;
   personalizationEnabled: boolean;
@@ -81,23 +103,40 @@ export const updateProductPersonalizationMetafield = async (input: {
     },
   };
 
-  let data;
-  if (input.admin.graphql) {
+  let data: unknown;
+
+  if (typeof input.admin.graphql === "function") {
     const response = await input.admin.graphql(query, { variables });
     data = await response.json();
+  } else if (typeof input.admin.request === "function") {
+    data = await input.admin.request(query, { variables });
   } else {
-    const response = await input.admin.request(query, { variables });
-    data = response;
-  }
-  if (data.data?.productUpdate?.userErrors?.length > 0) {
-    console.error(
-      "Metafield update failed",
-      data.data.productUpdate.userErrors,
+    throw new Error(
+      "Invalid admin client: must have either graphql or request method",
     );
-    throw new Error(data.data.productUpdate.userErrors[0].message);
   }
 
-  return data.data?.productUpdate?.product;
+  const dataObj = data as {
+    data?: {
+      productUpdate?: {
+        product?: unknown;
+        userErrors?: Array<{ message: string }>;
+      };
+    };
+  };
+
+  if (
+    dataObj.data?.productUpdate?.userErrors &&
+    dataObj.data.productUpdate.userErrors.length > 0
+  ) {
+    console.error(
+      "Metafield update failed",
+      dataObj.data.productUpdate.userErrors,
+    );
+    throw new Error(dataObj.data.productUpdate.userErrors[0].message);
+  }
+
+  return dataObj.data?.productUpdate?.product;
 };
 
 export const mapProductTemplateAssignmentRecord = (

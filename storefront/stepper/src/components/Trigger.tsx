@@ -8,6 +8,10 @@ export const Trigger = () => {
 
   useEffect(() => {
     setTriggerRef(triggerRef);
+
+    return () => {
+      setTriggerRef(null as any);
+    };
   }, [setTriggerRef]);
 
   const isLoaded =

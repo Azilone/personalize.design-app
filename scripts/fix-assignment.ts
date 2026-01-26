@@ -5,10 +5,17 @@ import "@shopify/shopify-api/adapters/node";
 
 const prisma = new PrismaClient();
 
+// SAFETY: This script should NEVER run in production
+if (process.env.NODE_ENV === "production") {
+  throw new Error("fix-assignment.ts cannot run in production environment");
+}
+
 async function fixAssignment() {
-  const shopDomain = "personalized-design-dev-store-2.myshopify.com";
-  const productId = "7676843622477"; // Accent Coffee Mug
-  const templateId = "cmksehg9p0001w17zzihagnz7"; // claymotion style
+  // Use environment variables for flexibility, with defaults for local development
+  const shopDomain =
+    process.env.SHOP_DOMAIN || "personalized-design-dev-store-2.myshopify.com";
+  const productId = process.env.PRODUCT_ID || "7676843622477"; // Accent Coffee Mug
+  const templateId = process.env.TEMPLATE_ID || "cmksehg9p0001w17zzihagnz7"; // claymotion style
 
   console.log(`Fixing assignment for ${shopDomain} product ${productId}...`);
 

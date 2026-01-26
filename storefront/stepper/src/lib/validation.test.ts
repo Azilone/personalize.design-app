@@ -1,71 +1,105 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { validateFile, MAX_SIZE, ALLOWED_TYPES } from "./validation";
 
-vi.mock("./browser-support", () => ({
+import { isFileTypeSupported, validateBrowserSupport } from "./browser-support";
+
+vi.mock("./browser-support", async () => ({
   isFileTypeSupported: vi.fn(),
   validateBrowserSupport: vi.fn(),
 }));
 
-import { isFileTypeSupported, validateBrowserSupport } from "./browser-support";
-
 describe("validateFile", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.mocked(isFileTypeSupported).mockReturnValue(true);
-    vi.mocked(validateBrowserSupport).mockReturnValue(null);
+    vi.mocked(isFileTypeSupported).mockResolvedValue(true);
+    vi.mocked(validateBrowserSupport).mockResolvedValue(null);
   });
 
-  it("accepts valid files", () => {
+  it("accepts valid files", async () => {
     const file = new File(["test"], "test.png", { type: "image/png" });
-    expect(validateFile(file)).toBeNull();
+    const result = await validateFile(file);
+    expect(result).toBeNull();
   });
 
-  it("accepts all allowed MIME types", () => {
-    ALLOWED_TYPES.forEach((type) => {
+  it("accepts all allowed MIME types", async () => {
+    for (const type of ALLOWED_TYPES) {
       const file = new File(["test"], `test.${type.split("/")[1]}`, { type });
-      expect(validateFile(file)).toBeNull();
-    });
+      const result = await validateFile(file);
+      expect(result).toBeNull();
+    }
   });
 
-  it("rejects invalid types", () => {
+  it("rejects invalid types", async () => {
     const file = new File(["test"], "test.pdf", { type: "application/pdf" });
-    expect(validateFile(file)).toContain("Unsupported file type");
+    const result = await validateFile(file);
+    expect(result).toContain("Unsupported file type");
   });
 
-  it("rejects large files", () => {
+  it("rejects large files", async () => {
     const file = {
       name: "large.png",
       type: "image/png",
       size: MAX_SIZE + 1,
     } as File;
 
-    expect(validateFile(file)).toContain("File size exceeds");
+    const result = await validateFile(file);
+    expect(result).toContain("File size exceeds");
   });
 
-  it("rejects HEIC when browser doesn't support it", () => {
-    vi.mocked(validateBrowserSupport).mockReturnValue(
+  it("rejects HEIC when browser doesn't support it", async () => {
+    vi.mocked(validateBrowserSupport).mockResolvedValue(
       "Your browser does not support HEIC files",
     );
     const file = new File(["test"], "test.heic", { type: "image/heic" });
 
-    const result = validateFile(file);
+    const result = await validateFile(file);
     expect(result).toContain("Your browser does not support HEIC files");
   });
 
-  it("rejects AVIF when browser doesn't support it", () => {
-    vi.mocked(validateBrowserSupport).mockReturnValue(
+  it("rejects AVIF when browser doesn't support it", async () => {
+    vi.mocked(validateBrowserSupport).mockResolvedValue(
       "Your browser does not support AVIF files",
     );
     const file = new File(["test"], "test.avif", { type: "image/avif" });
 
-    const result = validateFile(file);
+    const result = await validateFile(file);
     expect(result).toContain("Your browser does not support AVIF files");
   });
 
-  it("accepts HEIC when browser supports it", () => {
-    vi.mocked(validateBrowserSupport).mockReturnValue(null);
+  it("accepts HEIC when browser supports it", async () => {
+    vi.mocked(validateBrowserSupport).mockResolvedValue(null);
     const file = new File(["test"], "test.heic", { type: "image/heic" });
 
-    expect(validateFile(file)).toBeNull();
+    const result = await validateFile(file);
+    expect(result).toBeNull();
+  });
+});
+
+describe("isFileTypeSupported", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("returns true for standard formats", async () => {
+    const result = await isFileTypeSupported("image/jpeg");
+    expect(result).toBe(true);
+  });
+
+  it("returns false when toDataURL throws error", async () => {
+    const mockCanvas = {
+      getContext: vi.fn().mockReturnValue({ createImageData: vi.fn() }),
+      toDataURL: vi.fn().mockImplementation(() => {
+        throw new Error("Not supported");
+      }),
+    };
+
+    // Mock document.createElement to return our mock canvas
+    const createElementSpy = vi.spyOn(document, "createElement");
+    createElementSpy.mockReturnValue(mockCanvas as any);
+
+    const result = await isFileTypeSupported("image/heic");
+    expect(result).toBe(false);
+
+    createElementSpy.mockRestore();
   });
 });
