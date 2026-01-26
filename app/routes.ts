@@ -7,7 +7,14 @@ export default [
   route("auth/session-token", "./routes/auth/session-token/route.tsx"),
   route("auth/*", "./routes/auth/$/route.tsx"),
   route("inngest", "./routes/inngest/route.tsx"),
-  route("app-proxy", "./routes/app-proxy/route.tsx"),
+  route("app-proxy", "./routes/app-proxy/route.tsx", {}, [
+    route("generate-preview", "./routes/app-proxy/generate-preview/route.tsx"),
+    route(
+      "generate-preview-status",
+      "./routes/app-proxy/generate-preview-status/route.tsx",
+    ),
+    route("template-config", "./routes/app-proxy/template-config/route.tsx"),
+  ]),
   route("api/inngest", "./routes/inngest/route.tsx", {
     id: "routes/inngest/api",
   }),
