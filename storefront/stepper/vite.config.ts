@@ -2,12 +2,13 @@ import path from "node:path";
 
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "vite";
+import tsconfigPaths from "vite-tsconfig-paths";
 
 const rootDir = __dirname;
 
 export default defineConfig({
   root: rootDir,
-  plugins: [tailwindcss()],
+  plugins: [tailwindcss(), tsconfigPaths()],
   build: {
     outDir: path.resolve(
       rootDir,

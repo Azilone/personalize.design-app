@@ -1,0 +1,21 @@
+{
+  "$schema": "https://ui.shadcn.com/schema.json",
+  "style": "new-york",
+  "rsc": false,
+  "tsx": true,
+  "tailwind": {
+    "config": "",
+    "css": "storefront/stepper/src/personalize-stepper.css",
+    "baseColor": "neutral",
+    "cssVariables": true,
+    "prefix": ""
+  },
+  "aliases": {
+    "components": "@/storefront/stepper/src/components",
+    "utils": "@/storefront/stepper/src/lib/utils",
+    "ui": "@/storefront/stepper/src/components/ui",
+    "lib": "@/storefront/stepper/src/lib",
+    "hooks": "@/storefront/stepper/src/hooks"
+  },
+  "iconLibrary": "lucide"
+}

@@ -15,6 +15,7 @@ type StepperState = {
     textEnabled?: boolean;
   };
   file: File | null;
+  graphicFile: File | null;
   textInput: string;
   triggerRef: React.MutableRefObject<HTMLButtonElement | null> | null;
   setStep: (step: number) => void;
@@ -24,6 +25,7 @@ type StepperState = {
   close: () => void;
   setConfig: (config: StepperState["config"]) => void;
   setFile: (file: File | null) => void;
+  setGraphicFile: (file: File | null) => void;
   setTextInput: (text: string) => void;
   resetInputs: () => void;
   setTriggerRef: (
@@ -37,6 +39,7 @@ export const useStepperStore = create<StepperState>((set) => ({
   isOpen: false,
   config: {},
   file: null,
+  graphicFile: null,
   textInput: "",
   triggerRef: null,
   setStep: (step) => set({ step }),
@@ -58,7 +61,8 @@ export const useStepperStore = create<StepperState>((set) => ({
     }),
   setConfig: (config) => set({ config }),
   setFile: (file) => set({ file }),
+  setGraphicFile: (graphicFile) => set({ graphicFile }),
   setTextInput: (textInput) => set({ textInput }),
-  resetInputs: () => set({ file: null, textInput: "" }),
+  resetInputs: () => set({ file: null, graphicFile: null, textInput: "" }),
   setTriggerRef: (ref) => set({ triggerRef: ref }),
 }));

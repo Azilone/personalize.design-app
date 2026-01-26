@@ -20,7 +20,10 @@ export const Trigger = () => {
 
   if (!isLoaded) {
     return (
-      <Button disabled className="pd-trigger-button">
+      <Button
+        disabled
+        className="pd-trigger-button h-12 px-8 text-base font-semibold"
+      >
         Personalize
       </Button>
     );
@@ -34,7 +37,7 @@ export const Trigger = () => {
     <Button
       ref={triggerRef}
       onClick={open}
-      className="pd-trigger-button"
+      className="pd-trigger-button h-12 px-8 text-base font-semibold"
       aria-label="Personalize this product"
     >
       Personalize
