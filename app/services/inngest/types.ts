@@ -94,6 +94,46 @@ export const buyerPreviewGeneratePayloadSchema = z.object({
   variable_values: z.record(z.string(), z.string()),
 });
 
+export const generateImagePayloadSchema = z.discriminatedUnion("request_type", [
+  buyerPreviewGeneratePayloadSchema.extend({
+    request_type: z.literal("buyer_preview"),
+  }),
+  merchantPreviewGeneratePayloadSchema.extend({
+    request_type: z.literal("merchant_preview"),
+  }),
+  templateTestGeneratePayloadSchema.extend({
+    request_type: z.literal("template_test"),
+  }),
+]);
+
+export const generateDevFakeImagePayloadSchema = z.discriminatedUnion(
+  "request_type",
+  [
+    buyerPreviewGeneratePayloadSchema.extend({
+      request_type: z.literal("buyer_preview"),
+    }),
+    merchantPreviewFakeGeneratePayloadSchema.extend({
+      request_type: z.literal("merchant_preview"),
+    }),
+    templateTestFakeGeneratePayloadSchema.extend({
+      request_type: z.literal("template_test"),
+    }),
+  ],
+);
+
+export const generateImageAndRemoveBackgroundPayloadSchema =
+  templateTestRemoveBackgroundPayloadSchema;
+
+export const mockupPrintifyPayloadSchema = z.object({
+  job_id: z.string().min(1),
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+  template_id: z.string().min(1),
+  cover_print_area: z.boolean(),
+  design_url: z.string().url().optional(),
+  fake_generation: z.boolean().optional().default(false),
+});
+
 export type MerchantPreviewGeneratePayload = z.infer<
   typeof merchantPreviewGeneratePayloadSchema
 >;
@@ -105,6 +145,18 @@ export type MerchantPreviewFakeGeneratePayload = z.infer<
 export type BuyerPreviewGeneratePayload = z.infer<
   typeof buyerPreviewGeneratePayloadSchema
 >;
+
+export type GenerateImagePayload = z.infer<typeof generateImagePayloadSchema>;
+
+export type GenerateDevFakeImagePayload = z.infer<
+  typeof generateDevFakeImagePayloadSchema
+>;
+
+export type GenerateImageAndRemoveBackgroundPayload = z.infer<
+  typeof generateImageAndRemoveBackgroundPayloadSchema
+>;
+
+export type MockupPrintifyPayload = z.infer<typeof mockupPrintifyPayloadSchema>;
 
 export const productsSyncPayloadSchema = z.object({
   shop_id: z.string().min(1),

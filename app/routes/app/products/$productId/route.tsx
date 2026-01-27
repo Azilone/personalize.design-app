@@ -24,8 +24,8 @@ import { captureEvent } from "../../../../lib/posthog.server";
 import { buildPlaceholderUrl } from "../../../../lib/placeholder-images";
 import { productTemplateAssignmentActionSchema } from "../../../../schemas/admin";
 import {
-  merchantPreviewFakeGeneratePayloadSchema,
-  merchantPreviewGeneratePayloadSchema,
+  generateDevFakeImagePayloadSchema,
+  generateImagePayloadSchema,
 } from "../../../../services/inngest/types";
 import { inngest } from "../../../../services/inngest/client.server";
 import {
@@ -356,35 +356,32 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         variableValues,
       });
 
+      const basePayload = {
+        request_type: "merchant_preview" as const,
+        job_id: jobId,
+        shop_id: shopId,
+        product_id: productId,
+        template_id: templateId,
+        cover_print_area: coverPrintArea,
+        test_text: parsed.data.test_text,
+        variable_values: variableValues,
+      };
+
       if (fakeGeneration) {
-        const payload = merchantPreviewFakeGeneratePayloadSchema.parse({
-          job_id: jobId,
-          shop_id: shopId,
-          product_id: productId,
-          template_id: templateId,
-          cover_print_area: coverPrintArea,
-          test_text: parsed.data.test_text,
-          variable_values: variableValues,
-        });
+        const payload = generateDevFakeImagePayloadSchema.parse(basePayload);
 
         await inngest.send({
-          name: "merchant_previews.fake_generate.requested",
+          name: "generate.dev-fake-image.requested",
           data: payload,
         });
       } else {
-        const payload = merchantPreviewGeneratePayloadSchema.parse({
-          job_id: jobId,
-          shop_id: shopId,
-          product_id: productId,
-          template_id: templateId,
-          cover_print_area: coverPrintArea,
+        const payload = generateImagePayloadSchema.parse({
+          ...basePayload,
           test_image_url: uploadResult.readUrl,
-          test_text: parsed.data.test_text,
-          variable_values: variableValues,
         });
 
         await inngest.send({
-          name: "merchant_previews.generate.requested",
+          name: "generate.image.requested",
           data: payload,
         });
       }

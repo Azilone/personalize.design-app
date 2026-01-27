@@ -36,8 +36,8 @@ import {
 import { getAllModelConfigs } from "../../../../services/fal/registry";
 import { inngest } from "../../../../services/inngest/client.server";
 import {
-  templateTestFakeGeneratePayloadSchema,
-  templateTestGeneratePayloadSchema,
+  generateDevFakeImagePayloadSchema,
+  generateImagePayloadSchema,
 } from "../../../../services/inngest/types";
 import logger from "../../../../lib/logger";
 import { uploadFileAndGetReadUrl } from "../../../../services/supabase/storage";
@@ -400,24 +400,25 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     }
 
     try {
+      const basePayload = {
+        request_type: "template_test" as const,
+        shop_id: shopId,
+        template_id: templateId,
+        num_images: num_images,
+      };
+
       const { ids } = fake_generation
         ? await inngest.send({
-            name: "templates/test.fake_generate.requested",
-            data: templateTestFakeGeneratePayloadSchema.parse({
-              shop_id: shopId,
-              template_id: templateId,
-              num_images: num_images,
-            }),
+            name: "generate.dev-fake-image.requested",
+            data: generateDevFakeImagePayloadSchema.parse(basePayload),
           })
         : await inngest.send({
-            name: "templates/test.generate.requested",
-            data: templateTestGeneratePayloadSchema.parse({
-              shop_id: shopId,
-              template_id: templateId,
+            name: "generate.image.requested",
+            data: generateImagePayloadSchema.parse({
+              ...basePayload,
               test_photo_url: finalTestPhotoUrl,
               prompt: generationPrompt,
               variable_values: safeVariableValues,
-              num_images: num_images,
               generation_model_identifier:
                 template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
               remove_background_enabled: removeBackgroundEnabled,

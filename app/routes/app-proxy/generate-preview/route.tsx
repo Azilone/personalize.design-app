@@ -7,7 +7,10 @@ import {
 } from "../../../schemas/app_proxy";
 import { uploadFileAndGetReadUrl } from "../../../services/supabase/storage";
 import { inngest } from "../../../services/inngest/client.server";
-import { buyerPreviewGeneratePayloadSchema } from "../../../services/inngest/types";
+import {
+  generateDevFakeImagePayloadSchema,
+  generateImagePayloadSchema,
+} from "../../../services/inngest/types";
 import { createBuyerPreviewJob } from "../../../services/buyer-previews/buyer-previews.server";
 import logger from "../../../lib/logger";
 
@@ -149,7 +152,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       buyerSessionId: session_id,
     });
 
-    const payload = buyerPreviewGeneratePayloadSchema.parse({
+    const basePayload = {
+      request_type: "buyer_preview" as const,
       shop_id: shopId,
       product_id: normalizedProductId,
       template_id,
@@ -157,12 +161,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       image_url: uploadResult.readUrl,
       text_input: text_input || undefined,
       variable_values: parseVariableValues(variable_values_json),
-    });
+    };
+
+    const payload = shouldFakeGenerate
+      ? generateDevFakeImagePayloadSchema.parse(basePayload)
+      : generateImagePayloadSchema.parse(basePayload);
 
     await inngest.send({
       name: shouldFakeGenerate
-        ? "buyer_previews.fake_generate.requested"
-        : "buyer_previews.generate.requested",
+        ? "generate.dev-fake-image.requested"
+        : "generate.image.requested",
       data: payload,
     });
   } catch (error) {
