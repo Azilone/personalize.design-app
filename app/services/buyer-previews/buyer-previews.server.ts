@@ -8,6 +8,7 @@ export type BuyerPreviewJobRecord = {
   templateId: string;
   buyerSessionId: string;
   status: BuyerPreviewStatus;
+  previewStorageKey: string | null;
   previewUrl: string | null;
   errorMessage: string | null;
   createdAt: Date;
@@ -26,6 +27,7 @@ export type UpdateBuyerPreviewJobInput = {
   jobId: string;
   shopId: string;
   status: BuyerPreviewStatus;
+  previewStorageKey?: string | null;
   previewUrl?: string | null;
   errorMessage?: string | null;
 };
@@ -37,6 +39,7 @@ const mapBuyerPreviewJob = (record: {
   template_id: string;
   buyer_session_id: string;
   status: BuyerPreviewStatus;
+  preview_storage_key: string | null;
   preview_url: string | null;
   error_message: string | null;
   created_at: Date;
@@ -48,6 +51,7 @@ const mapBuyerPreviewJob = (record: {
   templateId: record.template_id,
   buyerSessionId: record.buyer_session_id,
   status: record.status,
+  previewStorageKey: record.preview_storage_key,
   previewUrl: record.preview_url,
   errorMessage: record.error_message,
   createdAt: record.created_at,
@@ -78,6 +82,7 @@ export const createBuyerPreviewJob = async (
       template_id: input.templateId,
       buyer_session_id: input.buyerSessionId,
       status: "pending",
+      preview_storage_key: null,
       preview_url: null,
       error_message: null,
     },
@@ -98,6 +103,7 @@ export const updateBuyerPreviewJob = async (
     },
     data: {
       status: input.status,
+      preview_storage_key: input.previewStorageKey ?? undefined,
       preview_url: input.previewUrl ?? undefined,
       error_message: input.errorMessage ?? undefined,
     },

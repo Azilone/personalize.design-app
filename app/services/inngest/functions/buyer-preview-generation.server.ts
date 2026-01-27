@@ -34,6 +34,25 @@ import { applyPromptVariableValues } from "../../../lib/prompt-variables";
 const DEV_PLACEHOLDER_PREVIEW_URL =
   "https://placehold.co/600x400?text=Hello+World";
 
+const FAKE_GENERATION_DELAY_MS = 5000;
+
+const wait = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
+const fetchWithTimeout = async (
+  url: string,
+  timeoutMs = 10000,
+): Promise<Response> => {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    return await fetch(url, { signal: controller.signal });
+  } finally {
+    clearTimeout(timeoutId);
+  }
+};
+
 const selectPreviewVariant = (
   variants: Array<{ id: number; price: number; isEnabled: boolean }>,
 ) => {
@@ -199,6 +218,10 @@ export const buyerPreviewFakeGenerate = inngest.createFunction(
         shopId: payload.shop_id,
         status: "processing",
       }),
+    );
+
+    await step.run("fake-generation-delay", async () =>
+      wait(FAKE_GENERATION_DELAY_MS),
     );
 
     await step.run("mark-preview-done", async () =>
@@ -426,7 +449,7 @@ export const buyerPreviewGenerate = inngest.createFunction(
     }
 
     const storedImage = await step.run("store-generated-image", async () => {
-      const response = await fetch(designUrl);
+      const response = await fetchWithTimeout(designUrl, 15000);
       if (!response.ok) {
         throw new Error(`Failed to fetch generated image (${response.status})`);
       }
@@ -463,7 +486,8 @@ export const buyerPreviewGenerate = inngest.createFunction(
         jobId: payload.buyer_session_id,
         shopId: payload.shop_id,
         status: "succeeded",
-        previewUrl: storedImage.readUrl,
+        previewStorageKey: storedImage.storageKey,
+        previewUrl: null,
         errorMessage: null,
       }),
     );

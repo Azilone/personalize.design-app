@@ -1,6 +1,6 @@
 # Story 6.3: Generate Preview + Secure Access + Performance Tracking
 
-Status: ready-for-dev
+Status: in-progress
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -63,7 +63,7 @@ so that I can see the personalized result before adding to cart.
     - Verify App Proxy signature
     - Query DB for job status (need `buyer_preview_jobs` table or reuse merchant previews)
     - Return job status + signed URL when ready
-  - [ ] Return errors via `{ error: { code, message, details? } }`
+  - [x] Return errors via `{ error: { code, message, details? } }`
 - [x] **Front-end integration**
   - [x] Update `storefront/stepper/src/components/Shell.tsx` to call App Proxy `POST /generate-preview`
   - [x] Store `job_id`, `preview_url`, `generation_status`, and `error` in Zustand store
@@ -208,6 +208,9 @@ codex-gpt-5
 - Manual QA attempt via storefront modal failed: App Proxy response returned HTML (non-JSON) on generate.
 - Removed unsupported Liquid `parse_json` filter from theme app extension block to clear theme check errors.
 - Moved App Proxy routes into nested route folders to satisfy React Router file-based routing.
+- Added preview storage key support and per-request signed URLs for buyer preview access.
+- Added server-side file type/size validation and App Proxy schema tests for upload constraints.
+- Added timeout for generated image fetch and improved error handling for signed URL failures.
 
 ### File List
 
@@ -220,7 +223,9 @@ codex-gpt-5
 - app/services/inngest/index.server.ts
 - app/services/inngest/types.test.ts
 - app/services/inngest/types.ts
+- app/services/supabase/storage.ts
 - prisma/migrations/20260126163647_add_buyer_preview_jobs/migration.sql
+- prisma/migrations/20260127120000_add_buyer_preview_storage_key/migration.sql
 - extensions/personalize-design-app/blocks/personalize_stepper.liquid
 - prisma/migrations/20260124171847_add_storefront_generation_attempts/migration.sql
 - prisma/schema.prisma

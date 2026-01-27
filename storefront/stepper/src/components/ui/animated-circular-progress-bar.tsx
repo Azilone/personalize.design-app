@@ -1,5 +1,5 @@
-import type { CSSProperties, ReactNode } from "react";
 import { cn } from "../../lib/utils";
+import type { CSSProperties } from "react";
 
 interface AnimatedCircularProgressBarProps {
   max?: number;
@@ -8,7 +8,6 @@ interface AnimatedCircularProgressBarProps {
   gaugePrimaryColor: string;
   gaugeSecondaryColor: string;
   className?: string;
-  displayValue?: ReactNode;
 }
 
 export function AnimatedCircularProgressBar({
@@ -18,13 +17,10 @@ export function AnimatedCircularProgressBar({
   gaugePrimaryColor,
   gaugeSecondaryColor,
   className,
-  displayValue,
 }: AnimatedCircularProgressBarProps) {
   const circumference = 2 * Math.PI * 45;
   const percentPx = circumference / 100;
-  const normalizedValue = Math.min(Math.max(value, min), max);
-  const currentPercent =
-    Math.round(((normalizedValue - min) / (max - min)) * 100) || 0;
+  const currentPercent = Math.round(((value - min) / (max - min)) * 100);
 
   return (
     <div
@@ -64,8 +60,7 @@ export function AnimatedCircularProgressBar({
               {
                 stroke: gaugeSecondaryColor,
                 "--stroke-percent": 90 - currentPercent,
-                "--offset-factor-secondary":
-                  "calc(1 - var(--offset-factor))",
+                "--offset-factor-secondary": "calc(1 - var(--offset-factor))",
                 strokeDasharray:
                   "calc(var(--stroke-percent) * var(--percent-to-px)) var(--circumference)",
                 transform:
@@ -73,7 +68,7 @@ export function AnimatedCircularProgressBar({
                 transition: "all var(--transition-length) ease var(--delay)",
                 transformOrigin:
                   "calc(var(--circle-size) / 2) calc(var(--circle-size) / 2)",
-              } as CSSProperties
+              } as React.CSSProperties
             }
           />
         )}
@@ -99,15 +94,15 @@ export function AnimatedCircularProgressBar({
                 "rotate(calc(-90deg + var(--gap-percent) * var(--offset-factor) * var(--percent-to-deg)))",
               transformOrigin:
                 "calc(var(--circle-size) / 2) calc(var(--circle-size) / 2)",
-            } as CSSProperties
+            } as React.CSSProperties
           }
         />
       </svg>
       <span
         data-current-value={currentPercent}
-        className="animate-in fade-in absolute inset-0 m-auto size-fit delay-[var(--delay)] duration-[var(--transition-length)] ease-linear text-3xl font-bold text-gray-900"
+        className="animate-in fade-in absolute inset-0 m-auto size-fit delay-[var(--delay)] duration-[var(--transition-length)] ease-linear"
       >
-        {displayValue ?? currentPercent}
+        {currentPercent}
       </span>
     </div>
   );

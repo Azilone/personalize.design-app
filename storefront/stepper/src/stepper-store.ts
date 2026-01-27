@@ -28,6 +28,7 @@ type StepperState = {
   generationStatus: "idle" | "pending" | "processing" | "succeeded" | "failed";
   previewUrl: string | null;
   generationError: string | null;
+  serverJobConfirmed: boolean;
   triggerRef: React.MutableRefObject<HTMLButtonElement | null> | null;
   setStep: (step: number) => void;
   next: () => void;
@@ -45,6 +46,7 @@ type StepperState = {
   setGenerationStatus: (status: StepperState["generationStatus"]) => void;
   setPreviewUrl: (url: string | null) => void;
   setGenerationError: (error: string | null) => void;
+  setServerJobConfirmed: (confirmed: boolean) => void;
   resetPreview: () => void;
   setTriggerRef: (
     ref: React.MutableRefObject<HTMLButtonElement | null>,
@@ -64,6 +66,7 @@ export const useStepperStore = create<StepperState>((set) => ({
   generationStatus: "idle",
   previewUrl: null,
   generationError: null,
+  serverJobConfirmed: false,
   triggerRef: null,
   setStep: (step) => set({ step }),
   next: () =>
@@ -99,12 +102,14 @@ export const useStepperStore = create<StepperState>((set) => ({
   setGenerationStatus: (generationStatus) => set({ generationStatus }),
   setPreviewUrl: (previewUrl) => set({ previewUrl }),
   setGenerationError: (generationError) => set({ generationError }),
+  setServerJobConfirmed: (serverJobConfirmed) => set({ serverJobConfirmed }),
   resetPreview: () =>
     set({
       previewJobId: null,
       generationStatus: "idle",
       previewUrl: null,
       generationError: null,
+      serverJobConfirmed: false,
     }),
   setTriggerRef: (ref) => set({ triggerRef: ref }),
 }));

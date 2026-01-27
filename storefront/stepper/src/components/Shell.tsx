@@ -37,6 +37,19 @@ const PLACEHOLDER_IMAGE_URL =
   "https://placehold.co/600x400?text=Heretext+Hello+World";
 const APP_PROXY_BASE = "/apps/personalize";
 
+const WAITING_MESSAGES = [
+  "The AI is pondering existence...",
+  "Adding a pinch of creativity...",
+  "Consulting the design spirits...",
+  "Painting with digital pixels...",
+  "The magic is happening...",
+  "Almost there, we promise!",
+  "Our AI is a bit slow today...",
+  "Did we mention AI is artistic?",
+  "Warming up the creative engines...",
+  "Crafting something special...",
+] as const;
+
 export const Shell = () => {
   const {
     isOpen,
@@ -53,10 +66,12 @@ export const Shell = () => {
     generationStatus,
     previewUrl,
     generationError,
+    serverJobConfirmed,
     setPreviewJobId,
     setGenerationStatus,
     setPreviewUrl,
     setGenerationError,
+    setServerJobConfirmed,
     resetPreview,
   } = useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -66,6 +81,10 @@ export const Shell = () => {
   const [selectedMockupIndex, setSelectedMockupIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [fakeGeneration, setFakeGeneration] = useState(false);
+  const [generationStartTime, setGenerationStartTime] = useState<number | null>(
+    null,
+  );
+  const [waitingMessageIndex, setWaitingMessageIndex] = useState(0);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const logoUrlRef = useRef<string | null>(null);
   const templateVariables = templateConfig?.variables ?? [];
@@ -107,16 +126,66 @@ export const Shell = () => {
     if (!isOpen) {
       return;
     }
-    if (generationStatus === "pending") {
-      setProgress(20);
-    } else if (generationStatus === "processing") {
-      setProgress(65);
-    } else if (generationStatus === "succeeded") {
+    if (generationStatus === "succeeded") {
       setProgress(100);
-    } else if (generationStatus === "failed" || generationStatus === "idle") {
+    } else if (generationStatus === "failed") {
       setProgress(0);
+      setGenerationStartTime(null);
+      setWaitingMessageIndex(0);
+    } else if (generationStatus === "idle" && modalState !== "generating") {
+      setProgress(0);
+      setGenerationStartTime(null);
+      setWaitingMessageIndex(0);
     }
-  }, [generationStatus, isOpen]);
+  }, [generationStatus, isOpen, modalState]);
+
+  useEffect(() => {
+    if (modalState !== "generating") {
+      return;
+    }
+
+    if (!generationStartTime) {
+      setGenerationStartTime(Date.now());
+      return;
+    }
+
+    const startTime = generationStartTime;
+    const FAKE_DURATION = 15000;
+    const MESSAGE_CYCLE_INTERVAL = 4000;
+    let cancelled = false;
+
+    const animateProgress = () => {
+      if (cancelled) {
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      const progressValue = Math.min((elapsed / FAKE_DURATION) * 100, 95);
+      setProgress(progressValue);
+
+      if (elapsed < FAKE_DURATION) {
+        requestAnimationFrame(animateProgress);
+      }
+    };
+
+    const messageInterval = setInterval(() => {
+      if (cancelled) {
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      if (elapsed > FAKE_DURATION) {
+        setWaitingMessageIndex((prev) => (prev + 1) % WAITING_MESSAGES.length);
+      }
+    }, MESSAGE_CYCLE_INTERVAL);
+
+    requestAnimationFrame(animateProgress);
+
+    return () => {
+      cancelled = true;
+      clearInterval(messageInterval);
+    };
+  }, [modalState, generationStatus, generationStartTime]);
 
   useEffect(() => {
     const shopDomain = config.shopDomain;
@@ -125,6 +194,10 @@ export const Shell = () => {
     }
 
     if (!["pending", "processing"].includes(generationStatus)) {
+      return;
+    }
+
+    if (!serverJobConfirmed) {
       return;
     }
 
@@ -182,10 +255,14 @@ export const Shell = () => {
         }
 
         if (nextStatus === "succeeded") {
-          setModalState("reveal");
+          setTimeout(() => {
+            setModalState("reveal");
+          }, 500);
+          return;
         }
         if (nextStatus === "failed") {
           setModalState("editing");
+          return;
         }
       } catch (error) {
         if (cancelled) {
@@ -212,6 +289,7 @@ export const Shell = () => {
     previewJobId,
     config.shopDomain,
     generationStatus,
+    serverJobConfirmed,
     setGenerationError,
     setGenerationStatus,
     setPreviewUrl,
@@ -360,6 +438,9 @@ export const Shell = () => {
   const isGenerating =
     generationStatus === "pending" || generationStatus === "processing";
   const errorMessage = error ?? generationError;
+  const isWaitingLong =
+    generationStartTime && Date.now() - generationStartTime > 15000;
+  const waitingMessage = WAITING_MESSAGES[waitingMessageIndex];
 
   const personalizationItems = useMemo(() => {
     const items = [] as Array<{
@@ -411,6 +492,12 @@ export const Shell = () => {
   };
 
   const handleGenerate = async () => {
+    const isGenerating =
+      generationStatus === "pending" || generationStatus === "processing";
+    if (isGenerating) {
+      return;
+    }
+
     if (!file) {
       setError("Please upload an image to proceed.");
       return;
@@ -432,10 +519,9 @@ export const Shell = () => {
     setError(null);
     setGenerationError(null);
     setPreviewUrl(null);
+    setServerJobConfirmed(false);
 
     const jobId = crypto.randomUUID();
-    setPreviewJobId(jobId);
-    setGenerationStatus("pending");
     setModalState("generating");
 
     const formData = new FormData();
@@ -485,6 +571,7 @@ export const Shell = () => {
 
       if (!response.ok || payload.error) {
         setGenerationStatus("failed");
+        setServerJobConfirmed(false);
         setGenerationError(
           payload.error?.message ??
             "Something went wrong while starting preview generation.",
@@ -495,6 +582,7 @@ export const Shell = () => {
 
       const nextJobId = payload.data?.job_id ?? jobId;
       setPreviewJobId(nextJobId);
+      setServerJobConfirmed(true);
       setGenerationStatus(
         (payload.data?.status as
           | "pending"
@@ -504,6 +592,7 @@ export const Shell = () => {
       );
     } catch (error) {
       setGenerationStatus("failed");
+      setServerJobConfirmed(false);
       setGenerationError(
         error instanceof Error
           ? error.message
@@ -570,22 +659,21 @@ export const Shell = () => {
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center p-[20px] lg:p-[32px]">
             {modalState === "generating" ? (
-              <div className="flex flex-col items-center justify-center gap-[24px]">
+              <div className="flex flex-col items-center justify-center gap-[24px] animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
                 <AnimatedCircularProgressBar
-                  value={progress}
+                  value={Math.floor(progress / 10) * 10}
                   max={100}
                   min={0}
                   gaugePrimaryColor="#1a3a4a"
                   gaugeSecondaryColor="rgba(26, 58, 74, 0.2)"
                   className="size-[160px]"
-                  displayValue={`${progress}%`}
                 />
                 <p className="text-[18px] text-muted-foreground">
-                  Generating your design...
+                  {isWaitingLong ? waitingMessage : "Generating your design..."}
                 </p>
               </div>
             ) : modalState === "reveal" ? (
-              <div className="flex flex-col items-center justify-center gap-[24px]">
+              <div className="flex flex-col items-center justify-center gap-[24px] animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
                 <p className="text-[18px] text-muted-foreground">
                   Scratch to reveal your design!
                 </p>
@@ -607,7 +695,7 @@ export const Shell = () => {
                 </ScratchToReveal>
               </div>
             ) : (
-              <div className="flex flex-col items-center gap-[16px] text-muted-foreground">
+              <div className="flex flex-col items-center gap-[16px] text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
                 <div className="relative h-full w-full max-w-full lg:max-w-[800px]">
                   <img
                     src={mainImageUrl}
@@ -804,7 +892,9 @@ export const Shell = () => {
                 Creating your design
               </p>
               <p className="text-center text-[16px] text-muted-foreground">
-                Please wait while we generate your personalized product...
+                {isWaitingLong
+                  ? waitingMessage
+                  : "Please wait while we generate your personalized product..."}
               </p>
             </div>
           )}

@@ -203,6 +203,7 @@ model BuyerPreviewJob {
   template_id      String
   buyer_session_id String
   status           BuyerPreviewStatus @default(pending)
+  preview_storage_key String?
   preview_url      String?
   error_message    String?
   created_at       DateTime          @default(now())

@@ -1,4 +1,19 @@
 import { z } from "zod";
+import {
+  ALLOWED_FILE_TYPES,
+  MAX_FILE_SIZE_BYTES,
+} from "../services/supabase/storage";
+
+const isAllowedFileType = (filename: string): boolean => {
+  const lastDot = filename.lastIndexOf(".");
+  if (lastDot === -1 || lastDot === filename.length - 1) {
+    return false;
+  }
+  const extension = filename.slice(lastDot + 1).toLowerCase();
+  return ALLOWED_FILE_TYPES.includes(
+    extension as (typeof ALLOWED_FILE_TYPES)[number],
+  );
+};
 
 const appProxyErrorSchema = z.object({
   error: z.object({
@@ -13,10 +28,14 @@ export const generatePreviewRequestSchema = z.object({
   product_id: z.string().min(1),
   template_id: z.string().min(1),
   session_id: z.string().min(1),
-  image_file: z.custom<File>(
-    (value) => value instanceof File,
-    "Image file is required.",
-  ),
+  image_file: z
+    .custom<File>((value) => value instanceof File, "Image file is required.")
+    .refine((file) => file.size <= MAX_FILE_SIZE_BYTES, {
+      message: "Image file is too large.",
+    })
+    .refine((file) => isAllowedFileType(file.name), {
+      message: "Image file type is not allowed.",
+    }),
   text_input: z.string().optional(),
   variable_values_json: z.string().optional(),
   fake_generation: z

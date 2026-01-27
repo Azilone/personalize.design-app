@@ -64,6 +64,13 @@ export interface UploadResult {
   expiresAt: Date;
 }
 
+export interface SignedReadUrlResult {
+  /** Signed URL for reading the file (GET) */
+  readUrl: string;
+  /** Expiry timestamp for signed URLs */
+  expiresAt: Date;
+}
+
 let supabaseClient: SupabaseClient | null | undefined;
 
 const isHttpUrl = (value: string): boolean =>
@@ -338,6 +345,44 @@ export async function uploadFileAndGetReadUrl(
   return {
     storageKey,
     uploadUrl: readData.signedUrl,
+    readUrl: readData.signedUrl,
+    expiresAt,
+  };
+}
+
+export async function createSignedReadUrl(
+  storageKey: string,
+): Promise<SignedReadUrlResult> {
+  const expiresAt = new Date(Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000);
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    if (process.env.NODE_ENV === "production") {
+      throw new StorageError(
+        "storage_error",
+        "Supabase storage is not configured.",
+        false,
+      );
+    }
+
+    return {
+      readUrl: `https://mock-storage.example.com/read/${storageKey}`,
+      expiresAt,
+    };
+  }
+
+  const { data: readData, error: readError } = await supabase.storage
+    .from(TEST_UPLOADS_BUCKET)
+    .createSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
+
+  if (readError || !readData?.signedUrl) {
+    throw new StorageError(
+      "storage_error",
+      readError?.message ?? "Unable to create read URL.",
+    );
+  }
+
+  return {
     readUrl: readData.signedUrl,
     expiresAt,
   };

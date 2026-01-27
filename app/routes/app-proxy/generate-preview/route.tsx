@@ -5,7 +5,13 @@ import {
   generatePreviewRequestSchema,
   type GeneratePreviewResponse,
 } from "../../../schemas/app_proxy";
-import { uploadFileAndGetReadUrl } from "../../../services/supabase/storage";
+import {
+  StorageError,
+  getFileExtension,
+  uploadFileAndGetReadUrl,
+  validateFileSize,
+  validateFileType,
+} from "../../../services/supabase/storage";
 import { inngest } from "../../../services/inngest/client.server";
 import {
   generateDevFakeImagePayloadSchema,
@@ -113,6 +119,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
+  try {
+    const extension = getFileExtension(image_file.name);
+    validateFileType(extension);
+    validateFileSize(image_file.size);
+  } catch (error) {
+    const message =
+      error instanceof StorageError ? error.message : "Image file is invalid.";
+    return data<GeneratePreviewResponse>(
+      {
+        error: {
+          code: "invalid_request",
+          message,
+        },
+      },
+      { status: 400 },
+    );
+  }
+
   let uploadResult;
   if (shouldFakeGenerate) {
     uploadResult = { readUrl: DEV_PLACEHOLDER_PREVIEW_URL };
@@ -129,7 +153,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return data<GeneratePreviewResponse>(
         {
           error: {
-            code: "upload_failed",
+            code: error instanceof StorageError ? error.code : "upload_failed",
             message:
               error instanceof Error
                 ? error.message
