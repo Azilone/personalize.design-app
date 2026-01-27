@@ -19,6 +19,10 @@ export const generatePreviewRequestSchema = z.object({
   ),
   text_input: z.string().optional(),
   variable_values_json: z.string().optional(),
+  fake_generation: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 });
 
 export const generatePreviewResponseSchema = z.union([

@@ -1,18 +1,26 @@
 import { spawn, spawnSync } from "node:child_process";
 
-const buildResult = spawnSync("pnpm", ["run", "build:extension"], {
-  stdio: "inherit",
-  shell: true,
-});
+const buildResult = spawnSync(
+  "pnpm",
+  ["run", "build:extension", "--", "--mode", "development"],
+  {
+    stdio: "inherit",
+    shell: true,
+  },
+);
 
 if (buildResult.status && buildResult.status !== 0) {
   process.exit(buildResult.status);
 }
 
-const extension = spawn("pnpm", ["run", "dev:extension"], {
-  stdio: "inherit",
-  shell: true,
-});
+const extension = spawn(
+  "pnpm",
+  ["run", "dev:extension", "--", "--mode", "development"],
+  {
+    stdio: "inherit",
+    shell: true,
+  },
+);
 
 const app = spawn(
   "node",

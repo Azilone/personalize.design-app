@@ -65,9 +65,11 @@ export const Shell = () => {
   const [progress, setProgress] = useState(0);
   const [selectedMockupIndex, setSelectedMockupIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const [fakeGeneration, setFakeGeneration] = useState(false);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const logoUrlRef = useRef<string | null>(null);
   const templateVariables = templateConfig?.variables ?? [];
+  const isDev = import.meta.env?.MODE === "development";
 
   useEffect(() => {
     if (file) {
@@ -96,6 +98,7 @@ export const Shell = () => {
       setProgress(0);
       setSelectedMockupIndex(0);
       setError(null);
+      setFakeGeneration(false);
       resetPreview();
     }
   }, [isOpen, resetPreview]);
@@ -425,6 +428,9 @@ export const Shell = () => {
     formData.append("template_id", config.templateId);
     formData.append("session_id", jobId);
     formData.append("image_file", file);
+    if (isDev && fakeGeneration) {
+      formData.append("fake_generation", "true");
+    }
 
     if (templateVariables.length > 0) {
       const variablePayload = templateVariables.reduce<Record<string, string>>(
@@ -518,8 +524,8 @@ export const Shell = () => {
   const content = (
     <div className="flex h-full flex-col font-['Helvetica',_'Arial',_sans-serif]">
       <div className="flex items-center justify-between border-b border-border px-[20px] py-[16px] lg:px-[32px] lg:py-[24px]">
-        <div className="min-w-0">
-          <TitleComponent className="text-[20px] font-bold text-foreground lg:text-[30px]">
+        <div className="min-w-0 flex-1 mr-4">
+          <TitleComponent className="text-[20px] font-bold text-foreground lg:text-[30px] truncate">
             {title}
           </TitleComponent>
           <DescriptionComponent className="sr-only">
@@ -538,7 +544,7 @@ export const Shell = () => {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="flex w-full flex-1 flex-col border-b border-border lg:w-3/4 lg:border-b-0 lg:border-r min-h-[55vh] lg:min-h-0 overflow-y-auto lg:overflow-hidden">
+        <div className="flex w-full flex-1 flex-col border-b border-border lg:border-b-0 lg:border-r min-h-[55vh] lg:min-h-0 overflow-y-auto">
           <div className="flex items-center justify-between px-[20px] pt-[20px] lg:px-[32px] lg:pt-[24px]">
             <span className="text-[16px] text-muted-foreground lg:text-[18px]">
               {modalState === "review"
@@ -586,7 +592,7 @@ export const Shell = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-[16px] text-muted-foreground">
-                <div className="relative h-full w-full max-w-[800px]">
+                <div className="relative h-full w-full max-w-full lg:max-w-[800px]">
                   <img
                     src={mainImageUrl}
                     alt={config.productTitle ?? "Product"}
@@ -636,7 +642,7 @@ export const Shell = () => {
             </div>
           )}
         </div>
-        <div className="flex h-full w-full flex-col lg:w-1/4 min-h-0">
+        <div className="flex flex-1 w-full flex-col lg:h-full lg:w-[400px] min-h-0">
           {modalState === "editing" && (
             <>
               <div className="flex-1 overflow-y-auto p-[20px] lg:p-[32px]">
@@ -741,6 +747,19 @@ export const Shell = () => {
                   <p className="text-[12px] font-medium text-destructive">
                     {errorMessage}
                   </p>
+                )}
+                {isDev && (
+                  <label className="flex items-center gap-[8px] text-[12px] text-muted-foreground">
+                    <input
+                      type="checkbox"
+                      checked={fakeGeneration}
+                      onChange={(event) =>
+                        setFakeGeneration(event.target.checked)
+                      }
+                      className="h-[14px] w-[14px] rounded border border-input"
+                    />
+                    Dev mode: skip AI generation
+                  </label>
                 )}
                 <Button
                   onClick={handleGenerate}
@@ -880,7 +899,7 @@ export const Shell = () => {
       <Dialog open={isOpen} onOpenChange={(open) => !open && close()}>
         <DialogContent
           showCloseButton={false}
-          className="pd-stepper-theme fixed z-50 flex h-[90vh] w-[95vw] max-w-none flex-col overflow-hidden rounded-lg bg-white p-0 shadow-xl"
+          className="pd-stepper-theme fixed z-50 flex h-[90vh] w-[90vw] max-w-[1600px] flex-col overflow-hidden rounded-lg bg-white p-0 shadow-xl"
         >
           {content}
         </DialogContent>

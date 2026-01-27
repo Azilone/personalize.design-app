@@ -19,7 +19,7 @@ const mount = document.querySelector<HTMLElement>("#pd-stepper-root");
 if (mount) {
   // Read data attributes
   const shopDomain = mount.dataset.shopDomain;
-  const productId = mount.dataset.productGid ?? mount.dataset.productId;
+  const productId = mount.dataset.productGid || mount.dataset.productId;
   const productTitle = mount.dataset.productTitle;
   const variantTitle = mount.dataset.variantTitle;
   const productImageUrl = mount.dataset.productImage;

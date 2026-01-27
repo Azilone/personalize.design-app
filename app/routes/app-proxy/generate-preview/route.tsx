@@ -11,6 +11,9 @@ import { buyerPreviewGeneratePayloadSchema } from "../../../services/inngest/typ
 import { createBuyerPreviewJob } from "../../../services/buyer-previews/buyer-previews.server";
 import logger from "../../../lib/logger";
 
+const DEV_PLACEHOLDER_PREVIEW_URL =
+  "https://placehold.co/600x400?text=Hello+World";
+
 const parseVariableValues = (value?: string | null): Record<string, string> => {
   if (!value) {
     return {};
@@ -43,10 +46,13 @@ const normalizeProductId = (value: string): string => {
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   await authenticate.public.appProxy(request);
+  const url = new URL(request.url);
   const formData = await request.formData();
   const parsed = generatePreviewRequestSchema.safeParse(
     Object.fromEntries(formData),
   );
+
+  const isDev = process.env.NODE_ENV === "development";
 
   if (!parsed.success) {
     return data<GeneratePreviewResponse>(
@@ -69,8 +75,28 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     image_file,
     text_input,
     variable_values_json,
+    fake_generation,
   } = parsed.data;
+  const appProxyShop = url.searchParams.get("shop");
+  const shopId = appProxyShop || shop_id;
   const normalizedProductId = normalizeProductId(product_id);
+  const shouldFakeGenerate = isDev && fake_generation;
+
+  if (fake_generation && !isDev) {
+    logger.error(
+      { mode: "buyer_preview", env: process.env.NODE_ENV },
+      "Fake buyer preview requested outside development",
+    );
+    return data<GeneratePreviewResponse>(
+      {
+        error: {
+          code: "invalid_request",
+          message: "Fake preview generation is only available in development.",
+        },
+      },
+      { status: 400 },
+    );
+  }
 
   if (image_file.size === 0) {
     return data<GeneratePreviewResponse>(
@@ -85,27 +111,31 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   let uploadResult;
-  try {
-    uploadResult = await uploadFileAndGetReadUrl(
-      shop_id,
-      image_file.name,
-      image_file.size,
-      Buffer.from(await image_file.arrayBuffer()),
-      image_file.type || "application/octet-stream",
-    );
-  } catch (error) {
-    return data<GeneratePreviewResponse>(
-      {
-        error: {
-          code: "upload_failed",
-          message:
-            error instanceof Error
-              ? error.message
-              : "Unable to upload preview image.",
+  if (shouldFakeGenerate) {
+    uploadResult = { readUrl: DEV_PLACEHOLDER_PREVIEW_URL };
+  } else {
+    try {
+      uploadResult = await uploadFileAndGetReadUrl(
+        shopId,
+        image_file.name,
+        image_file.size,
+        Buffer.from(await image_file.arrayBuffer()),
+        image_file.type || "application/octet-stream",
+      );
+    } catch (error) {
+      return data<GeneratePreviewResponse>(
+        {
+          error: {
+            code: "upload_failed",
+            message:
+              error instanceof Error
+                ? error.message
+                : "Unable to upload preview image.",
+          },
         },
-      },
-      { status: 400 },
-    );
+        { status: 400 },
+      );
+    }
   }
 
   const jobId = session_id;
@@ -113,14 +143,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   try {
     await createBuyerPreviewJob({
       jobId,
-      shopId: shop_id,
+      shopId,
       productId: normalizedProductId,
       templateId: template_id,
       buyerSessionId: session_id,
     });
 
     const payload = buyerPreviewGeneratePayloadSchema.parse({
-      shop_id,
+      shop_id: shopId,
       product_id: normalizedProductId,
       template_id,
       buyer_session_id: session_id,
@@ -130,12 +160,14 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     await inngest.send({
-      name: "buyer_previews.generate.requested",
+      name: shouldFakeGenerate
+        ? "buyer_previews.fake_generate.requested"
+        : "buyer_previews.generate.requested",
       data: payload,
     });
   } catch (error) {
     logger.error(
-      { shop_id, product_id, template_id, err: error },
+      { shop_id: shopId, product_id, template_id, err: error },
       "Failed to queue buyer preview generation",
     );
 
@@ -155,7 +187,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   logger.info(
     {
-      shop_id,
+      shop_id: shopId,
       product_id,
       template_id,
       job_id: jobId,

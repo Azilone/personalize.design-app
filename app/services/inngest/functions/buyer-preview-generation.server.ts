@@ -31,6 +31,9 @@ import { updateBuyerPreviewJob } from "../../buyer-previews/buyer-previews.serve
 import { captureEvent } from "../../../lib/posthog.server";
 import { applyPromptVariableValues } from "../../../lib/prompt-variables";
 
+const DEV_PLACEHOLDER_PREVIEW_URL =
+  "https://placehold.co/600x400?text=Hello+World";
+
 const selectPreviewVariant = (
   variants: Array<{ id: number; price: number; isEnabled: boolean }>,
 ) => {
@@ -72,6 +75,157 @@ const resolveContentType = (value: string | null): string => {
   }
   return "image/png";
 };
+
+export const buyerPreviewFakeGenerate = inngest.createFunction(
+  {
+    id: "buyer_preview_fake_generate",
+    concurrency: {
+      key: "event.data.shop_id",
+      limit: 2,
+    },
+  },
+  { event: "buyer_previews.fake_generate.requested" },
+  async ({ event, step }) => {
+    const parsed = buyerPreviewGeneratePayloadSchema.safeParse(event.data);
+    if (!parsed.success) {
+      logger.warn(
+        { errors: parsed.error.flatten().fieldErrors },
+        "Invalid buyer preview fake payload",
+      );
+      throw new NonRetriableError("Invalid buyer preview fake payload");
+    }
+
+    const payload: BuyerPreviewGeneratePayload = parsed.data;
+
+    const template = await step.run("load-template", async () =>
+      getTemplate(payload.template_id, payload.shop_id),
+    );
+
+    if (!template?.prompt) {
+      await step.run("mark-preview-failed-no-prompt", async () =>
+        updateBuyerPreviewJob({
+          jobId: payload.buyer_session_id,
+          shopId: payload.shop_id,
+          status: "failed",
+          errorMessage: "Template prompt is missing.",
+        }),
+      );
+
+      throw new NonRetriableError("Template prompt is missing.");
+    }
+
+    const shopProduct = await step.run("load-shop-product", async () =>
+      prisma.shopProduct.findUnique({
+        where: {
+          shop_id_product_id: {
+            shop_id: payload.shop_id,
+            product_id: payload.product_id,
+          },
+        },
+        select: { printify_product_id: true },
+      }),
+    );
+
+    const printifyProductId = shopProduct?.printify_product_id;
+    if (!printifyProductId) {
+      await step.run("mark-preview-failed-no-printify-link", async () =>
+        updateBuyerPreviewJob({
+          jobId: payload.buyer_session_id,
+          shopId: payload.shop_id,
+          status: "failed",
+          errorMessage: "Printify product is not linked to this product.",
+        }),
+      );
+
+      throw new NonRetriableError("Printify product not linked.");
+    }
+
+    const printifyProduct = await step.run("fetch-printify-product", async () =>
+      getPrintifyProductDetails(payload.shop_id, printifyProductId),
+    );
+
+    const previewVariant = selectPreviewVariant(printifyProduct.variants);
+    if (!previewVariant) {
+      await step.run("mark-preview-failed-no-variants", async () =>
+        updateBuyerPreviewJob({
+          jobId: payload.buyer_session_id,
+          shopId: payload.shop_id,
+          status: "failed",
+          errorMessage: "No Printify variants available for preview.",
+        }),
+      );
+
+      throw new NonRetriableError("No Printify variants available.");
+    }
+
+    const printAreaDimensions = await step.run("fetch-print-area", async () =>
+      getPrintifyVariantPrintArea({
+        shopId: payload.shop_id,
+        blueprintId: printifyProduct.blueprintId,
+        printProviderId: printifyProduct.printProviderId,
+        variantId: previewVariant.id,
+      }),
+    );
+
+    calculateFalImageSize({
+      coverPrintArea: false,
+      templateAspectRatio: template.aspectRatio,
+      printAreaDimensions,
+    });
+
+    const generationPrompt = buildPrompt(
+      template.prompt,
+      payload.variable_values,
+      payload.text_input,
+      template.textInputEnabled,
+    );
+
+    if (!generationPrompt.trim()) {
+      await step.run("mark-preview-failed-empty-prompt", async () =>
+        updateBuyerPreviewJob({
+          jobId: payload.buyer_session_id,
+          shopId: payload.shop_id,
+          status: "failed",
+          errorMessage: "Generation prompt is empty.",
+        }),
+      );
+
+      throw new NonRetriableError("Generation prompt is empty.");
+    }
+
+    await step.run("mark-generating", async () =>
+      updateBuyerPreviewJob({
+        jobId: payload.buyer_session_id,
+        shopId: payload.shop_id,
+        status: "processing",
+      }),
+    );
+
+    await step.run("mark-preview-done", async () =>
+      updateBuyerPreviewJob({
+        jobId: payload.buyer_session_id,
+        shopId: payload.shop_id,
+        status: "succeeded",
+        previewUrl: DEV_PLACEHOLDER_PREVIEW_URL,
+        errorMessage: null,
+      }),
+    );
+
+    logger.info(
+      {
+        shop_id: payload.shop_id,
+        job_id: payload.buyer_session_id,
+        fake_generation: true,
+      },
+      "Buyer preview fake generation completed",
+    );
+
+    return {
+      job_id: payload.buyer_session_id,
+      preview_url: DEV_PLACEHOLDER_PREVIEW_URL,
+    };
+  },
+);
 
 export const buyerPreviewGenerate = inngest.createFunction(
   {
@@ -420,6 +574,7 @@ export const buyerPreviewGenerateFailure = inngest.createFunction(
 );
 
 export const inngestFunctions = [
+  buyerPreviewFakeGenerate,
   buyerPreviewGenerate,
   buyerPreviewGenerateFailure,
 ];

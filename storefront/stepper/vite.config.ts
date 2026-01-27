@@ -9,6 +9,10 @@ const rootDir = __dirname;
 export default defineConfig({
   root: rootDir,
   plugins: [tailwindcss(), tsconfigPaths()],
+  define: {
+    "import.meta.env.DEV": true,
+    "import.meta.env.MODE": JSON.stringify("development"),
+  },
   build: {
     outDir: path.resolve(
       rootDir,
