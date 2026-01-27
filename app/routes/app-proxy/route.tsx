@@ -1,9 +1,21 @@
 import { useLoaderData } from "react-router";
 
 import { authenticate } from "../../shopify.server";
+import logger from "../../lib/logger";
 
 export const loader = async ({ request }: { request: Request }) => {
-  await authenticate.public.appProxy(request);
+  logger.info({ url: request.url }, "App proxy parent route received request");
+
+  try {
+    await authenticate.public.appProxy(request);
+    logger.info("App proxy parent route authentication successful");
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "App proxy parent route authentication failed"
+    );
+    throw error;
+  }
 
   const url = new URL(request.url);
 

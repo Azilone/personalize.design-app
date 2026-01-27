@@ -217,6 +217,8 @@ export default function DevToolsBilling() {
   const showDanger =
     searchParams.get("danger") === "1" || searchParams.get("danger") === "true";
   const shopId = appData?.shopId ?? "";
+  const apiKey = appData?.apiKey ?? "";
+  const appUrl = appData?.appUrl ?? "";
   const planStatus = appData?.planStatus ?? null;
   const subscriptionId = appData?.subscriptionId ?? null;
   const subscriptionStatus = appData?.subscriptionStatus ?? null;
@@ -239,6 +241,35 @@ export default function DevToolsBilling() {
           {subscriptionId
             ? `${subscriptionId} (${subscriptionStatus ?? "unknown"})`
             : "none"}
+        </s-paragraph>
+        <s-paragraph>
+          <strong>App URL:</strong> {appUrl || "(missing)"}
+        </s-paragraph>
+        <s-paragraph>
+          <strong>Client ID:</strong> {apiKey || "(missing)"}
+        </s-paragraph>
+      </s-section>
+
+      <s-section heading="App proxy">
+        <s-paragraph>
+          App proxy requests must hit the storefront domain, not the admin URL.
+        </s-paragraph>
+        <s-paragraph>
+          <strong>Expected base:</strong>{" "}
+          {shopId ? `https://${shopId}/apps/personalize` : "(shop missing)"}
+        </s-paragraph>
+        <s-paragraph>
+          <strong>Template config:</strong>{" "}
+          {shopId
+            ? `https://${shopId}/apps/personalize/template-config?shop_id=${encodeURIComponent(
+                shopId,
+              )}&template_id=YOUR_TEMPLATE_ID`
+            : "(shop missing)"}
+        </s-paragraph>
+        <s-paragraph>
+          If the base URL returns 404, the app proxy is not linked to this app
+          instance. Run <code>shopify app config push</code> for the current app
+          and re-test.
         </s-paragraph>
       </s-section>
 

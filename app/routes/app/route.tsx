@@ -40,6 +40,7 @@ const SUBSCRIPTION_STATUS_CACHE_TTL_MS = 15_000;
 
 export type AppLoaderData = {
   apiKey: string;
+  appUrl: string;
   isDev: boolean;
   shopId: string;
   planStatus: PlanStatus;
@@ -158,6 +159,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const data: AppLoaderData = {
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    appUrl: process.env.SHOPIFY_APP_URL || "",
     isDev,
     shopId,
     planStatus: planStatusForUi,

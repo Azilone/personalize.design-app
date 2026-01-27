@@ -241,30 +241,46 @@ export const Shell = () => {
           },
         );
         const contentType = response.headers.get("content-type") ?? "";
-        if (!contentType.includes("application/json")) {
-          throw new Error(
-            "Template configuration is unavailable. Please try again.",
-          );
+        const rawBody = await response.text();
+        let payload:
+          | {
+              data?: {
+                template_id: string;
+                template_name: string;
+                photo_required: boolean;
+                text_input_enabled: boolean;
+                variables: Array<{ id: string; name: string }>;
+              };
+              error?: { message?: string };
+            }
+          | undefined;
+
+        if (rawBody && contentType.includes("application/json")) {
+          try {
+            payload = JSON.parse(rawBody) as {
+              data?: {
+                template_id: string;
+                template_name: string;
+                photo_required: boolean;
+                text_input_enabled: boolean;
+                variables: Array<{ id: string; name: string }>;
+              };
+              error?: { message?: string };
+            };
+          } catch {
+            payload = undefined;
+          }
         }
-        const payload = (await response.json()) as {
-          data?: {
-            template_id: string;
-            template_name: string;
-            photo_required: boolean;
-            text_input_enabled: boolean;
-            variables: Array<{ id: string; name: string }>;
-          };
-          error?: { message?: string };
-        };
 
         if (cancelled) {
           return;
         }
 
-        if (!response.ok || payload.error || !payload.data) {
-          throw new Error(
-            payload.error?.message ?? "Unable to load template configuration.",
-          );
+        if (!response.ok || payload?.error || !payload?.data) {
+          const fallbackMessage = response.ok
+            ? "Unable to load template configuration."
+            : `Template configuration is unavailable (status ${response.status}).`;
+          throw new Error(payload?.error?.message ?? fallbackMessage);
         }
 
         setTemplateConfig({

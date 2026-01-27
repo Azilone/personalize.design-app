@@ -9,7 +9,18 @@ import { getTemplate } from "../../../services/templates/templates.server";
 import logger from "../../../lib/logger";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.public.appProxy(request);
+  logger.info({ url: request.url }, "App proxy request received");
+
+  try {
+    await authenticate.public.appProxy(request);
+    logger.info("App proxy authentication successful");
+  } catch (error) {
+    logger.error(
+      { error: error instanceof Error ? error.message : String(error) },
+      "App proxy authentication failed"
+    );
+    throw error;
+  }
 
   const url = new URL(request.url);
   const parsed = templateConfigRequestSchema.safeParse({
