@@ -35,8 +35,8 @@ import {
 } from "../../../services/templates/templates.server";
 import { inngest } from "../../../services/inngest/client.server";
 import {
-  generateDevFakeImagePayloadSchema,
-  generateImagePayloadSchema,
+  templateTestFakeGeneratePayloadSchema,
+  templateTestGeneratePayloadSchema,
 } from "../../../services/inngest/types";
 import logger from "../../../lib/logger";
 import {
@@ -282,7 +282,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
     try {
       const basePayload = {
-        request_type: "template_test" as const,
         shop_id: shopId,
         template_id: templateId,
         num_images: num_images,
@@ -290,12 +289,12 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
 
       const { ids } = fake_generation
         ? await inngest.send({
-            name: "generate.dev-fake-image.requested",
-            data: generateDevFakeImagePayloadSchema.parse(basePayload),
+            name: "templates/test.fake_generate.requested",
+            data: templateTestFakeGeneratePayloadSchema.parse(basePayload),
           })
         : await inngest.send({
-            name: "generate.image.requested",
-            data: generateImagePayloadSchema.parse({
+            name: "templates/test.generate.requested",
+            data: templateTestGeneratePayloadSchema.parse({
               ...basePayload,
               test_photo_url,
               prompt: generationPrompt,

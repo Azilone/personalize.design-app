@@ -54,3 +54,151 @@
     @apply border-border;
   }
 }
+
+/* Button styles with CSS custom properties for theme integration */
+#pd-stepper-root,
+.pd-stepper-theme {
+  /* Default button styles (Dawn theme defaults) */
+  --pd-button-bg-color: #121212;
+  --pd-button-text-color: #ffffff;
+  --pd-button-border-radius: 3px;
+  --pd-button-font-size: 15px;
+  --pd-button-font-weight: 400;
+  --pd-button-letter-spacing: 1px;
+  --pd-button-padding-x: 32px;
+  --pd-button-padding-y: 16px;
+  --pd-button-border-width: 0px;
+  --pd-button-border-color: transparent;
+  --pd-button-box-shadow: none;
+
+  /* Hover states */
+  --pd-button-hover-bg-color: #000000;
+  --pd-button-hover-text-color: #ffffff;
+  --pd-button-hover-box-shadow: none;
+
+  /* Disabled states */
+  --pd-button-disabled-bg-color: rgba(18, 18, 18, 0.5);
+  --pd-button-disabled-text-color: rgba(255, 255, 255, 0.5);
+
+  /* Theme-detected styles (set by theme-style-detector.js) */
+  --pd-theme-bg-color: var(--pd-button-bg-color);
+  --pd-theme-bg-image: none;
+  --pd-theme-text-color: var(--pd-button-text-color);
+  --pd-theme-border-radius: var(--pd-button-border-radius);
+  --pd-theme-border-width: var(--pd-button-border-width);
+  --pd-theme-border-style: solid;
+  --pd-theme-border-color: var(--pd-button-border-color);
+  --pd-theme-outline: none;
+  --pd-theme-outline-offset: 0px;
+  --pd-theme-padding-top: var(--pd-button-padding-y);
+  --pd-theme-padding-right: var(--pd-button-padding-x);
+  --pd-theme-padding-bottom: var(--pd-button-padding-y);
+  --pd-theme-padding-left: var(--pd-button-padding-x);
+  --pd-theme-font-family: inherit;
+  --pd-theme-font-size: var(--pd-button-font-size);
+  --pd-theme-font-weight: var(--pd-button-font-weight);
+  --pd-theme-font-style: normal;
+  --pd-theme-line-height: 1.2;
+  --pd-theme-letter-spacing: var(--pd-button-letter-spacing);
+  --pd-theme-text-transform: none;
+  --pd-theme-text-decoration: none;
+  --pd-theme-text-align: center;
+  --pd-theme-box-shadow: var(--pd-button-box-shadow);
+  --pd-theme-cursor: pointer;
+  --pd-theme-transition: all 0.2s ease;
+  --pd-theme-min-height: auto;
+  --pd-theme-min-width: auto;
+  --pd-theme-bg-color-hover: var(--pd-button-hover-bg-color);
+  --pd-theme-text-color-hover: var(--pd-button-hover-text-color);
+}
+
+.pd-personalize-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+
+.pd-personalize-button:not(.pd-theme-classes-applied) {
+  /* Use theme-detected styles by default, fallback to defaults */
+  background-color: var(--pd-theme-bg-color);
+  background-image: var(--pd-theme-bg-image);
+  color: var(--pd-theme-text-color);
+  border-radius: var(--pd-theme-border-radius);
+  font-size: var(--pd-theme-font-size);
+  font-weight: var(--pd-theme-font-weight);
+  letter-spacing: var(--pd-theme-letter-spacing);
+  padding: var(--pd-theme-padding-top) var(--pd-theme-padding-right)
+    var(--pd-theme-padding-bottom) var(--pd-theme-padding-left);
+  border: var(--pd-theme-border-width) var(--pd-theme-border-style)
+    var(--pd-theme-border-color);
+  box-shadow: var(--pd-theme-box-shadow);
+  cursor: var(--pd-theme-cursor);
+  transition: var(--pd-theme-transition);
+  text-align: var(--pd-theme-text-align);
+  text-decoration: var(--pd-theme-text-decoration);
+  line-height: var(--pd-theme-line-height);
+  font-family: var(--pd-theme-font-family);
+  font-style: var(--pd-theme-font-style);
+  text-transform: var(--pd-theme-text-transform);
+  min-height: var(--pd-theme-min-height);
+  min-width: var(--pd-theme-min-width);
+  outline: var(--pd-theme-outline);
+  outline-offset: var(--pd-theme-outline-offset);
+}
+
+.pd-personalize-button:hover:not(:disabled):not(.pd-theme-classes-applied) {
+  background-color: var(
+    --pd-theme-bg-color-hover,
+    var(--pd-button-hover-bg-color)
+  );
+  background-image: var(--pd-theme-bg-image-hover, var(--pd-theme-bg-image));
+  color: var(--pd-theme-text-color-hover, var(--pd-button-hover-text-color));
+  border-color: var(
+    --pd-theme-border-color-hover,
+    var(--pd-theme-border-color)
+  );
+  border-width: var(
+    --pd-theme-border-width-hover,
+    var(--pd-theme-border-width)
+  );
+  border-style: var(
+    --pd-theme-border-style-hover,
+    var(--pd-theme-border-style)
+  );
+  box-shadow: var(--pd-theme-box-shadow-hover, var(--pd-theme-box-shadow));
+}
+
+.pd-personalize-button:disabled {
+  background-color: var(--pd-button-disabled-bg-color);
+  color: var(--pd-button-disabled-text-color);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.pd-personalize-button:focus-visible {
+  outline: 2px solid var(--pd-theme-text-color);
+  outline-offset: 2px;
+}
+
+/* Custom style mode - override with block settings */
+#pd-stepper-root[data-use-theme-style="false"] .pd-personalize-button,
+#pd-stepper-root .pd-personalize-button.pd-custom-style {
+  background-color: var(--pd-button-bg-color);
+  color: var(--pd-button-text-color);
+  border-radius: var(--pd-button-border-radius);
+  font-size: var(--pd-button-font-size);
+  font-weight: var(--pd-button-font-weight);
+  letter-spacing: var(--pd-button-letter-spacing);
+  padding: var(--pd-button-padding-y) var(--pd-button-padding-x);
+  border: var(--pd-button-border-width) solid var(--pd-button-border-color);
+  box-shadow: var(--pd-button-box-shadow);
+}
+
+#pd-stepper-root[data-use-theme-style="false"]
+  .pd-personalize-button:hover:not(:disabled),
+#pd-stepper-root .pd-personalize-button.pd-custom-style:hover:not(:disabled) {
+  background-color: var(--pd-button-hover-bg-color);
+  color: var(--pd-button-hover-text-color);
+  box-shadow: var(--pd-button-hover-box-shadow);
+}

@@ -83,6 +83,31 @@ model ShopOnboarding {
   @@map("shop_onboarding")
 }
 
+model ShopButtonStyles {
+  shop_id                    String   @id
+  use_custom                 Boolean  @default(false)
+  background_color           String?
+  text_color                 String?
+  border_radius              String?
+  font_size                  String?
+  font_weight                String?
+  letter_spacing             String?
+  padding_x                  String?
+  padding_y                  String?
+  border_width               String?
+  border_color               String?
+  box_shadow                 String?
+  hover_background_color     String?
+  hover_text_color           String?
+  hover_box_shadow           String?
+  disabled_background_color  String?
+  disabled_text_color        String?
+  created_at                 DateTime @default(now())
+  updated_at                 DateTime @updatedAt
+
+  @@map("shop_button_styles")
+}
+
 model DesignTemplate {
   id                          String                   @id @default(cuid())
   shop_id                     String
@@ -173,47 +198,37 @@ model ProductTemplateAssignment {
   @@map("product_template_assignments")
 }
 
-model MerchantPreview {
-  id               String                @id @default(cuid())
-  job_id           String
-  shop_id          String
-  product_id       String
-  template_id      String
-  status           MerchantPreviewStatus @default(queued)
-  cover_print_area Boolean               @default(false)
-  test_image_url   String
-  test_text        String?
-  variable_values  Json?
-  design_url       String?
-  mockup_urls      Json?
-  error_message    String?
-  created_at       DateTime              @default(now())
-  updated_at       DateTime              @updatedAt
+model PreviewJob {
+  id                       String           @id @default(cuid())
+  job_id                   String
+  shop_id                  String
+  product_id               String
+  template_id              String
+  type                     PreviewJobType
+
+  input_image_url          String?
+  input_text               String?
+  variable_values          Json?
+  cover_print_area         Boolean          @default(false)
+
+  design_url               String?
+  design_storage_key       String?
+  mockup_urls              Json?
+  temp_printify_product_id String?
+
+  session_id               String?
+
+  status                   PreviewJobStatus @default(queued)
+  error_message            String?
+
+  created_at               DateTime         @default(now())
+  updated_at               DateTime         @updatedAt
 
   @@unique([shop_id, job_id])
   @@index([shop_id])
   @@index([job_id])
-  @@map("merchant_previews")
-}
-
-model BuyerPreviewJob {
-  id               String            @id
-  shop_id          String
-  product_id       String
-  template_id      String
-  buyer_session_id String
-  status           BuyerPreviewStatus @default(pending)
-  preview_storage_key String?
-  preview_url      String?
-  error_message    String?
-  created_at       DateTime          @default(now())
-  updated_at       DateTime          @updatedAt
-
-  @@unique([shop_id, id])
-  @@index([shop_id])
-  @@index([product_id])
-  @@index([template_id])
-  @@map("buyer_preview_jobs")
+  @@index([type])
+  @@map("preview_jobs")
 }
 
 model UsageLedgerEntry {
@@ -253,18 +268,18 @@ enum TemplateAspectRatio {
   ratio_16_9
 }
 
-enum MerchantPreviewStatus {
-  queued
-  generating
-  creating_mockups
-  done
-  failed
+enum PreviewJobType {
+  buyer
+  merchant
+  template_test
 }
 
-enum BuyerPreviewStatus {
-  pending
+enum PreviewJobStatus {
+  queued
+  generating
   processing
-  succeeded
+  creating_mockups
+  done
   failed
 }
 

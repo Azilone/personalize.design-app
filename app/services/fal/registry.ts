@@ -60,6 +60,14 @@ export function getAllModelConfigs(): ModelConfig[] {
 }
 
 /**
+ * Get a model configuration by ID.
+ */
+export function getModelConfig(modelId: string): ModelConfig | null {
+  const adapter = modelRegistry.get(modelId);
+  return adapter ? adapter.config : null;
+}
+
+/**
  * Get count of registered models.
  */
 export function getRegisteredModelCount(): number {

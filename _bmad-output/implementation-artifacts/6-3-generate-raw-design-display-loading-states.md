@@ -1,6 +1,6 @@
 # Story 6.3: Generate Preview + Secure Access + Performance Tracking
 
-Status: in-progress
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -79,11 +79,11 @@ so that I can see the personalized result before adding to cart.
 - [x] **Database schema for buyer preview jobs**
   - [x] Create Prisma model `BuyerPreviewJob` with fields: `id`, `shop_id`, `product_id`, `template_id`, `buyer_session_id`, `status`, `preview_url`, `error_message`, `created_at`, `updated_at`
   - [x] Add migration for new model
-- [ ] **Manual QA**
-  - [ ] Upload valid photo, generate preview, see hero preview
-  - [ ] Verify billing event created and charged after successful generation
-  - [ ] Simulate generation failure (mock fal error) and verify error UX + billable event failed (not charged)
-  - [ ] Verify signed URL access works and is time-limited
+- [x] **Manual QA**
+  - [x] Upload valid photo, generate preview, see hero preview
+  - [x] Verify billing event created and charged after successful generation
+  - [x] Simulate generation failure (mock fal error) and verify error UX + billable event failed (not charged)
+  - [x] Verify signed URL access works and is time-limited
 
 ## Dev Notes
 

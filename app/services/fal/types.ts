@@ -99,6 +99,8 @@ export interface ModelConfig {
   pricePerImage: number;
   /** Maximum number of images per request */
   maxImagesPerRequest: number;
+  /** True if the model supports custom image_size dimensions */
+  supportsImageSize: boolean;
 }
 
 /**

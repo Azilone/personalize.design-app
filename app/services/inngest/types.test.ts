@@ -1,13 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { buyerPreviewGeneratePayloadSchema } from "./types";
+import { previewGeneratePayloadSchema } from "./types";
 
-describe("buyerPreviewGeneratePayloadSchema", () => {
+describe("previewGeneratePayloadSchema", () => {
   it("accepts a valid payload", () => {
-    const parsed = buyerPreviewGeneratePayloadSchema.safeParse({
+    const parsed = previewGeneratePayloadSchema.safeParse({
+      job_id: "job-001",
       shop_id: "shop-123",
       product_id: "product-456",
       template_id: "template-789",
-      buyer_session_id: "session-abc",
+      type: "buyer",
       image_url: "https://storage.example.com/image.png",
       text_input: "Hello world",
       variable_values: { name: "Nova" },
@@ -17,7 +18,7 @@ describe("buyerPreviewGeneratePayloadSchema", () => {
   });
 
   it("rejects payloads missing required fields", () => {
-    const parsed = buyerPreviewGeneratePayloadSchema.safeParse({
+    const parsed = previewGeneratePayloadSchema.safeParse({
       shop_id: "shop-123",
       product_id: "product-456",
     });

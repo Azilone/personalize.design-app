@@ -14,10 +14,10 @@ import {
 } from "../../../services/supabase/storage";
 import { inngest } from "../../../services/inngest/client.server";
 import {
-  generateDevFakeImagePayloadSchema,
-  generateImagePayloadSchema,
+  previewFakeGeneratePayloadSchema,
+  previewGeneratePayloadSchema,
 } from "../../../services/inngest/types";
-import { createBuyerPreviewJob } from "../../../services/buyer-previews/buyer-previews.server";
+import { createPreviewJob } from "../../../services/previews/preview-jobs.server";
 import logger from "../../../lib/logger";
 
 const DEV_PLACEHOLDER_PREVIEW_URL =
@@ -168,33 +168,41 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const jobId = session_id;
 
   try {
-    await createBuyerPreviewJob({
+    const variableValues = parseVariableValues(variable_values_json);
+
+    await createPreviewJob({
       jobId,
       shopId,
       productId: normalizedProductId,
       templateId: template_id,
-      buyerSessionId: session_id,
+      type: "buyer",
+      sessionId: session_id,
+      inputImageUrl: uploadResult.readUrl,
+      inputText: text_input || undefined,
+      variableValues,
+      coverPrintArea: false,
     });
 
     const basePayload = {
-      request_type: "buyer_preview" as const,
+      job_id: jobId,
       shop_id: shopId,
       product_id: normalizedProductId,
       template_id,
-      buyer_session_id: session_id,
+      type: "buyer" as const,
       image_url: uploadResult.readUrl,
       text_input: text_input || undefined,
-      variable_values: parseVariableValues(variable_values_json),
+      variable_values: variableValues,
+      session_id: session_id,
     };
 
     const payload = shouldFakeGenerate
-      ? generateDevFakeImagePayloadSchema.parse(basePayload)
-      : generateImagePayloadSchema.parse(basePayload);
+      ? previewFakeGeneratePayloadSchema.parse(basePayload)
+      : previewGeneratePayloadSchema.parse(basePayload);
 
     await inngest.send({
       name: shouldFakeGenerate
-        ? "generate.dev-fake-image.requested"
-        : "generate.image.requested",
+        ? "previews.fake_generate.requested"
+        : "previews.generate.requested",
       data: payload,
     });
   } catch (error) {

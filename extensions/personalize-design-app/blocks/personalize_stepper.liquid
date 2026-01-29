@@ -1,23 +1,75 @@
-{% comment %}Personalize Stepper block - Updated UI{% endcomment %}
-{{ 'personalize-stepper.css' | asset_url | stylesheet_tag }}
-<script src="{{ 'personalize-stepper.js' | asset_url }}" defer></script>
+{% comment %}
+  Personalize Button Block
+  This block renders the personalize button on product pages.
+  It supports both personalized products and preview mode in the theme editor.
+{% endcomment %}
+
+{% comment %}Load assets once per page to avoid duplicate execution{% endcomment %}
+<script>
+  window.__pd_stepper_assets_loaded =
+    window.__pd_stepper_assets_loaded || {};
+  if (!window.__pd_stepper_assets_loaded["personalize-stepper"]) {
+    window.__pd_stepper_assets_loaded["personalize-stepper"] = true;
+    const head = document.head || document.getElementsByTagName("head")[0];
+    const css = document.createElement("link");
+    css.rel = "stylesheet";
+    css.href = "{{ 'personalize-stepper.css' | asset_url }}";
+    head.appendChild(css);
+    const themeScript = document.createElement("script");
+    themeScript.src = "{{ 'theme-style-detector.js' | asset_url }}";
+    themeScript.defer = true;
+    head.appendChild(themeScript);
+    const stepperScript = document.createElement("script");
+    stepperScript.src = "{{ 'personalize-stepper.js' | asset_url }}";
+    stepperScript.defer = true;
+    head.appendChild(stepperScript);
+  }
+</script>
 
 {% assign pd_config = product.metafields.personalize_design.config %}
+{% assign show_preview = block.settings.show_preview | default: true %}
+{% assign is_editor = request.design_mode %}
+{% assign is_preview = false %}
 
+{% comment %}Extract config from metafields if available{% endcomment %}
 {% if pd_config %}
   {% if pd_config.value %}
-    {% assign pd_config_value = pd_config.value %}
-    {% assign pd_config_obj = pd_config_value %}
+    {% assign template_id = pd_config.value.template_id | default: pd_config.value.templateId %}
+    {% assign personalization_enabled = pd_config.value.personalization_enabled %}
+    {% assign text_enabled = pd_config.value.text_enabled | default: pd_config.value.textEnabled %}
   {% elsif pd_config.template_id %}
-    {% assign pd_config_value = pd_config %}
-    {% assign pd_config_obj = pd_config %}
+    {% assign template_id = pd_config.template_id %}
+    {% assign personalization_enabled = pd_config.personalization_enabled %}
+    {% assign text_enabled = pd_config.text_enabled %}
   {% endif %}
+{% endif %}
 
-  {% assign pd_config_obj = pd_config_obj %}
+{% comment %}Preview mode overrides{% endcomment %}
+{% if show_preview and is_editor and template_id == blank %}
+  {% assign template_id = "preview" %}
+  {% assign personalization_enabled = true %}
+  {% assign text_enabled = true %}
+  {% assign is_preview = true %}
+{% endif %}
+
+{% comment %}
+  Determine if we should render the block:
+  1. Product has a valid template and personalization is enabled
+  2. Preview mode is enabled AND we're in the theme editor
+{% endcomment %}
+{% assign should_render = false %}
+{% if template_id != blank and personalization_enabled %}
+  {% assign should_render = true %}
+{% elsif show_preview and is_editor %}
+  {% assign should_render = true %}
+{% endif %}
+
+{% if should_render %}
 
   <div
     id="pd-stepper-root"
     data-pd-stepper
+    {{ block.shopify_attributes }}
     data-shop-domain="{{ shop.permanent_domain }}"
     data-product-id="{{ product.id }}"
     data-product-gid="{{ product.admin_graphql_api_id }}"
@@ -26,19 +78,127 @@
     {% if product.featured_image %}
       data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
     {% endif %}
-    {% if pd_config_obj %}
-      data-template-id="{{ pd_config_obj.template_id | default: pd_config_obj.templateId }}"
-      data-personalization-enabled="{{ pd_config_obj.personalization_enabled }}"
-      data-text-enabled="{{ pd_config_obj.text_enabled | default: pd_config_obj.textEnabled }}"
-    {% endif %}
+    data-template-id="{{ template_id }}"
+    data-personalization-enabled="{{ personalization_enabled }}"
+    data-text-enabled="{{ text_enabled }}"
+    data-is-preview="{{ is_preview }}"
+    data-button-text="{{ block.settings.button_text | escape }}"
+    data-button-text-applied="{{ block.settings.button_text_applied | escape }}"
+    data-button-extra-classes="{{ block.settings.button_extra_classes | escape }}"
+    data-button-extra-classes-applied="{{ block.settings.button_extra_classes_applied | escape }}"
+    data-use-theme-style="{{ block.settings.use_theme_style }}"
+    data-custom-button-selector="{{ block.settings.custom_button_selector | escape }}"
+    data-button-bg-color="{{ block.settings.button_bg_color }}"
+    data-button-text-color="{{ block.settings.button_text_color }}"
+    data-button-padding="{{ block.settings.button_padding | escape }}"
+    data-button-font-size="{{ block.settings.button_font_size | escape }}"
   ></div>
 {% endif %}
 
 {% schema %}
 {
-  "name": "Personalize Stepper",
+  "name": "Personalize Button",
   "target": "section",
   "templates": ["product"],
-  "settings": []
+  "settings": [
+    {
+      "type": "paragraph",
+      "content": "The button will only appear for personalizable products published from Personalize Design. We recommend adding the button in the product default page below the variant picker."
+    },
+    {
+      "type": "header",
+      "content": "Editor Preview"
+    },
+    {
+      "type": "checkbox",
+      "id": "show_preview",
+      "label": "Show button preview in theme editor",
+      "default": true,
+      "info": "When enabled, displays a preview button in the theme editor even for non-personalized products. This helps you style the button. The preview only appears in the editor, not on the live store."
+    },
+    {
+      "type": "header",
+      "content": "Button Style"
+    },
+    {
+      "type": "checkbox",
+      "id": "use_theme_style",
+      "label": "Use default theme style",
+      "default": true,
+      "info": "When enabled, the button will automatically copy styles from your theme's Add to Cart button. If auto-detection fails, use the custom selector below."
+    },
+    {
+      "type": "text",
+      "id": "custom_button_selector",
+      "label": "Custom Add to Cart Button Selector (Optional)",
+      "info": "If the button styles aren't copying correctly, enter a CSS selector for your theme's Add to Cart button (e.g., '.product-form__submit' or '[name=\"add\"]'). Leave empty for auto-detection."
+    },
+    {
+      "type": "header",
+      "content": "Button Text"
+    },
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Text",
+      "default": "Add personalized design"
+    },
+    {
+      "type": "text",
+      "id": "button_text_applied",
+      "label": "Button Text (When Personalization Applied)",
+      "default": "Remove saved design",
+      "info": "Text shown on the button after personalization has been applied. Clicking this button will remove the personalization details."
+    },
+    {
+      "type": "header",
+      "content": "Button Classes"
+    },
+    {
+      "type": "text",
+      "id": "button_extra_classes",
+      "label": "Button Extra Classes",
+      "default": "product-form__buttons button--full-width",
+      "info": "Additional CSS classes to add to the button (space-separated, e.g., 'class1 class2')"
+    },
+    {
+      "type": "text",
+      "id": "button_extra_classes_applied",
+      "label": "Button Extra Classes (When Personalization Applied)",
+      "default": "product-form__buttons button--full-width button--secondary",
+      "info": "Additional CSS classes to add to the button when personalization is applied (space-separated, e.g., 'class1 class2')"
+    },
+    {
+      "type": "header",
+      "content": "Custom Button Styles",
+      "info": "Only used when 'Use default theme style' is disabled"
+    },
+    {
+      "type": "color",
+      "id": "button_bg_color",
+      "label": "Button Background Color",
+      "default": "#007BFF"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Color",
+      "default": "#FFFFFF"
+    },
+    {
+      "type": "text",
+      "id": "button_padding",
+      "label": "Button Padding",
+      "default": "12px 24px",
+      "info": "CSS padding value (e.g., '12px 24px')"
+    },
+    {
+      "type": "text",
+      "id": "button_font_size",
+      "label": "Font Size",
+      "default": "16px",
+      "info": "CSS font size (e.g., '16px')"
+    }
+  ]
 }
 {% endschema %}

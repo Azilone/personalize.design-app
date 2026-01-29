@@ -1,5 +1,17 @@
 import { create } from "zustand";
 
+type ButtonStyles = {
+  useThemeStyle: boolean;
+  buttonText: string;
+  buttonTextApplied: string;
+  buttonExtraClasses: string;
+  buttonExtraClassesApplied: string;
+  buttonBgColor: string;
+  buttonTextColor: string;
+  buttonPadding: string;
+  buttonFontSize: string;
+};
+
 type StepperState = {
   step: number;
   totalSteps: number;
@@ -13,7 +25,9 @@ type StepperState = {
     templateId?: string;
     personalizationEnabled?: boolean;
     textEnabled?: boolean;
+    isPreview?: boolean;
   };
+  buttonStyles: ButtonStyles;
   templateConfig: {
     templateId: string;
     templateName: string;
@@ -51,6 +65,19 @@ type StepperState = {
   setTriggerRef: (
     ref: React.MutableRefObject<HTMLButtonElement | null>,
   ) => void;
+  setButtonStyles: (styles: ButtonStyles) => void;
+};
+
+const defaultButtonStyles: ButtonStyles = {
+  useThemeStyle: true,
+  buttonText: "Personalize",
+  buttonTextApplied: "Remove saved design",
+  buttonExtraClasses: "",
+  buttonExtraClassesApplied: "",
+  buttonBgColor: "#007BFF",
+  buttonTextColor: "#FFFFFF",
+  buttonPadding: "12px 24px",
+  buttonFontSize: "16px",
 };
 
 export const useStepperStore = create<StepperState>((set) => ({
@@ -58,6 +85,7 @@ export const useStepperStore = create<StepperState>((set) => ({
   totalSteps: 3,
   isOpen: false,
   config: {},
+  buttonStyles: defaultButtonStyles,
   templateConfig: null,
   file: null,
   graphicFile: null,
@@ -112,4 +140,5 @@ export const useStepperStore = create<StepperState>((set) => ({
       serverJobConfirmed: false,
     }),
   setTriggerRef: (ref) => set({ triggerRef: ref }),
+  setButtonStyles: (buttonStyles) => set({ buttonStyles }),
 }));

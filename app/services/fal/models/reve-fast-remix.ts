@@ -29,6 +29,7 @@ const REVE_FAST_REMIX_CONFIG: ModelConfig = {
   displayName: REVE_FAST_REMIX_DISPLAY_NAME,
   pricePerImage: MVP_PRICE_USD_PER_GENERATION,
   maxImagesPerRequest: 4, // fal.ai limit: 1-4 per request
+  supportsImageSize: false,
 };
 
 /**

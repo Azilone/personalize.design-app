@@ -24,8 +24,8 @@ import { captureEvent } from "../../../../lib/posthog.server";
 import { buildPlaceholderUrl } from "../../../../lib/placeholder-images";
 import { productTemplateAssignmentActionSchema } from "../../../../schemas/admin";
 import {
-  generateDevFakeImagePayloadSchema,
-  generateImagePayloadSchema,
+  previewFakeGeneratePayloadSchema,
+  previewGeneratePayloadSchema,
 } from "../../../../services/inngest/types";
 import { inngest } from "../../../../services/inngest/client.server";
 import {
@@ -34,7 +34,7 @@ import {
   saveProductTemplateAssignment,
   updateProductPersonalizationMetafield,
 } from "../../../../services/products/product-template-assignment.server";
-import { createMerchantPreview } from "../../../../services/merchant-previews/merchant-previews.server";
+import { createPreviewJob } from "../../../../services/previews/preview-jobs.server";
 import {
   getPublishedTemplate,
   listPublishedTemplates,
@@ -48,6 +48,8 @@ import {
   isSupabaseConfigured,
   uploadFileAndGetReadUrl,
 } from "../../../../services/supabase/storage";
+import { getModelConfig } from "../../../../services/fal/registry";
+import { MVP_GENERATION_MODEL_ID } from "../../../../lib/generation-settings";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
@@ -103,6 +105,11 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
   }
 
+  const modelId =
+    template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
+  const modelConfig = getModelConfig(modelId);
+  const supportsCoverPrintArea = modelConfig?.supportsImageSize ?? true;
+
   return {
     product: {
       id: shopProduct.product_id,
@@ -113,6 +120,7 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     assignment,
     templates,
     template,
+    supportsCoverPrintArea,
   };
 };
 
@@ -155,7 +163,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (parsed.data.intent === "product_preview_generate") {
     const productId = parsed.data.product_id.trim();
     const templateId = parsed.data.template_id.trim();
-    const coverPrintArea = parsed.data.cover_print_area === "true";
+    const coverPrintAreaRequested = parsed.data.cover_print_area === "true";
     const fakeGeneration = parsed.data.fake_generation;
     const isDev = process.env.NODE_ENV === "development";
 
@@ -197,6 +205,24 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       }
     }
 
+    const template = await getTemplate(templateId, shopId);
+    if (!template) {
+      return data(
+        {
+          previewError: {
+            message: "Template not found for preview.",
+          },
+        },
+        { status: 404 },
+      );
+    }
+
+    const modelId =
+      template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
+    const modelConfig = getModelConfig(modelId);
+    const supportsCoverPrintArea = modelConfig?.supportsImageSize ?? true;
+    const coverPrintArea = coverPrintAreaRequested && supportsCoverPrintArea;
+
     let variableValues: Record<string, string> = {};
     try {
       const candidate = JSON.parse(parsed.data.variable_values_json);
@@ -216,20 +242,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     let requiresUpload = false;
 
     if (fakeGeneration) {
-      const template = await getTemplate(templateId, shopId);
-      if (!template) {
-        return data(
-          {
-            previewError: {
-              message: "Template not found for preview.",
-            },
-          },
-          { status: 404 },
-        );
-      }
-
       const imageSize = calculateFalImageSize({
-        coverPrintArea: false,
+        coverPrintArea,
         templateAspectRatio: template.aspectRatio,
         printAreaDimensions: null,
       });
@@ -337,6 +351,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         template_id: templateId,
         job_id: jobId,
         cover_print_area: coverPrintArea,
+        cover_print_area_requested: coverPrintAreaRequested,
         fake_generation: fakeGeneration,
         variable_count: Object.keys(variableValues).length,
         has_test_text: Boolean(parsed.data.test_text?.trim()),
@@ -345,43 +360,47 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     );
 
     try {
-      await createMerchantPreview({
+      await createPreviewJob({
         jobId,
         shopId,
         productId,
         templateId,
-        coverPrintArea,
-        testImageUrl: uploadResult.readUrl,
-        testText: parsed.data.test_text ?? null,
+        type: "merchant",
+        inputImageUrl: uploadResult.readUrl,
+        inputText: parsed.data.test_text ?? undefined,
         variableValues,
+        coverPrintArea,
       });
 
       const basePayload = {
-        request_type: "merchant_preview" as const,
         job_id: jobId,
         shop_id: shopId,
         product_id: productId,
         template_id: templateId,
+        type: "merchant" as const,
         cover_print_area: coverPrintArea,
         test_text: parsed.data.test_text,
         variable_values: variableValues,
       };
 
       if (fakeGeneration) {
-        const payload = generateDevFakeImagePayloadSchema.parse(basePayload);
-
-        await inngest.send({
-          name: "generate.dev-fake-image.requested",
-          data: payload,
-        });
-      } else {
-        const payload = generateImagePayloadSchema.parse({
+        const payload = previewFakeGeneratePayloadSchema.parse({
           ...basePayload,
           test_image_url: uploadResult.readUrl,
         });
 
         await inngest.send({
-          name: "generate.image.requested",
+          name: "previews.fake_generate.requested",
+          data: payload,
+        });
+      } else {
+        const payload = previewGeneratePayloadSchema.parse({
+          ...basePayload,
+          test_image_url: uploadResult.readUrl,
+        });
+
+        await inngest.send({
+          name: "previews.generate.requested",
           data: payload,
         });
       }
@@ -586,6 +605,7 @@ type LoaderData =
       } | null;
       templates: PublishedTemplateListItem[];
       template: DesignTemplateDto | null;
+      supportsCoverPrintArea: boolean;
     }
   | { error: { code: string; message: string } };
 
@@ -598,7 +618,13 @@ type ActionData = {
   } | null;
   preview?: {
     jobId: string;
-    status: "Queued" | "Generating" | "Creating Mockups" | "Done" | "Failed";
+    status:
+      | "Queued"
+      | "Generating"
+      | "Processing"
+      | "Creating Mockups"
+      | "Done"
+      | "Failed";
     designUrl?: string | null;
     mockupUrls?: string[];
     errorMessage?: string | null;
@@ -622,6 +648,9 @@ export default function ProductConfigurationPage() {
   const product = isError ? null : loaderData.product;
   const templates = isError ? [] : loaderData.templates;
   const template = isError ? null : loaderData.template;
+  const supportsCoverPrintArea = isError
+    ? true
+    : loaderData.supportsCoverPrintArea;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     assignment?.templateId ?? noTemplateValue,
@@ -921,6 +950,7 @@ export default function ProductConfigurationPage() {
                 previewErrorMessage={previewErrorMessage}
                 isPreviewSubmitting={isPreviewSubmitting}
                 isPreviewInFlight={isPreviewInFlight}
+                supportsCoverPrintArea={supportsCoverPrintArea}
               />
             ) : (
               <s-banner tone="warning">
@@ -954,6 +984,7 @@ type SimulatorPanelProps = {
   previewErrorMessage: string | null;
   isPreviewSubmitting: boolean;
   isPreviewInFlight: boolean;
+  supportsCoverPrintArea: boolean;
 };
 
 function SimulatorPanel({
@@ -964,6 +995,7 @@ function SimulatorPanel({
   previewErrorMessage,
   isPreviewSubmitting,
   isPreviewInFlight,
+  supportsCoverPrintArea,
 }: SimulatorPanelProps) {
   const [variableValues, setVariableValues] = useState<Record<string, string>>(
     {},
@@ -973,6 +1005,12 @@ function SimulatorPanel({
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [fakeGeneration, setFakeGeneration] = useState(false);
   const isDev = process.env.NODE_ENV === "development";
+
+  useEffect(() => {
+    if (!supportsCoverPrintArea && coverPrintArea) {
+      setCoverPrintArea(false);
+    }
+  }, [supportsCoverPrintArea, coverPrintArea]);
 
   const variableValuesJson = JSON.stringify(variableValues);
   const hasResults = Boolean(
@@ -1172,12 +1210,13 @@ function SimulatorPanel({
           <s-checkbox
             label="Cover entire print area"
             checked={coverPrintArea}
+            disabled={!supportsCoverPrintArea}
             onChange={() => setCoverPrintArea(!coverPrintArea)}
           />
           <s-text color="subdued">
-            When enabled, the preview will use the exact Printify print area
-            dimensions. When disabled, it uses the template&apos;s base aspect
-            ratio.
+            {supportsCoverPrintArea
+              ? "When enabled, the preview will use the exact Printify print area dimensions. When disabled, it uses the template's base aspect ratio."
+              : "The selected generation model does not support custom dimensions, so cover print area is disabled."}
           </s-text>
 
           <s-button

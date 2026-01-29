@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type {
   ActionFunctionArgs,
   HeadersFunction,
@@ -68,6 +68,11 @@ type SettingsActionData =
       success?: boolean;
       savedChoice?: "enabled" | "disabled";
       requiresSpendSafety?: boolean;
+      error?: { code: string; message: string };
+    }
+  | {
+      scope: "button_styles";
+      success?: boolean;
       error?: { code: string; message: string };
     };
 

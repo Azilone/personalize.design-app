@@ -26,6 +26,7 @@ const SEEDREAM_V4_EDIT_CONFIG: ModelConfig = {
   displayName: "Seedream v4 Edit (fal.ai)",
   pricePerImage: MVP_PRICE_USD_PER_GENERATION,
   maxImagesPerRequest: 6, // fal.ai limit: 1-6 per request
+  supportsImageSize: true,
 };
 
 /**

@@ -36,6 +36,22 @@ if (mount) {
       ? undefined
       : textEnabledRaw === "true";
 
+  // Check if this is a preview mode (theme editor)
+  const isPreview = mount.dataset.isPreview === "true";
+
+  // Read button style settings from block
+  const useThemeStyle = mount.dataset.useThemeStyle !== "false";
+  const buttonText = mount.dataset.buttonText || "Personalize";
+  const buttonTextApplied =
+    mount.dataset.buttonTextApplied || "Remove saved design";
+  const buttonExtraClasses = mount.dataset.buttonExtraClasses || "";
+  const buttonExtraClassesApplied =
+    mount.dataset.buttonExtraClassesApplied || "";
+  const buttonBgColor = mount.dataset.buttonBgColor || "#007BFF";
+  const buttonTextColor = mount.dataset.buttonTextColor || "#FFFFFF";
+  const buttonPadding = mount.dataset.buttonPadding || "12px 24px";
+  const buttonFontSize = mount.dataset.buttonFontSize || "16px";
+
   if (import.meta.env?.DEV) {
     // eslint-disable-next-line no-console
     console.info("[pd-stepper] dataset", {
@@ -44,6 +60,9 @@ if (mount) {
       templateId,
       personalizationEnabled,
       textEnabled,
+      useThemeStyle,
+      buttonText,
+      isPreview,
     });
   }
 
@@ -57,6 +76,20 @@ if (mount) {
     templateId,
     personalizationEnabled,
     textEnabled,
+    isPreview,
+  });
+
+  // Initialize button styles
+  useStepperStore.getState().setButtonStyles({
+    useThemeStyle,
+    buttonText,
+    buttonTextApplied,
+    buttonExtraClasses,
+    buttonExtraClassesApplied,
+    buttonBgColor,
+    buttonTextColor,
+    buttonPadding,
+    buttonFontSize,
   });
 
   createRoot(mount).render(<StepperApp />);

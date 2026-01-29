@@ -63,100 +63,43 @@ export type TemplateTestFakeGeneratePayload = z.infer<
   typeof templateTestFakeGeneratePayloadSchema
 >;
 
-export const merchantPreviewGeneratePayloadSchema = z.object({
+export const previewGeneratePayloadSchema = z.object({
   job_id: z.string().min(1),
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
   template_id: z.string().min(1),
-  cover_print_area: z.boolean(),
-  test_image_url: z.string().url(),
-  test_text: z.string().optional(),
-  variable_values: z.record(z.string(), z.string()),
-});
-
-export const merchantPreviewFakeGeneratePayloadSchema = z.object({
-  job_id: z.string().min(1),
-  shop_id: z.string().min(1),
-  product_id: z.string().min(1),
-  template_id: z.string().min(1),
-  cover_print_area: z.boolean(),
-  test_text: z.string().optional(),
-  variable_values: z.record(z.string(), z.string()),
-});
-
-export const buyerPreviewGeneratePayloadSchema = z.object({
-  shop_id: z.string().min(1),
-  product_id: z.string().min(1),
-  template_id: z.string().min(1),
-  buyer_session_id: z.string().min(1),
-  image_url: z.string().url(),
+  type: z.enum(["buyer", "merchant", "template_test"]),
+  image_url: z.string().url().optional(),
   text_input: z.string().optional(),
-  variable_values: z.record(z.string(), z.string()),
+  test_image_url: z.string().url().optional(),
+  test_text: z.string().optional(),
+  variable_values: z.record(z.string(), z.string()).optional(),
+  cover_print_area: z.boolean().optional(),
+  session_id: z.string().optional(),
 });
 
-export const generateImagePayloadSchema = z.discriminatedUnion("request_type", [
-  buyerPreviewGeneratePayloadSchema.extend({
-    request_type: z.literal("buyer_preview"),
-  }),
-  merchantPreviewGeneratePayloadSchema.extend({
-    request_type: z.literal("merchant_preview"),
-  }),
-  templateTestGeneratePayloadSchema.extend({
-    request_type: z.literal("template_test"),
-  }),
-]);
-
-export const generateDevFakeImagePayloadSchema = z.discriminatedUnion(
-  "request_type",
-  [
-    buyerPreviewGeneratePayloadSchema.extend({
-      request_type: z.literal("buyer_preview"),
-    }),
-    merchantPreviewFakeGeneratePayloadSchema.extend({
-      request_type: z.literal("merchant_preview"),
-    }),
-    templateTestFakeGeneratePayloadSchema.extend({
-      request_type: z.literal("template_test"),
-    }),
-  ],
-);
-
-export const generateImageAndRemoveBackgroundPayloadSchema =
-  templateTestRemoveBackgroundPayloadSchema;
-
-export const mockupPrintifyPayloadSchema = z.object({
+export const previewFakeGeneratePayloadSchema = z.object({
   job_id: z.string().min(1),
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
   template_id: z.string().min(1),
-  cover_print_area: z.boolean(),
-  design_url: z.string().url().optional(),
-  fake_generation: z.boolean().optional().default(false),
+  type: z.enum(["buyer", "merchant", "template_test"]),
+  image_url: z.string().url().optional(),
+  text_input: z.string().optional(),
+  test_image_url: z.string().url().optional(),
+  test_text: z.string().optional(),
+  variable_values: z.record(z.string(), z.string()).optional(),
+  cover_print_area: z.boolean().optional(),
+  session_id: z.string().optional(),
 });
 
-export type MerchantPreviewGeneratePayload = z.infer<
-  typeof merchantPreviewGeneratePayloadSchema
+export type PreviewGeneratePayload = z.infer<
+  typeof previewGeneratePayloadSchema
 >;
 
-export type MerchantPreviewFakeGeneratePayload = z.infer<
-  typeof merchantPreviewFakeGeneratePayloadSchema
+export type PreviewFakeGeneratePayload = z.infer<
+  typeof previewFakeGeneratePayloadSchema
 >;
-
-export type BuyerPreviewGeneratePayload = z.infer<
-  typeof buyerPreviewGeneratePayloadSchema
->;
-
-export type GenerateImagePayload = z.infer<typeof generateImagePayloadSchema>;
-
-export type GenerateDevFakeImagePayload = z.infer<
-  typeof generateDevFakeImagePayloadSchema
->;
-
-export type GenerateImageAndRemoveBackgroundPayload = z.infer<
-  typeof generateImageAndRemoveBackgroundPayloadSchema
->;
-
-export type MockupPrintifyPayload = z.infer<typeof mockupPrintifyPayloadSchema>;
 
 export const productsSyncPayloadSchema = z.object({
   shop_id: z.string().min(1),

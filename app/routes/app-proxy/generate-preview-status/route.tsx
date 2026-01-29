@@ -2,7 +2,7 @@ import type { LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 import { authenticate } from "../../../shopify.server";
 import type { GeneratePreviewStatusResponse } from "../../../schemas/app_proxy";
-import { getBuyerPreviewJobById } from "../../../services/buyer-previews/buyer-previews.server";
+import { getPreviewJobById } from "../../../services/previews/preview-jobs.server";
 import { createSignedReadUrl } from "../../../services/supabase/storage";
 import logger from "../../../lib/logger";
 
@@ -25,7 +25,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  const job = await getBuyerPreviewJobById(shopId, jobId);
+  const job = await getPreviewJobById(shopId, jobId);
   if (!job) {
     logger.warn(
       { shop_id: shopId, job_id: jobId },
@@ -42,11 +42,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     );
   }
 
-  let previewUrl = job.previewUrl ?? undefined;
+  let previewUrl = job.designUrl ?? undefined;
 
-  if (job.previewStorageKey) {
+  if (job.designStorageKey) {
     try {
-      const signed = await createSignedReadUrl(job.previewStorageKey);
+      const signed = await createSignedReadUrl(job.designStorageKey);
       previewUrl = signed.readUrl;
     } catch (error) {
       logger.error(
@@ -65,11 +65,22 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  const status =
+    job.status === "done"
+      ? "succeeded"
+      : job.status === "failed"
+        ? "failed"
+        : job.status === "queued"
+          ? "pending"
+          : "processing";
+
   return data<GeneratePreviewStatusResponse>({
     data: {
-      job_id: job.id,
-      status: job.status,
+      job_id: job.jobId,
+      status,
       preview_url: previewUrl,
+      design_url: job.designUrl ?? undefined,
+      mockup_urls: job.mockupUrls.length ? job.mockupUrls : undefined,
       error: job.errorMessage ?? undefined,
     },
   });

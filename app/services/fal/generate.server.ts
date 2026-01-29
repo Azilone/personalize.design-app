@@ -38,6 +38,8 @@ export interface GenerateOptions {
   seed?: number;
   /** Optional target image size for generation */
   imageSize?: { width: number; height: number };
+  /** Optional aspect ratio for generation (used by some models) */
+  aspectRatio?: GenerationInput["aspectRatio"];
   /** Shop ID for multi-tenancy logging */
   shopId?: string;
   /** Apply background removal after generation */
@@ -79,6 +81,7 @@ export async function generateImages(
     numImages,
     seed,
     imageSize,
+    aspectRatio,
     shopId,
     removeBackgroundEnabled = false,
     removeBackgroundOptions,
@@ -120,6 +123,7 @@ export async function generateImages(
     numImages,
     seed,
     imageSize,
+    aspectRatio,
   };
 
   logger.info(
