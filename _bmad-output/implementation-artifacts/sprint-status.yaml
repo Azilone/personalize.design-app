@@ -79,7 +79,7 @@ development_status:
   6-1-storefront-trigger-button-and-modal-shell-portal: done
   6-2-storefront-input-step-photo-upload-text-validation: done
   6-3-generate-raw-design-display-loading-states: done
-  6-4-printify-mockups-via-preview-modal-non-blocking: review
+  6-4-printify-mockups-via-preview-modal-non-blocking: done
   6-5-regenerate-flow-limits-cost-messaging: ready-for-dev
   6-6-add-to-cart-action-from-modal-metadata: backlog
   6-7-enforce-generation-limits-per-product-per-session-reset-window: backlog
