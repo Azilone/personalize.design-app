@@ -3,6 +3,7 @@ import {
   ChevronRight,
   Eye,
   Image as ImageIcon,
+  Loader2,
   Plus,
   Type,
   X,
@@ -37,6 +38,8 @@ const PLACEHOLDER_IMAGE_URL =
   "https://placehold.co/600x400?text=Heretext+Hello+World";
 const APP_PROXY_BASE = "/apps/personalize";
 
+const MOCKUP_LOADING_TIMEOUT_MS = 30000;
+
 const WAITING_MESSAGES = [
   "The AI is pondering existence...",
   "Adding a pinch of creativity...",
@@ -67,11 +70,17 @@ export const Shell = () => {
     previewUrl,
     generationError,
     serverJobConfirmed,
+    mockupUrls,
+    mockupStatus,
+    mockupError,
     setPreviewJobId,
     setGenerationStatus,
     setPreviewUrl,
     setGenerationError,
     setServerJobConfirmed,
+    setMockupUrls,
+    setMockupStatus,
+    setMockupError,
     resetPreview,
   } = useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -85,6 +94,10 @@ export const Shell = () => {
     null,
   );
   const [waitingMessageIndex, setWaitingMessageIndex] = useState(0);
+  const [isRetryingMockups, setIsRetryingMockups] = useState(false);
+  const [mockupLoadingStartTime, setMockupLoadingStartTime] = useState<
+    number | null
+  >(null);
   const logoInputRef = useRef<HTMLInputElement>(null);
   const logoUrlRef = useRef<string | null>(null);
   const templateVariables = templateConfig?.variables ?? [];
@@ -193,7 +206,15 @@ export const Shell = () => {
       return;
     }
 
-    if (!["pending", "processing"].includes(generationStatus)) {
+    const shouldPollForMockups =
+      generationStatus === "succeeded" &&
+      mockupStatus !== "ready" &&
+      mockupStatus !== "error";
+
+    if (
+      !["pending", "processing"].includes(generationStatus) &&
+      !shouldPollForMockups
+    ) {
       return;
     }
 
@@ -220,7 +241,13 @@ export const Shell = () => {
           );
         }
         const payload = (await response.json()) as {
-          data?: { status?: string; preview_url?: string; error?: string };
+          data?: {
+            status?: string;
+            preview_url?: string;
+            mockup_urls?: string[];
+            mockup_status?: "loading" | "ready" | "error";
+            error?: string;
+          };
           error?: { message?: string };
         };
 
@@ -250,11 +277,33 @@ export const Shell = () => {
         if (payload.data?.preview_url) {
           setPreviewUrl(payload.data.preview_url);
         }
+        if (payload.data?.mockup_urls) {
+          setMockupUrls(payload.data.mockup_urls);
+        }
+        if (payload.data?.mockup_status) {
+          setMockupStatus(payload.data.mockup_status);
+          if (
+            payload.data.mockup_status === "loading" &&
+            !mockupLoadingStartTime
+          ) {
+            setMockupLoadingStartTime(Date.now());
+          } else if (payload.data.mockup_status !== "loading") {
+            setMockupLoadingStartTime(null);
+          }
+        } else if (
+          nextStatus === "succeeded" &&
+          (!payload.data?.mockup_urls || payload.data.mockup_urls.length === 0)
+        ) {
+          setMockupStatus("loading");
+          if (!mockupLoadingStartTime) {
+            setMockupLoadingStartTime(Date.now());
+          }
+        }
         if (payload.data?.error) {
           setGenerationError(payload.data.error);
         }
 
-        if (nextStatus === "succeeded") {
+        if (nextStatus === "succeeded" && modalState === "generating") {
           setTimeout(() => {
             setModalState("reveal");
           }, 500);
@@ -289,10 +338,14 @@ export const Shell = () => {
     previewJobId,
     config.shopDomain,
     generationStatus,
+    modalState,
     serverJobConfirmed,
     setGenerationError,
     setGenerationStatus,
     setPreviewUrl,
+    setMockupStatus,
+    setMockupUrls,
+    mockupStatus,
   ]);
 
   useEffect(() => {
@@ -419,21 +472,27 @@ export const Shell = () => {
   const heroImageUrl = previewUrl || productImageUrl;
   const scratchSize = isDesktop ? 500 : 280;
 
-  const mockupImages = useMemo(
-    () => [
-      { id: 1, label: "Front View", url: productImageUrl },
-      { id: 2, label: "Back View", url: productImageUrl },
-      { id: 3, label: "Side View", url: productImageUrl },
-      { id: 4, label: "Detail View", url: productImageUrl },
-    ],
-    [productImageUrl],
-  );
+  const mockupImages = useMemo(() => {
+    if (mockupUrls.length > 0) {
+      return mockupUrls.map((url, index) => ({
+        id: index + 1,
+        label: `View ${index + 1}`,
+        url,
+      }));
+    }
+    // If no mockups yet but we have a previewUrl, show that as the main image
+    // This allows users to see their design while mockups are loading
+    if (previewUrl) {
+      return [{ id: 1, label: "Your Design", url: previewUrl }];
+    }
+    // Fallback to product image if nothing else available
+    return [{ id: 1, label: "Product View", url: productImageUrl }];
+  }, [mockupUrls, previewUrl, productImageUrl]);
 
-  const mainImageUrl = previewUrl
-    ? previewUrl
-    : modalState === "review"
+  const mainImageUrl =
+    modalState === "review"
       ? mockupImages[selectedMockupIndex]?.url || PLACEHOLDER_IMAGE_URL
-      : productImageUrl;
+      : previewUrl || productImageUrl;
   const generateLabel = generationError ? "Try again" : "Generate";
   const isGenerating =
     generationStatus === "pending" || generationStatus === "processing";
@@ -441,6 +500,10 @@ export const Shell = () => {
   const isWaitingLong =
     generationStartTime && Date.now() - generationStartTime > 15000;
   const waitingMessage = WAITING_MESSAGES[waitingMessageIndex];
+
+  const isMockupLoadingLong =
+    mockupLoadingStartTime &&
+    Date.now() - mockupLoadingStartTime > MOCKUP_LOADING_TIMEOUT_MS;
 
   const personalizationItems = useMemo(() => {
     const items = [] as Array<{
@@ -608,6 +671,41 @@ export const Shell = () => {
 
   const handlePreview = () => {
     setModalState("review");
+  };
+
+  const handleRetryMockups = async () => {
+    if (!previewJobId || !config.shopDomain) return;
+
+    setIsRetryingMockups(true);
+    setMockupStatus("loading");
+    setMockupError(null);
+
+    try {
+      const response = await fetch(
+        `${APP_PROXY_BASE}/retry-mockups?job_id=${encodeURIComponent(previewJobId)}&shop_id=${encodeURIComponent(config.shopDomain)}`,
+        {
+          method: "POST",
+          headers: { Accept: "application/json" },
+        },
+      );
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        setMockupError(
+          payload.error?.message || "Failed to retry mockup generation",
+        );
+        setMockupStatus("error");
+      }
+    } catch (error) {
+      setMockupError(
+        error instanceof Error
+          ? error.message
+          : "Failed to retry mockup generation",
+      );
+      setMockupStatus("error");
+    } finally {
+      setIsRetryingMockups(false);
+    }
   };
 
   const handleBack = () => {
@@ -917,7 +1015,11 @@ export const Shell = () => {
                   Design Generated!
                 </p>
                 <p className="text-center text-[16px] text-muted-foreground">
-                  Click Preview to see your design on different mockups.
+                  {mockupStatus === "loading"
+                    ? "Mockups are still generating. You can preview your design now."
+                    : mockupStatus === "error"
+                      ? "Mockups failed to load. You can still preview your design."
+                      : "Click Preview to see your design on different mockups."}
                 </p>
               </div>
               <div className="space-y-[12px] border-t border-border p-[24px]">
@@ -927,8 +1029,17 @@ export const Shell = () => {
                   className="w-full bg-transparent h-[48px] text-[16px]"
                   size="lg"
                 >
-                  <Eye className="mr-[8px] size-[16px]" />
-                  Preview
+                  {mockupStatus === "loading" ? (
+                    <>
+                      <Loader2 className="mr-[8px] size-[16px] animate-spin" />
+                      Preview now
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="mr-[8px] size-[16px]" />
+                      Preview
+                    </>
+                  )}
                 </Button>
                 <Button
                   onClick={handleSaveDesign}
@@ -973,6 +1084,33 @@ export const Shell = () => {
                     </p>
                   )}
                 </div>
+
+                {/* Mockup status indicator */}
+                {mockupStatus === "loading" && (
+                  <div className="mt-[24px] rounded-lg border border-border bg-muted/30 p-[16px]">
+                    <p className="text-[14px] text-muted-foreground">
+                      {isMockupLoadingLong
+                        ? "Mockups are taking longer than expected. Please wait a bit longer..."
+                        : "Generating product mockups..."}
+                    </p>
+                  </div>
+                )}
+                {mockupStatus === "error" && (
+                  <div className="mt-[24px] rounded-lg border border-destructive/20 bg-destructive/10 p-[16px]">
+                    <p className="mb-[8px] text-[14px] text-destructive">
+                      {mockupError || "Failed to generate mockups"}
+                    </p>
+                    <Button
+                      onClick={handleRetryMockups}
+                      variant="outline"
+                      size="sm"
+                      disabled={isRetryingMockups}
+                      className="text-[14px]"
+                    >
+                      {isRetryingMockups ? "Retrying..." : "Try again"}
+                    </Button>
+                  </div>
+                )}
               </div>
               <div className="border-t border-border p-[24px]">
                 <div className="flex gap-[12px]">

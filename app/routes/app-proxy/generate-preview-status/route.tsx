@@ -65,14 +65,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
     }
   }
 
+  const jobStatus = job.status as typeof job.status | "mockups_failed";
+
   const status =
-    job.status === "done"
+    jobStatus === "done" ||
+    jobStatus === "creating_mockups" ||
+    jobStatus === "mockups_failed"
       ? "succeeded"
-      : job.status === "failed"
+      : jobStatus === "failed"
         ? "failed"
-        : job.status === "queued"
+        : jobStatus === "queued"
           ? "pending"
           : "processing";
+
+  const mockupStatus: "loading" | "ready" | "error" | undefined =
+    jobStatus === "creating_mockups"
+      ? "loading"
+      : jobStatus === "mockups_failed"
+        ? "error"
+        : job.mockupUrls.length > 0
+          ? "ready"
+          : undefined;
 
   return data<GeneratePreviewStatusResponse>({
     data: {
@@ -81,6 +94,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       preview_url: previewUrl,
       design_url: job.designUrl ?? undefined,
       mockup_urls: job.mockupUrls.length ? job.mockupUrls : undefined,
+      mockup_status: mockupStatus,
       error: job.errorMessage ?? undefined,
     },
   });

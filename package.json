@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "@fal-ai/client": "^1.8.3",
-    "@prisma/client": "^6.16.3",
+    "@prisma/client": "6.19.1",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-slot": "^1.2.4",
     "@react-router/dev": "^7.12.0",

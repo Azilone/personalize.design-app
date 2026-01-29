@@ -43,6 +43,9 @@ type StepperState = {
   previewUrl: string | null;
   generationError: string | null;
   serverJobConfirmed: boolean;
+  mockupUrls: string[];
+  mockupStatus: "idle" | "loading" | "ready" | "error";
+  mockupError: string | null;
   triggerRef: React.MutableRefObject<HTMLButtonElement | null> | null;
   setStep: (step: number) => void;
   next: () => void;
@@ -61,6 +64,9 @@ type StepperState = {
   setPreviewUrl: (url: string | null) => void;
   setGenerationError: (error: string | null) => void;
   setServerJobConfirmed: (confirmed: boolean) => void;
+  setMockupUrls: (urls: string[]) => void;
+  setMockupStatus: (status: StepperState["mockupStatus"]) => void;
+  setMockupError: (error: string | null) => void;
   resetPreview: () => void;
   setTriggerRef: (
     ref: React.MutableRefObject<HTMLButtonElement | null>,
@@ -95,6 +101,9 @@ export const useStepperStore = create<StepperState>((set) => ({
   previewUrl: null,
   generationError: null,
   serverJobConfirmed: false,
+  mockupUrls: [],
+  mockupStatus: "idle",
+  mockupError: null,
   triggerRef: null,
   setStep: (step) => set({ step }),
   next: () =>
@@ -131,6 +140,9 @@ export const useStepperStore = create<StepperState>((set) => ({
   setPreviewUrl: (previewUrl) => set({ previewUrl }),
   setGenerationError: (generationError) => set({ generationError }),
   setServerJobConfirmed: (serverJobConfirmed) => set({ serverJobConfirmed }),
+  setMockupUrls: (mockupUrls) => set({ mockupUrls }),
+  setMockupStatus: (mockupStatus) => set({ mockupStatus }),
+  setMockupError: (mockupError) => set({ mockupError }),
   resetPreview: () =>
     set({
       previewJobId: null,
@@ -138,6 +150,9 @@ export const useStepperStore = create<StepperState>((set) => ({
       previewUrl: null,
       generationError: null,
       serverJobConfirmed: false,
+      mockupUrls: [],
+      mockupStatus: "idle",
+      mockupError: null,
     }),
   setTriggerRef: (ref) => set({ triggerRef: ref }),
   setButtonStyles: (buttonStyles) => set({ buttonStyles }),

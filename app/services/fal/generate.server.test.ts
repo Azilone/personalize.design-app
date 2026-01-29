@@ -40,6 +40,7 @@ const mockAdapter: ModelAdapter = {
     displayName: "Test Model",
     pricePerImage: 0.05,
     maxImagesPerRequest: 4,
+    supportsImageSize: true,
   },
   generate: vi.fn(),
 };

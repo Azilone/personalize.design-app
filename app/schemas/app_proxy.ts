@@ -58,10 +58,17 @@ export const generatePreviewStatusResponseSchema = z.union([
   z.object({
     data: z.object({
       job_id: z.string().min(1),
-      status: z.enum(["pending", "processing", "succeeded", "failed"]),
+      status: z.enum([
+        "pending",
+        "processing",
+        "succeeded",
+        "failed",
+        "mockups_failed",
+      ]),
       preview_url: z.string().url().optional(),
       design_url: z.string().url().optional(),
       mockup_urls: z.array(z.string().url()).optional(),
+      mockup_status: z.enum(["loading", "ready", "error"]).optional(),
       error: z.string().optional(),
     }),
   }),

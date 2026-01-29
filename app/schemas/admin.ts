@@ -220,6 +220,8 @@ const templateCreateSchema = z
     price_usd_per_generation: z.coerce.number().positive().optional(),
     // Remove background setting
     remove_background_enabled: z.enum(["true", "false"]).default("false"),
+    // Cover print area setting
+    cover_print_area: z.enum(["true", "false"]).default("true"),
   })
   .superRefine((data, ctx) => {
     if (data.generation_model_identifier && data.price_usd_per_generation) {
@@ -256,6 +258,8 @@ const templateUpdateSchema = z
     price_usd_per_generation: z.coerce.number().positive().optional(),
     // Remove background setting
     remove_background_enabled: z.enum(["true", "false"]).default("false"),
+    // Cover print area setting
+    cover_print_area: z.enum(["true", "false"]).default("true"),
   })
   .superRefine((data, ctx) => {
     if (data.generation_model_identifier && data.price_usd_per_generation) {

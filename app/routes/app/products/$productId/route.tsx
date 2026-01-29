@@ -105,11 +105,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     );
   }
 
-  const modelId =
-    template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
-  const modelConfig = getModelConfig(modelId);
-  const supportsCoverPrintArea = modelConfig?.supportsImageSize ?? true;
-
   return {
     product: {
       id: shopProduct.product_id,
@@ -120,7 +115,6 @@ export const loader = async ({ request, params }: LoaderFunctionArgs) => {
     assignment,
     templates,
     template,
-    supportsCoverPrintArea,
   };
 };
 
@@ -163,7 +157,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
   if (parsed.data.intent === "product_preview_generate") {
     const productId = parsed.data.product_id.trim();
     const templateId = parsed.data.template_id.trim();
-    const coverPrintAreaRequested = parsed.data.cover_print_area === "true";
     const fakeGeneration = parsed.data.fake_generation;
     const isDev = process.env.NODE_ENV === "development";
 
@@ -221,7 +214,8 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       template.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID;
     const modelConfig = getModelConfig(modelId);
     const supportsCoverPrintArea = modelConfig?.supportsImageSize ?? true;
-    const coverPrintArea = coverPrintAreaRequested && supportsCoverPrintArea;
+    // Use template's coverPrintArea setting, but only if model supports it
+    const coverPrintArea = template.coverPrintArea && supportsCoverPrintArea;
 
     let variableValues: Record<string, string> = {};
     try {
@@ -351,7 +345,6 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
         template_id: templateId,
         job_id: jobId,
         cover_print_area: coverPrintArea,
-        cover_print_area_requested: coverPrintAreaRequested,
         fake_generation: fakeGeneration,
         variable_count: Object.keys(variableValues).length,
         has_test_text: Boolean(parsed.data.test_text?.trim()),
@@ -605,7 +598,6 @@ type LoaderData =
       } | null;
       templates: PublishedTemplateListItem[];
       template: DesignTemplateDto | null;
-      supportsCoverPrintArea: boolean;
     }
   | { error: { code: string; message: string } };
 
@@ -648,9 +640,6 @@ export default function ProductConfigurationPage() {
   const product = isError ? null : loaderData.product;
   const templates = isError ? [] : loaderData.templates;
   const template = isError ? null : loaderData.template;
-  const supportsCoverPrintArea = isError
-    ? true
-    : loaderData.supportsCoverPrintArea;
 
   const [selectedTemplateId, setSelectedTemplateId] = useState(
     assignment?.templateId ?? noTemplateValue,
@@ -950,7 +939,6 @@ export default function ProductConfigurationPage() {
                 previewErrorMessage={previewErrorMessage}
                 isPreviewSubmitting={isPreviewSubmitting}
                 isPreviewInFlight={isPreviewInFlight}
-                supportsCoverPrintArea={supportsCoverPrintArea}
               />
             ) : (
               <s-banner tone="warning">
@@ -979,12 +967,21 @@ type PreviewStatus = NonNullable<ActionData["preview"]>["status"];
 type SimulatorPanelProps = {
   productId: string;
   template: DesignTemplateDto;
-  previewStatus: PreviewStatus | null;
-  previewResults: ActionData["preview"] | null;
+  previewStatus:
+    | "Queued"
+    | "Generating"
+    | "Processing"
+    | "Creating Mockups"
+    | "Done"
+    | "Failed"
+    | null;
+  previewResults: {
+    designUrl?: string | null;
+    mockupUrls?: string[];
+  } | null;
   previewErrorMessage: string | null;
   isPreviewSubmitting: boolean;
   isPreviewInFlight: boolean;
-  supportsCoverPrintArea: boolean;
 };
 
 function SimulatorPanel({
@@ -995,22 +992,14 @@ function SimulatorPanel({
   previewErrorMessage,
   isPreviewSubmitting,
   isPreviewInFlight,
-  supportsCoverPrintArea,
 }: SimulatorPanelProps) {
   const [variableValues, setVariableValues] = useState<Record<string, string>>(
     {},
   );
   const [testText, setTestText] = useState("");
-  const [coverPrintArea, setCoverPrintArea] = useState(true);
   const [selectedFileName, setSelectedFileName] = useState<string | null>(null);
   const [fakeGeneration, setFakeGeneration] = useState(false);
   const isDev = process.env.NODE_ENV === "development";
-
-  useEffect(() => {
-    if (!supportsCoverPrintArea && coverPrintArea) {
-      setCoverPrintArea(false);
-    }
-  }, [supportsCoverPrintArea, coverPrintArea]);
 
   const variableValuesJson = JSON.stringify(variableValues);
   const hasResults = Boolean(
@@ -1100,11 +1089,6 @@ function SimulatorPanel({
         <input type="hidden" name="intent" value="product_preview_generate" />
         <input type="hidden" name="product_id" value={productId} />
         <input type="hidden" name="template_id" value={template.id} />
-        <input
-          type="hidden"
-          name="cover_print_area"
-          value={coverPrintArea ? "true" : "false"}
-        />
         <input
           type="hidden"
           name="variable_values_json"
@@ -1206,18 +1190,6 @@ function SimulatorPanel({
               }}
             />
           )}
-
-          <s-checkbox
-            label="Cover entire print area"
-            checked={coverPrintArea}
-            disabled={!supportsCoverPrintArea}
-            onChange={() => setCoverPrintArea(!coverPrintArea)}
-          />
-          <s-text color="subdued">
-            {supportsCoverPrintArea
-              ? "When enabled, the preview will use the exact Printify print area dimensions. When disabled, it uses the template's base aspect ratio."
-              : "The selected generation model does not support custom dimensions, so cover print area is disabled."}
-          </s-text>
 
           <s-button
             type="submit"

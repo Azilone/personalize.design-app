@@ -1,5 +1,6 @@
 import { NonRetriableError } from "inngest";
 import { BillableEventType } from "@prisma/client";
+import { z } from "zod";
 import prisma from "../../../db.server";
 import { inngest } from "../client.server";
 import {
@@ -353,6 +354,47 @@ export const previewGenerate = inngest.createFunction(
             job_id: payload.job_id,
           },
           "Buyer preview generation completed",
+        );
+
+        captureEvent("generation.completed", {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          template_id: payload.template_id,
+          product_id: payload.product_id,
+          preview_type: payload.type,
+        });
+
+        // Trigger mockup generation asynchronously - don't wait for it
+        await step.run("trigger-mockups-async", async () => {
+          await inngest.send({
+            name: "previews.mockups.generate",
+            data: {
+              job_id: payload.job_id,
+              shop_id: payload.shop_id,
+              product_id: payload.product_id,
+              template_id: payload.template_id,
+              design_url: generationResult.designUrl,
+              design_storage_key: generationResult.storageKey,
+              cover_print_area: coverPrintArea,
+              image_width: imageSize.width,
+              image_height: imageSize.height,
+            },
+          });
+        });
+
+        captureEvent("mockups.triggered", {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          template_id: payload.template_id,
+          product_id: payload.product_id,
+        });
+
+        logger.info(
+          {
+            shop_id: payload.shop_id,
+            job_id: payload.job_id,
+          },
+          "Mockup generation triggered asynchronously",
         );
 
         return {
@@ -756,6 +798,50 @@ export const previewFakeGenerate = inngest.createFunction(
           "Preview fake generation completed",
         );
 
+        captureEvent("generation.completed", {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          template_id: payload.template_id,
+          product_id: payload.product_id,
+          preview_type: payload.type,
+          fake_generation: true,
+        });
+
+        // Trigger mockup generation asynchronously - don't wait for it
+        await step.run("trigger-mockups-async", async () => {
+          await inngest.send({
+            name: "previews.mockups.generate",
+            data: {
+              job_id: payload.job_id,
+              shop_id: payload.shop_id,
+              product_id: payload.product_id,
+              template_id: payload.template_id,
+              design_url: placeholderUrl,
+              design_storage_key: null,
+              cover_print_area: coverPrintArea,
+              image_width: imageSize.width,
+              image_height: imageSize.height,
+              fake_generation: true,
+            },
+          });
+        });
+
+        captureEvent("mockups.triggered", {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          template_id: payload.template_id,
+          product_id: payload.product_id,
+          fake_generation: true,
+        });
+
+        logger.info(
+          {
+            shop_id: payload.shop_id,
+            job_id: payload.job_id,
+          },
+          "Mockup generation triggered asynchronously",
+        );
+
         return {
           job_id: payload.job_id,
           design_url: placeholderUrl,
@@ -940,9 +1026,415 @@ export const previewFakeGenerateFailure = inngest.createFunction(
   },
 );
 
+const mockupsRetryPayloadSchema = z.object({
+  job_id: z.string().min(1),
+  shop_id: z.string().min(1),
+  design_url: z.string().url(),
+  design_storage_key: z.string().nullable().optional(),
+});
+
+export const mockupsRetry = inngest.createFunction(
+  {
+    id: "mockups_retry",
+    concurrency: {
+      key: "event.data.shop_id",
+      limit: 2,
+    },
+  },
+  { event: "previews.mockups.retry" },
+  async ({ event, step }) => {
+    const parsed = mockupsRetryPayloadSchema.safeParse(event.data);
+    if (!parsed.success) {
+      logger.warn(
+        { errors: parsed.error.flatten().fieldErrors },
+        "Invalid mockups retry payload",
+      );
+      throw new NonRetriableError("Invalid mockups retry payload");
+    }
+
+    const payload = parsed.data;
+    let tempProductId: string | null = null;
+
+    try {
+      const job = await step.run("load-job", async () =>
+        getPreviewJobById(payload.shop_id, payload.job_id),
+      );
+
+      if (!job) {
+        throw new NonRetriableError("Preview job not found.");
+      }
+
+      // Get the shop product to retrieve Printify product details
+      const shopProduct = await step.run("load-shop-product", async () =>
+        prisma.shopProduct.findUnique({
+          where: {
+            shop_id_product_id: {
+              shop_id: payload.shop_id,
+              product_id: job.productId,
+            },
+          },
+          select: { printify_product_id: true },
+        }),
+      );
+
+      const printifyProductId = shopProduct?.printify_product_id;
+      if (!printifyProductId) {
+        throw new NonRetriableError("Printify product not linked.");
+      }
+
+      const printifyProduct = await step.run(
+        "fetch-printify-product",
+        async () =>
+          getPrintifyProductDetails(payload.shop_id, printifyProductId),
+      );
+
+      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      if (!previewVariant) {
+        throw new NonRetriableError("No Printify variants available.");
+      }
+
+      const printAreaDimensions = await step.run("fetch-print-area", async () =>
+        getPrintifyVariantPrintArea({
+          shopId: payload.shop_id,
+          blueprintId: printifyProduct.blueprintId,
+          printProviderId: printifyProduct.printProviderId,
+          variantId: previewVariant.id,
+        }),
+      );
+
+      await step.run("mark-creating-mockups", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "creating_mockups",
+          errorMessage: null,
+        }),
+      );
+
+      captureEvent("mockups.retry_started", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+      });
+
+      const mockups = await step.run("generate-mockups", async () =>
+        generateMockups({
+          designUrl: payload.design_url,
+          blueprintId: printifyProduct.blueprintId,
+          printProviderId: printifyProduct.printProviderId,
+          variants: [previewVariant],
+          printArea: {
+            position: printAreaDimensions?.position ?? "front",
+            width: printAreaDimensions?.width ?? 1000,
+            height: printAreaDimensions?.height ?? 1000,
+          },
+          shopId: payload.shop_id,
+        }),
+      );
+
+      tempProductId = mockups.tempProductId;
+
+      await step.run("mark-mockups-done", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "done",
+          mockupUrls: mockups.mockupUrls,
+          tempPrintifyProductId: mockups.tempProductId,
+          errorMessage: null,
+        }),
+      );
+
+      captureEvent("mockups.retry_succeeded", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+        mockup_count: mockups.mockupUrls.length,
+      });
+
+      logger.info(
+        {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          mockup_count: mockups.mockupUrls.length,
+        },
+        "Mockup retry completed",
+      );
+
+      return {
+        job_id: payload.job_id,
+        mockup_urls: mockups.mockupUrls,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Mockup retry failed";
+
+      await step.run("mark-mockups-failed", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "mockups_failed",
+          errorMessage: message,
+        }),
+      );
+
+      captureEvent("mockups.retry_failed", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+        error: message,
+      });
+
+      logger.error(
+        {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          error: message,
+        },
+        "Mockup retry failed",
+      );
+
+      throw new NonRetriableError(message);
+    } finally {
+      if (tempProductId) {
+        const cleanupProductId = tempProductId;
+        try {
+          await step.run("cleanup-temp-product", async () =>
+            deleteProduct(payload.shop_id, cleanupProductId),
+          );
+        } catch (cleanupError) {
+          logger.error(
+            {
+              shop_id: payload.shop_id,
+              job_id: payload.job_id,
+              printify_product_id: tempProductId,
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError),
+            },
+            "Failed to cleanup temporary Printify product",
+          );
+        }
+      }
+    }
+  },
+);
+
+const mockupsGeneratePayloadSchema = z.object({
+  job_id: z.string().min(1),
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+  template_id: z.string().min(1),
+  design_url: z.string().url(),
+  design_storage_key: z.string().nullable().optional(),
+  cover_print_area: z.boolean().default(false),
+  image_width: z.number().default(1024),
+  image_height: z.number().default(1024),
+  fake_generation: z.boolean().default(false),
+});
+
+export const mockupsGenerate = inngest.createFunction(
+  {
+    id: "mockups_generate",
+    concurrency: {
+      key: "event.data.shop_id",
+      limit: 2,
+    },
+  },
+  { event: "previews.mockups.generate" },
+  async ({ event, step }) => {
+    const parsed = mockupsGeneratePayloadSchema.safeParse(event.data);
+    if (!parsed.success) {
+      logger.warn(
+        { errors: parsed.error.flatten().fieldErrors },
+        "Invalid mockups generate payload",
+      );
+      throw new NonRetriableError("Invalid mockups generate payload");
+    }
+
+    const payload = parsed.data;
+    let tempProductId: string | null = null;
+
+    try {
+      await step.run("mark-creating-mockups", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "creating_mockups",
+          designUrl: payload.design_url,
+          designStorageKey: payload.design_storage_key,
+          errorMessage: null,
+        }),
+      );
+
+      captureEvent("mockups.started", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+        template_id: payload.template_id,
+        product_id: payload.product_id,
+        fake_generation: payload.fake_generation,
+      });
+
+      const shopProduct = await step.run("load-shop-product", async () =>
+        prisma.shopProduct.findUnique({
+          where: {
+            shop_id_product_id: {
+              shop_id: payload.shop_id,
+              product_id: payload.product_id,
+            },
+          },
+          select: { printify_product_id: true },
+        }),
+      );
+
+      const printifyProductId = shopProduct?.printify_product_id;
+      if (!printifyProductId) {
+        throw new NonRetriableError("Printify product not linked.");
+      }
+
+      const printifyProduct = await step.run(
+        "fetch-printify-product",
+        async () =>
+          getPrintifyProductDetails(payload.shop_id, printifyProductId),
+      );
+
+      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      if (!previewVariant) {
+        throw new NonRetriableError("No Printify variants available.");
+      }
+
+      const printAreaDimensions = await step.run("fetch-print-area", async () =>
+        getPrintifyVariantPrintArea({
+          shopId: payload.shop_id,
+          blueprintId: printifyProduct.blueprintId,
+          printProviderId: printifyProduct.printProviderId,
+          variantId: previewVariant.id,
+        }),
+      );
+
+      const previewImageScale = resolvePreviewImageScale({
+        coverPrintArea: payload.cover_print_area,
+        imageSize: { width: payload.image_width, height: payload.image_height },
+        printAreaDimensions,
+      });
+
+      const mockups = await step.run("generate-mockups", async () =>
+        generateMockups({
+          designUrl: payload.design_url,
+          blueprintId: printifyProduct.blueprintId,
+          printProviderId: printifyProduct.printProviderId,
+          variants: [previewVariant],
+          printArea: {
+            position: printAreaDimensions?.position ?? "front",
+            scale: previewImageScale ?? undefined,
+            width: printAreaDimensions?.width ?? payload.image_width,
+            height: printAreaDimensions?.height ?? payload.image_height,
+          },
+          shopId: payload.shop_id,
+        }),
+      );
+
+      tempProductId = mockups.tempProductId;
+
+      await step.run("mark-mockups-done", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "done",
+          designUrl: payload.design_url,
+          designStorageKey: payload.design_storage_key,
+          mockupUrls: mockups.mockupUrls,
+          tempPrintifyProductId: mockups.tempProductId,
+          errorMessage: null,
+        }),
+      );
+
+      captureEvent("mockups.succeeded", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+        template_id: payload.template_id,
+        product_id: payload.product_id,
+        mockup_count: mockups.mockupUrls.length,
+        fake_generation: payload.fake_generation,
+      });
+
+      logger.info(
+        {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          mockup_count: mockups.mockupUrls.length,
+          fake_generation: payload.fake_generation,
+        },
+        "Mockup generation completed",
+      );
+
+      return {
+        job_id: payload.job_id,
+        mockup_urls: mockups.mockupUrls,
+      };
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Mockup generation failed";
+
+      await step.run("mark-mockups-failed", async () =>
+        updatePreviewJob({
+          jobId: payload.job_id,
+          shopId: payload.shop_id,
+          status: "mockups_failed",
+          designUrl: payload.design_url,
+          designStorageKey: payload.design_storage_key,
+          errorMessage: message,
+        }),
+      );
+
+      captureEvent("mockups.failed", {
+        shop_id: payload.shop_id,
+        job_id: payload.job_id,
+        template_id: payload.template_id,
+        product_id: payload.product_id,
+        error: message,
+        fake_generation: payload.fake_generation,
+      });
+
+      logger.error(
+        {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          error: message,
+        },
+        "Mockup generation failed",
+      );
+
+      throw new NonRetriableError(message);
+    } finally {
+      if (tempProductId) {
+        const cleanupProductId = tempProductId;
+        try {
+          await step.run("cleanup-temp-product", async () =>
+            deleteProduct(payload.shop_id, cleanupProductId),
+          );
+        } catch (cleanupError) {
+          logger.error(
+            {
+              shop_id: payload.shop_id,
+              job_id: payload.job_id,
+              printify_product_id: tempProductId,
+              error:
+                cleanupError instanceof Error
+                  ? cleanupError.message
+                  : String(cleanupError),
+            },
+            "Failed to cleanup temporary Printify product",
+          );
+        }
+      }
+    }
+  },
+);
+
 export const inngestFunctions = [
   previewGenerate,
   previewGenerateFailure,
   previewFakeGenerate,
   previewFakeGenerateFailure,
+  mockupsGenerate,
+  mockupsRetry,
 ];

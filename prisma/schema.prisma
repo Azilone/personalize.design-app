@@ -118,6 +118,7 @@ model DesignTemplate {
   generation_model_identifier String?
   price_usd_per_generation    Decimal?
   remove_background_enabled   Boolean                  @default(false)
+  cover_print_area            Boolean                  @default(true)
   aspect_ratio                TemplateAspectRatio      @default(ratio_1_1)
   status                      DesignTemplateStatus     @default(draft)
   test_generation_count       Int                      @default(0)
@@ -220,6 +221,7 @@ model PreviewJob {
 
   status                   PreviewJobStatus @default(queued)
   error_message            String?
+  mockup_error_message     String?
 
   created_at               DateTime         @default(now())
   updated_at               DateTime         @updatedAt
@@ -281,6 +283,7 @@ enum PreviewJobStatus {
   creating_mockups
   done
   failed
+  mockups_failed
 }
 
 enum UsageLedgerEntryType {

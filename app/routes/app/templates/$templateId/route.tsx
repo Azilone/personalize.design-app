@@ -74,6 +74,7 @@ export type LoaderData = {
     modelId: string;
     displayName: string;
     pricePerImage: number;
+    supportsImageSize: boolean;
   }[];
 };
 
@@ -487,6 +488,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
     generation_model_identifier,
     price_usd_per_generation,
     remove_background_enabled,
+    cover_print_area,
     aspect_ratio,
   } = parsed.data;
 
@@ -548,6 +550,7 @@ export const action = async ({ request, params }: ActionFunctionArgs) => {
       generationModelIdentifier: generation_model_identifier ?? null,
       priceUsdPerGeneration: price_usd_per_generation ?? null,
       removeBackgroundEnabled: remove_background_enabled === "true",
+      coverPrintArea: cover_print_area === "true",
       aspectRatio: aspect_ratio,
       variableNames,
     });
@@ -671,15 +674,35 @@ export default function TemplateEditPage() {
   const [generationPrice, setGenerationPrice] = useState(
     template?.priceUsdPerGeneration ?? MVP_PRICE_USD_PER_GENERATION,
   );
+  const [coverPrintArea, setCoverPrintArea] = useState(
+    template?.coverPrintArea ?? true,
+  );
 
-  // Update price when model changes
+  // Check if selected model supports custom dimensions
+  const selectedModelConfig = modelConfigs.find(
+    (c) => c.modelId === generationModel,
+  );
+  const supportsCoverPrintArea = selectedModelConfig?.supportsImageSize ?? true;
+
+  // Update price and reset cover print area when model changes
   const handleModelChange = (newModelId: string) => {
     setGenerationModel(newModelId);
     const config = modelConfigs.find((c) => c.modelId === newModelId);
     if (config) {
       setGenerationPrice(config.pricePerImage);
+      // Reset cover print area if new model doesn't support it
+      if (!config.supportsImageSize) {
+        setCoverPrintArea(false);
+      }
     }
   };
+
+  // Ensure cover print area is disabled if model doesn't support it
+  useEffect(() => {
+    if (!supportsCoverPrintArea && coverPrintArea) {
+      setCoverPrintArea(false);
+    }
+  }, [supportsCoverPrintArea, coverPrintArea]);
 
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
@@ -881,6 +904,11 @@ export default function TemplateEditPage() {
               name="remove_background_enabled"
               value={removeBackgroundEnabled ? "true" : "false"}
             />
+            <input
+              type="hidden"
+              name="cover_print_area"
+              value={coverPrintArea ? "true" : "false"}
+            />
 
             <s-stack direction="block" gap="base">
               <s-text-field
@@ -937,8 +965,8 @@ export default function TemplateEditPage() {
                   </span>
                 </div>
                 <s-text color="subdued">
-                  Used when &quot;Cover entire print area&quot; is disabled in
-                  previews.
+                  Base aspect ratio for generated images. Used when &quot;Cover
+                  entire print area&quot; is disabled above.
                 </s-text>
               </s-stack>
 
@@ -1125,6 +1153,22 @@ export default function TemplateEditPage() {
                     Disabled when fake generation is enabled.
                   </s-text>
                 )}
+              </s-stack>
+
+              {/* Cover Entire Print Area Setting */}
+              <s-stack direction="block" gap="small">
+                <s-checkbox
+                  label="Cover entire print area"
+                  value="true"
+                  checked={coverPrintArea}
+                  onChange={() => setCoverPrintArea(!coverPrintArea)}
+                  disabled={!supportsCoverPrintArea}
+                />
+                <s-text color="subdued">
+                  {supportsCoverPrintArea
+                    ? "When enabled, generated images will use the exact Printify print area dimensions. When disabled, images use the template's base aspect ratio."
+                    : "The selected generation model does not support custom dimensions, so cover print area is disabled."}
+                </s-text>
               </s-stack>
 
               <s-divider />

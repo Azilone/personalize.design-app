@@ -64,6 +64,7 @@ export type DesignTemplateDto = {
   generationModelIdentifier: string | null;
   priceUsdPerGeneration: number | null;
   removeBackgroundEnabled: boolean;
+  coverPrintArea: boolean;
   aspectRatio: TemplateAspectRatio;
   status: DesignTemplateStatus;
   /** Monthly test generation count for rate limiting */
@@ -100,6 +101,7 @@ export type CreateTemplateInput = {
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
   removeBackgroundEnabled?: boolean;
+  coverPrintArea?: boolean;
   aspectRatio?: TemplateAspectRatio;
   variableNames: string[];
 };
@@ -114,6 +116,7 @@ export type UpdateTemplateInput = {
   generationModelIdentifier?: string | null;
   priceUsdPerGeneration?: number | null;
   removeBackgroundEnabled?: boolean;
+  coverPrintArea?: boolean;
   aspectRatio?: TemplateAspectRatio;
   variableNames: string[];
 };
@@ -238,6 +241,7 @@ export const getTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    coverPrintArea: template.cover_print_area,
     aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
@@ -267,6 +271,7 @@ export const createTemplate = async (
       generation_model_identifier: input.generationModelIdentifier ?? null,
       price_usd_per_generation: input.priceUsdPerGeneration ?? null,
       remove_background_enabled: input.removeBackgroundEnabled ?? false,
+      cover_print_area: input.coverPrintArea ?? true,
       aspect_ratio: input.aspectRatio ?? DEFAULT_TEMPLATE_ASPECT_RATIO,
       status: "draft",
       variables: {
@@ -286,6 +291,7 @@ export const createTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    coverPrintArea: template.cover_print_area,
     aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
@@ -333,6 +339,7 @@ export const updateTemplate = async (
         generation_model_identifier: input.generationModelIdentifier ?? null,
         price_usd_per_generation: input.priceUsdPerGeneration ?? null,
         remove_background_enabled: input.removeBackgroundEnabled ?? false,
+        cover_print_area: input.coverPrintArea ?? true,
         aspect_ratio: input.aspectRatio ?? DEFAULT_TEMPLATE_ASPECT_RATIO,
         variables: {
           create: input.variableNames.map((name) => ({ name })),
@@ -352,6 +359,7 @@ export const updateTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    coverPrintArea: template.cover_print_area,
     aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
@@ -459,6 +467,7 @@ export const publishTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    coverPrintArea: template.cover_print_area,
     aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,
@@ -523,6 +532,7 @@ export const unpublishTemplate = async (
     generationModelIdentifier: template.generation_model_identifier,
     priceUsdPerGeneration: decimalToNumber(template.price_usd_per_generation),
     removeBackgroundEnabled: template.remove_background_enabled,
+    coverPrintArea: template.cover_print_area,
     aspectRatio: template.aspect_ratio,
     status: template.status,
     testGenerationCount: template.test_generation_count,

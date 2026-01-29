@@ -27,6 +27,7 @@ export type UpdatePreviewJobParams = {
   mockupUrls?: string[] | null;
   tempPrintifyProductId?: string | null;
   errorMessage?: string | null;
+  mockupErrorMessage?: string | null;
 };
 
 export type PreviewJobRecord = {
@@ -47,15 +48,22 @@ export type PreviewJobRecord = {
   sessionId: string | null;
   status: PreviewJobStatus;
   errorMessage: string | null;
+  mockupErrorMessage: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
 
 const normalizeMockupUrls = (value: unknown): string[] => {
+  if (value === null || value === undefined) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     return [];
   }
-  return value.filter((item): item is string => typeof item === "string");
+  const filtered = value.filter(
+    (item): item is string => typeof item === "string",
+  );
+  return filtered.length > 0 ? filtered : [];
 };
 
 const normalizeVariableValues = (value: unknown): Record<string, string> => {
@@ -89,6 +97,7 @@ const mapPreviewJob = (record: {
   session_id: string | null;
   status: PreviewJobStatus;
   error_message: string | null;
+  mockup_error_message: string | null;
   created_at: Date;
   updated_at: Date;
 }): PreviewJobRecord => ({
@@ -109,6 +118,7 @@ const mapPreviewJob = (record: {
   sessionId: record.session_id,
   status: record.status,
   errorMessage: record.error_message,
+  mockupErrorMessage: record.mockup_error_message,
   createdAt: record.created_at,
   updatedAt: record.updated_at,
 });
