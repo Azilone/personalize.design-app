@@ -70,6 +70,11 @@ export type LoaderData = {
     paidUsageUsd: number;
     monthlyCapUsd: number;
   };
+  modelConfigs: {
+    modelId: string;
+    displayName: string;
+    pricePerImage: number;
+  }[];
 };
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
@@ -582,7 +587,7 @@ export const headers: HeadersFunction = () => {
 };
 
 export default function TemplateEditPage() {
-  const { template, testResults, pollInterval, billing } =
+  const { template, testResults, pollInterval, billing, modelConfigs } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigate = useNavigate();
@@ -659,13 +664,22 @@ export default function TemplateEditPage() {
   const [fakeGeneration, setFakeGeneration] = useState(false);
   const isDev = process.env.NODE_ENV === "development";
 
-  // Generation settings (MVP: use constants, read persisted from template)
-  const [generationModel] = useState(
+  // Generation settings
+  const [generationModel, setGenerationModel] = useState(
     template?.generationModelIdentifier ?? MVP_GENERATION_MODEL_ID,
   );
-  const [generationPrice] = useState(
+  const [generationPrice, setGenerationPrice] = useState(
     template?.priceUsdPerGeneration ?? MVP_PRICE_USD_PER_GENERATION,
   );
+
+  // Update price when model changes
+  const handleModelChange = (newModelId: string) => {
+    setGenerationModel(newModelId);
+    const config = modelConfigs.find((c) => c.modelId === newModelId);
+    if (config) {
+      setGenerationPrice(config.pricePerImage);
+    }
+  };
 
   // Test generation state
   const [testPhotoUrl, setTestPhotoUrl] = useState("");
@@ -1042,8 +1056,9 @@ export default function TemplateEditPage() {
                 <div style={{ position: "relative" }}>
                   <select
                     id="generation_model"
+                    name="generation_model_identifier"
                     value={generationModel}
-                    disabled
+                    onChange={(e) => handleModelChange(e.target.value)}
                     style={{
                       width: "100%",
                       padding: "8px 32px 8px 12px",
@@ -1051,12 +1066,14 @@ export default function TemplateEditPage() {
                       borderRadius: "4px",
                       fontFamily: "inherit",
                       fontSize: "inherit",
-                      backgroundColor: "#f5f5f5",
-                      cursor: "not-allowed",
                       appearance: "none",
                     }}
                   >
-                    <option value={MVP_GENERATION_MODEL_ID}>Flux (MVP)</option>
+                    {modelConfigs.map((config) => (
+                      <option key={config.modelId} value={config.modelId}>
+                        {config.displayName}
+                      </option>
+                    ))}
                   </select>
                   <span
                     aria-hidden="true"
