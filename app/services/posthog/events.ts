@@ -8,7 +8,7 @@ type UsageGiftGrantEventInput = {
 };
 
 export const trackUsageGiftGrant = (input: UsageGiftGrantEventInput) => {
-  captureEvent("usage_gift_grant", {
+  captureEvent("usage.gift.granted", {
     shop_id: input.shopId,
     billable_event_id: input.ledgerEntryId,
     idempotency_key: input.idempotencyKey,
@@ -171,5 +171,75 @@ export const trackBillableEventWaived = (input: BillableEventWaivedInput) => {
     billable_event_id: input.billableEventId,
     idempotency_key: input.idempotencyKey,
     error_message: input.errorMessage ?? null,
+  });
+};
+
+// --------------------------------------------------------------------------
+// Webhook Processing Events
+// --------------------------------------------------------------------------
+
+type WebhookReceivedInput = {
+  shopId: string;
+  webhookId: string;
+  topic: string;
+  correlationId: string;
+};
+
+export const trackWebhookReceived = (input: WebhookReceivedInput) => {
+  captureEvent("webhook.order_paid.received", {
+    shop_id: input.shopId,
+    webhook_id: input.webhookId,
+    topic: input.topic,
+    correlation_id: input.correlationId,
+  });
+};
+
+type WebhookProcessedInput = {
+  shopId: string;
+  webhookId: string;
+  orderId: string;
+  correlationId: string;
+  hasPersonalization: boolean;
+  eligibleLinesCount: number;
+  processingStatus:
+    | "success"
+    | "partial_failure"
+    | "duplicate"
+    | "no_personalization";
+  successCount?: number;
+  duplicateCount?: number;
+  errorCount?: number;
+};
+
+export const trackWebhookProcessed = (input: WebhookProcessedInput) => {
+  captureEvent("webhook.order_paid.processed", {
+    shop_id: input.shopId,
+    webhook_id: input.webhookId,
+    order_id: input.orderId,
+    correlation_id: input.correlationId,
+    has_personalization: input.hasPersonalization,
+    eligible_lines_count: input.eligibleLinesCount,
+    processing_status: input.processingStatus,
+    success_count: input.successCount ?? null,
+    duplicate_count: input.duplicateCount ?? null,
+    error_count: input.errorCount ?? null,
+  });
+};
+
+type WebhookDuplicateInput = {
+  shopId: string;
+  webhookId: string;
+  orderId: string;
+  orderLineId: string;
+  correlationId: string;
+};
+
+export const trackWebhookDuplicate = (input: WebhookDuplicateInput) => {
+  captureEvent("webhook.order_paid.duplicate", {
+    shop_id: input.shopId,
+    webhook_id: input.webhookId,
+    order_id: input.orderId,
+    order_line_id: input.orderLineId,
+    correlation_id: input.correlationId,
   });
 };

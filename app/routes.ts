@@ -32,6 +32,7 @@ export default [
     "webhooks/app/uninstalled",
     "./routes/webhooks/app/uninstalled/route.tsx",
   ),
+  route("webhooks/orders/paid", "./routes/webhooks/orders/paid/route.tsx"),
   route("app", "./routes/app/route.tsx", { id: "routes/app" }, [
     index("./routes/app/_index/route.tsx"),
     route("billing", "./routes/app/billing/route.tsx"),

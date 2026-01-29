@@ -82,11 +82,11 @@ development_status:
   6-4-printify-mockups-via-preview-modal-non-blocking: done
   6-5-regenerate-flow-limits-cost-messaging: done
   6-6-add-to-cart-action-from-modal-metadata: done
-  6-7-enforce-generation-limits-per-product-per-session-reset-window: backlog
+  6-7-enforce-generation-limits-per-product-per-session-reset-window: done
   epic-6-retrospective: optional
 
-  epic-7: backlog
-  7-1-detect-paid-orders-with-personalization-id-webhook-idempotent-intake: backlog
+   epic-7: in-progress
+   7-1-detect-paid-orders-with-personalization-id-webhook-idempotent-intake: done
   7-2-final-print-ready-asset-generated-preview-persist-retrieve: backlog
   7-3-submit-to-printify-track-status-visibility: backlog
   7-4-operator-reprocess-failed-order-line-diagnostics: backlog

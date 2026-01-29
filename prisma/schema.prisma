@@ -323,6 +323,22 @@ model BillableEvent {
   @@map("billable_events")
 }
 
+model OrderLineProcessing {
+  id                 String   @id @default(cuid())
+  shop_id            String
+  order_id           String
+  order_line_id      String
+  idempotency_key    String   @unique
+  status             String   // pending, processing, succeeded, failed
+  personalization_id String
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+
+  @@index([shop_id, order_line_id])
+  @@index([status])
+  @@map("order_line_processing")
+}
+
 enum BillableEventType {
   generation
   regeneration
