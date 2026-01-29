@@ -5,6 +5,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Plus,
+  RefreshCw,
   Type,
   X,
 } from "lucide-react";
@@ -65,6 +66,7 @@ export const Shell = () => {
     variableValues,
     setVariableValue,
     setVariableValues,
+    sessionId,
     previewJobId,
     generationStatus,
     previewUrl,
@@ -73,6 +75,10 @@ export const Shell = () => {
     mockupUrls,
     mockupStatus,
     mockupError,
+    triesRemaining,
+    resetInMinutes,
+    canRegenerate,
+    regenerationCostUsd,
     setPreviewJobId,
     setGenerationStatus,
     setPreviewUrl,
@@ -81,6 +87,14 @@ export const Shell = () => {
     setMockupUrls,
     setMockupStatus,
     setMockupError,
+    setTriesRemaining,
+    setPerProductTriesRemaining,
+    setPerSessionTriesRemaining,
+    setResetAt,
+    setResetInMinutes,
+    setCanRegenerate,
+    setRegenerationCostUsd,
+    setSessionId,
     resetPreview,
   } = useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -98,10 +112,49 @@ export const Shell = () => {
   const [mockupLoadingStartTime, setMockupLoadingStartTime] = useState<
     number | null
   >(null);
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [regenerationError, setRegenerationError] = useState<string | null>(
+    null,
+  );
   const logoInputRef = useRef<HTMLInputElement>(null);
   const logoUrlRef = useRef<string | null>(null);
   const templateVariables = templateConfig?.variables ?? [];
   const isDev = import.meta.env?.MODE === "development";
+
+  const sessionStorageKey = useMemo(() => {
+    if (!config.shopDomain || !config.productId || !config.templateId) {
+      return null;
+    }
+    return `personalize_session_${config.shopDomain}_${config.productId}_${config.templateId}`;
+  }, [config.shopDomain, config.productId, config.templateId]);
+
+  useEffect(() => {
+    if (!sessionStorageKey) {
+      return;
+    }
+
+    let storedSessionId: string | null = null;
+    try {
+      storedSessionId = window.sessionStorage.getItem(sessionStorageKey);
+    } catch {
+      storedSessionId = null;
+    }
+
+    if (storedSessionId) {
+      if (sessionId !== storedSessionId) {
+        setSessionId(storedSessionId);
+      }
+      return;
+    }
+
+    const newSessionId = crypto.randomUUID();
+    try {
+      window.sessionStorage.setItem(sessionStorageKey, newSessionId);
+    } catch {
+      // Ignore storage errors
+    }
+    setSessionId(newSessionId);
+  }, [sessionId, sessionStorageKey, setSessionId]);
 
   useEffect(() => {
     if (file) {
@@ -247,6 +300,13 @@ export const Shell = () => {
             mockup_urls?: string[];
             mockup_status?: "loading" | "ready" | "error";
             error?: string;
+            // Limit tracking fields
+            tries_remaining?: number;
+            per_product_tries_remaining?: number;
+            per_session_tries_remaining?: number;
+            reset_at?: string;
+            reset_in_minutes?: number;
+            can_regenerate?: boolean;
           };
           error?: { message?: string };
         };
@@ -302,6 +362,27 @@ export const Shell = () => {
         if (payload.data?.error) {
           setGenerationError(payload.data.error);
         }
+
+        // Update limit tracking from status response
+        if (payload.data?.tries_remaining !== undefined) {
+          setTriesRemaining(payload.data.tries_remaining);
+        }
+        if (payload.data?.per_product_tries_remaining !== undefined) {
+          setPerProductTriesRemaining(payload.data.per_product_tries_remaining);
+        }
+        if (payload.data?.per_session_tries_remaining !== undefined) {
+          setPerSessionTriesRemaining(payload.data.per_session_tries_remaining);
+        }
+        if (payload.data?.reset_at !== undefined) {
+          setResetAt(payload.data.reset_at);
+        }
+        if (payload.data?.reset_in_minutes !== undefined) {
+          setResetInMinutes(payload.data.reset_in_minutes);
+        }
+        if (payload.data?.can_regenerate !== undefined) {
+          setCanRegenerate(payload.data.can_regenerate);
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
 
         if (nextStatus === "succeeded" && modalState === "generating") {
           setTimeout(() => {
@@ -584,7 +665,18 @@ export const Shell = () => {
     setPreviewUrl(null);
     setServerJobConfirmed(false);
 
-    const jobId = crypto.randomUUID();
+    let jobId = sessionId;
+    if (!jobId) {
+      jobId = crypto.randomUUID();
+      if (sessionStorageKey) {
+        try {
+          window.sessionStorage.setItem(sessionStorageKey, jobId);
+        } catch {
+          // Ignore storage errors
+        }
+      }
+      setSessionId(jobId);
+    }
     setModalState("generating");
 
     const formData = new FormData();
@@ -705,6 +797,144 @@ export const Shell = () => {
       setMockupStatus("error");
     } finally {
       setIsRetryingMockups(false);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    if (!config.shopDomain || !config.productId || !config.templateId) {
+      return;
+    }
+
+    let activeSessionId = sessionId ?? previewJobId;
+    if (!activeSessionId) {
+      activeSessionId = crypto.randomUUID();
+      if (sessionStorageKey) {
+        try {
+          window.sessionStorage.setItem(sessionStorageKey, activeSessionId);
+        } catch {
+          // Ignore storage errors
+        }
+      }
+      setSessionId(activeSessionId);
+    }
+
+    if (!previewJobId) {
+      setRegenerationError("Please generate a preview before trying again.");
+      return;
+    }
+
+    // Check if regeneration is allowed
+    if (!canRegenerate) {
+      setRegenerationError(
+        resetInMinutes
+          ? `You've reached your generation limit. Try again in ${resetInMinutes} minutes.`
+          : "You've reached your generation limit.",
+      );
+      return;
+    }
+
+    setIsRegenerating(true);
+    setRegenerationError(null);
+    setGenerationError(null);
+    setPreviewUrl(null);
+    setServerJobConfirmed(false);
+    setMockupUrls([]);
+    setMockupStatus("idle");
+    setMockupError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("shop_id", config.shopDomain);
+      formData.append("product_id", config.productId);
+      formData.append("template_id", config.templateId);
+      formData.append("session_id", activeSessionId);
+      formData.append("previous_job_id", previewJobId);
+      if (isDev && fakeGeneration) {
+        formData.append("fake_generation", "true");
+      }
+
+      const response = await fetch(`${APP_PROXY_BASE}/regenerate-preview`, {
+        method: "POST",
+        body: formData,
+      });
+
+      const contentType = response.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        throw new Error(
+          "Preview service is unavailable. Please try again in a moment.",
+        );
+      }
+
+      const payload = (await response.json()) as {
+        data?: {
+          job_id: string;
+          status: string;
+          tries_remaining?: number;
+          per_product_tries_remaining?: number;
+          per_session_tries_remaining?: number;
+          reset_at?: string;
+          reset_in_minutes?: number;
+          cost_usd?: number;
+        };
+        error?: { message?: string; code?: string };
+      };
+
+      if (!response.ok || payload.error) {
+        setGenerationStatus("failed");
+        setServerJobConfirmed(false);
+        setRegenerationError(
+          payload.error?.message ??
+            "Something went wrong while starting preview regeneration.",
+        );
+
+        // Update limit info from error response
+        if (payload.error?.code === "limit_exceeded") {
+          setCanRegenerate(false);
+        }
+        return;
+      }
+
+      // Update limit tracking from response
+      if (payload.data?.tries_remaining !== undefined) {
+        setTriesRemaining(payload.data.tries_remaining);
+      }
+      if (payload.data?.per_product_tries_remaining !== undefined) {
+        setPerProductTriesRemaining(payload.data.per_product_tries_remaining);
+      }
+      if (payload.data?.per_session_tries_remaining !== undefined) {
+        setPerSessionTriesRemaining(payload.data.per_session_tries_remaining);
+      }
+      if (payload.data?.reset_at !== undefined) {
+        setResetAt(payload.data.reset_at);
+      }
+      if (payload.data?.reset_in_minutes !== undefined) {
+        setResetInMinutes(payload.data.reset_in_minutes);
+      }
+      if (payload.data?.cost_usd !== undefined) {
+        setRegenerationCostUsd(payload.data.cost_usd);
+      }
+
+      const nextJobId = payload.data?.job_id ?? previewJobId;
+      setPreviewJobId(nextJobId);
+      setServerJobConfirmed(true);
+      setGenerationStatus(
+        (payload.data?.status as
+          | "pending"
+          | "processing"
+          | "succeeded"
+          | "failed") ?? "pending",
+      );
+      setModalState("generating");
+    } catch (error) {
+      setGenerationStatus("failed");
+      setServerJobConfirmed(false);
+      setRegenerationError(
+        error instanceof Error
+          ? error.message
+          : "Preview service is unavailable. Please try again in a moment.",
+      );
+    } finally {
+      setIsRegenerating(false);
     }
   };
 
@@ -1021,8 +1251,78 @@ export const Shell = () => {
                       ? "Mockups failed to load. You can still preview your design."
                       : "Click Preview to see your design on different mockups."}
                 </p>
+                {/* Tries remaining and reset timer */}
+                {triesRemaining !== null && (
+                  <div className="mt-[16px] text-center">
+                    <p className="text-[14px] text-muted-foreground">
+                      {triesRemaining > 0 ? (
+                        <>
+                          <span className="font-medium text-foreground">
+                            {triesRemaining}
+                          </span>{" "}
+                          {triesRemaining === 1 ? "try" : "tries"} remaining
+                          {resetInMinutes !== null && resetInMinutes > 0 && (
+                            <span> · Resets in {resetInMinutes} min</span>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-destructive">
+                          No tries remaining
+                          {resetInMinutes !== null && resetInMinutes > 0 && (
+                            <> · Resets in {resetInMinutes} min</>
+                          )}
+                        </span>
+                      )}
+                    </p>
+                    {regenerationCostUsd !== null && triesRemaining > 0 && (
+                      <p className="mt-[4px] text-[12px] text-muted-foreground">
+                        Cost: ${regenerationCostUsd.toFixed(3)}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
               <div className="space-y-[12px] border-t border-border p-[24px]">
+                {/* Try Again button for regeneration */}
+                {triesRemaining !== null && triesRemaining > 0 && (
+                  <Button
+                    onClick={handleRegenerate}
+                    variant="outline"
+                    className="w-full bg-transparent h-[48px] text-[16px]"
+                    size="lg"
+                    disabled={isRegenerating || !canRegenerate}
+                  >
+                    {isRegenerating ? (
+                      <>
+                        <Loader2 className="mr-[8px] size-[16px] animate-spin" />
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="mr-[8px] size-[16px]" />
+                        Try again
+                      </>
+                    )}
+                  </Button>
+                )}
+                {/* Blocked state messaging */}
+                {triesRemaining !== null && triesRemaining === 0 && (
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/10 p-[16px]">
+                    <p className="text-[14px] text-destructive">
+                      Generation limit reached
+                    </p>
+                    <p className="mt-[4px] text-[12px] text-muted-foreground">
+                      {resetInMinutes !== null && resetInMinutes > 0
+                        ? `You can generate again in ${resetInMinutes} minutes.`
+                        : "Please try again later."}
+                    </p>
+                  </div>
+                )}
+                {regenerationError && (
+                  <p className="text-[12px] font-medium text-destructive">
+                    {regenerationError}
+                  </p>
+                )}
                 <Button
                   onClick={handlePreview}
                   variant="outline"
@@ -1110,6 +1410,82 @@ export const Shell = () => {
                       {isRetryingMockups ? "Retrying..." : "Try again"}
                     </Button>
                   </div>
+                )}
+
+                {/* Tries remaining indicator in review state */}
+                {triesRemaining !== null && (
+                  <div className="mt-[24px] rounded-lg border border-border bg-muted/30 p-[16px]">
+                    <div className="flex items-center justify-between">
+                      <p className="text-[14px] text-muted-foreground">
+                        {triesRemaining > 0 ? (
+                          <>
+                            <span className="font-medium text-foreground">
+                              {triesRemaining}
+                            </span>{" "}
+                            {triesRemaining === 1 ? "try" : "tries"} remaining
+                          </>
+                        ) : (
+                          <span className="text-destructive">
+                            No tries remaining
+                          </span>
+                        )}
+                      </p>
+                      {resetInMinutes !== null && resetInMinutes > 0 && (
+                        <p className="text-[12px] text-muted-foreground">
+                          Resets in {resetInMinutes} min
+                        </p>
+                      )}
+                    </div>
+                    {regenerationCostUsd !== null && triesRemaining > 0 && (
+                      <p className="mt-[4px] text-[12px] text-muted-foreground">
+                        Cost: ${regenerationCostUsd.toFixed(3)} per generation
+                      </p>
+                    )}
+                  </div>
+                )}
+
+                {/* Regenerate button in review state */}
+                {triesRemaining !== null && triesRemaining > 0 && (
+                  <div className="mt-[16px]">
+                    <Button
+                      onClick={handleRegenerate}
+                      variant="outline"
+                      className="w-full bg-transparent h-[48px] text-[16px]"
+                      size="lg"
+                      disabled={isRegenerating || !canRegenerate}
+                    >
+                      {isRegenerating ? (
+                        <>
+                          <Loader2 className="mr-[8px] size-[16px] animate-spin" />
+                          Generating...
+                        </>
+                      ) : (
+                        <>
+                          <RefreshCw className="mr-[8px] size-[16px]" />
+                          Try again
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {/* Blocked state messaging in review state */}
+                {triesRemaining !== null && triesRemaining === 0 && (
+                  <div className="mt-[16px] rounded-lg border border-destructive/20 bg-destructive/10 p-[16px]">
+                    <p className="text-[14px] text-destructive">
+                      Generation limit reached
+                    </p>
+                    <p className="mt-[4px] text-[12px] text-muted-foreground">
+                      {resetInMinutes !== null && resetInMinutes > 0
+                        ? `You can generate again in ${resetInMinutes} minutes.`
+                        : "Please try again later."}
+                    </p>
+                  </div>
+                )}
+                {regenerationError && (
+                  <p className="mt-[12px] text-[12px] font-medium text-destructive">
+                    {regenerationError}
+                  </p>
                 )}
               </div>
               <div className="border-t border-border p-[24px]">

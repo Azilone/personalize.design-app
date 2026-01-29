@@ -142,6 +142,32 @@ export type StorefrontPersonalizationActionInput = z.infer<
   typeof storefrontPersonalizationActionSchema
 >;
 
+const generationLimitsSchema = z
+  .object({
+    intent: z.literal("generation_limits_save"),
+    per_product_limit: z.coerce.number().int().min(1).max(50),
+    per_session_limit: z.coerce.number().int().min(1).max(200),
+    reset_window_minutes: z.coerce.number().int().min(5).max(240),
+  })
+  .superRefine((data, ctx) => {
+    if (data.per_session_limit < data.per_product_limit) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message:
+          "Session limit must be greater than or equal to per-product limit.",
+        path: ["per_session_limit"],
+      });
+    }
+  });
+
+export const generationLimitsActionSchema = z.discriminatedUnion("intent", [
+  generationLimitsSchema,
+]);
+
+export type GenerationLimitsActionInput = z.infer<
+  typeof generationLimitsActionSchema
+>;
+
 const productsSyncSchema = z.object({
   intent: z.literal("products_sync"),
 });

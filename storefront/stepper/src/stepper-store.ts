@@ -38,6 +38,7 @@ type StepperState = {
   file: File | null;
   graphicFile: File | null;
   variableValues: Record<string, string>;
+  sessionId: string | null;
   previewJobId: string | null;
   generationStatus: "idle" | "pending" | "processing" | "succeeded" | "failed";
   previewUrl: string | null;
@@ -46,6 +47,14 @@ type StepperState = {
   mockupUrls: string[];
   mockupStatus: "idle" | "loading" | "ready" | "error";
   mockupError: string | null;
+  // Limit tracking
+  triesRemaining: number | null;
+  perProductTriesRemaining: number | null;
+  perSessionTriesRemaining: number | null;
+  resetAt: string | null;
+  resetInMinutes: number | null;
+  canRegenerate: boolean;
+  regenerationCostUsd: number | null;
   triggerRef: React.MutableRefObject<HTMLButtonElement | null> | null;
   setStep: (step: number) => void;
   next: () => void;
@@ -59,6 +68,7 @@ type StepperState = {
   setVariableValue: (name: string, value: string) => void;
   setVariableValues: (values: Record<string, string>) => void;
   resetInputs: () => void;
+  setSessionId: (sessionId: string | null) => void;
   setPreviewJobId: (jobId: string | null) => void;
   setGenerationStatus: (status: StepperState["generationStatus"]) => void;
   setPreviewUrl: (url: string | null) => void;
@@ -67,6 +77,17 @@ type StepperState = {
   setMockupUrls: (urls: string[]) => void;
   setMockupStatus: (status: StepperState["mockupStatus"]) => void;
   setMockupError: (error: string | null) => void;
+  setTriesRemaining: (triesRemaining: number | null) => void;
+  setPerProductTriesRemaining: (
+    perProductTriesRemaining: number | null,
+  ) => void;
+  setPerSessionTriesRemaining: (
+    perSessionTriesRemaining: number | null,
+  ) => void;
+  setResetAt: (resetAt: string | null) => void;
+  setResetInMinutes: (resetInMinutes: number | null) => void;
+  setCanRegenerate: (canRegenerate: boolean) => void;
+  setRegenerationCostUsd: (regenerationCostUsd: number | null) => void;
   resetPreview: () => void;
   setTriggerRef: (
     ref: React.MutableRefObject<HTMLButtonElement | null>,
@@ -96,6 +117,7 @@ export const useStepperStore = create<StepperState>((set) => ({
   file: null,
   graphicFile: null,
   variableValues: {},
+  sessionId: null,
   previewJobId: null,
   generationStatus: "idle",
   previewUrl: null,
@@ -104,6 +126,14 @@ export const useStepperStore = create<StepperState>((set) => ({
   mockupUrls: [],
   mockupStatus: "idle",
   mockupError: null,
+  // Limit tracking defaults
+  triesRemaining: null,
+  perProductTriesRemaining: null,
+  perSessionTriesRemaining: null,
+  resetAt: null,
+  resetInMinutes: null,
+  canRegenerate: true,
+  regenerationCostUsd: null,
   triggerRef: null,
   setStep: (step) => set({ step }),
   next: () =>
@@ -135,6 +165,7 @@ export const useStepperStore = create<StepperState>((set) => ({
     })),
   setVariableValues: (values) => set({ variableValues: values }),
   resetInputs: () => set({ file: null, graphicFile: null, variableValues: {} }),
+  setSessionId: (sessionId) => set({ sessionId }),
   setPreviewJobId: (previewJobId) => set({ previewJobId }),
   setGenerationStatus: (generationStatus) => set({ generationStatus }),
   setPreviewUrl: (previewUrl) => set({ previewUrl }),
@@ -143,6 +174,15 @@ export const useStepperStore = create<StepperState>((set) => ({
   setMockupUrls: (mockupUrls) => set({ mockupUrls }),
   setMockupStatus: (mockupStatus) => set({ mockupStatus }),
   setMockupError: (mockupError) => set({ mockupError }),
+  setTriesRemaining: (triesRemaining) => set({ triesRemaining }),
+  setPerProductTriesRemaining: (perProductTriesRemaining) =>
+    set({ perProductTriesRemaining }),
+  setPerSessionTriesRemaining: (perSessionTriesRemaining) =>
+    set({ perSessionTriesRemaining }),
+  setResetAt: (resetAt) => set({ resetAt }),
+  setResetInMinutes: (resetInMinutes) => set({ resetInMinutes }),
+  setCanRegenerate: (canRegenerate) => set({ canRegenerate }),
+  setRegenerationCostUsd: (regenerationCostUsd) => set({ regenerationCostUsd }),
   resetPreview: () =>
     set({
       previewJobId: null,

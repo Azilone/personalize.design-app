@@ -3,6 +3,7 @@ import { data } from "react-router";
 import { authenticate } from "../../../shopify.server";
 import type { GeneratePreviewStatusResponse } from "../../../schemas/app_proxy";
 import { getPreviewJobById } from "../../../services/previews/preview-jobs.server";
+import { checkGenerationLimits } from "../../../services/previews/generation-limits.server";
 import { createSignedReadUrl } from "../../../services/supabase/storage";
 import logger from "../../../lib/logger";
 
@@ -87,6 +88,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           ? "ready"
           : undefined;
 
+  // Get limit status for regeneration
+  const limitCheck = await checkGenerationLimits({
+    shopId,
+    sessionId: job.sessionId || "",
+    productId: job.productId,
+  });
+
   return data<GeneratePreviewStatusResponse>({
     data: {
       job_id: job.jobId,
@@ -96,6 +104,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       mockup_urls: job.mockupUrls.length ? job.mockupUrls : undefined,
       mockup_status: mockupStatus,
       error: job.errorMessage ?? undefined,
+      // Limit tracking fields
+      tries_remaining: limitCheck.tries_remaining,
+      per_product_tries_remaining: limitCheck.per_product_tries_remaining,
+      per_session_tries_remaining: limitCheck.per_session_tries_remaining,
+      reset_at: limitCheck.reset_at?.toISOString(),
+      reset_in_minutes: limitCheck.reset_in_minutes,
+      can_regenerate: limitCheck.allowed,
     },
   });
 };

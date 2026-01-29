@@ -13,6 +13,10 @@ export default [
       "generate-preview-status",
       "./routes/app-proxy/generate-preview-status/route.tsx",
     ),
+    route(
+      "regenerate-preview",
+      "./routes/app-proxy/regenerate-preview/route.tsx",
+    ),
     route("template-config", "./routes/app-proxy/template-config/route.tsx"),
   ]),
   route("api/inngest", "./routes/inngest/route.tsx", {

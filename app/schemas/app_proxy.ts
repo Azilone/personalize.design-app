@@ -54,27 +54,6 @@ export const generatePreviewResponseSchema = z.union([
   appProxyErrorSchema,
 ]);
 
-export const generatePreviewStatusResponseSchema = z.union([
-  z.object({
-    data: z.object({
-      job_id: z.string().min(1),
-      status: z.enum([
-        "pending",
-        "processing",
-        "succeeded",
-        "failed",
-        "mockups_failed",
-      ]),
-      preview_url: z.string().url().optional(),
-      design_url: z.string().url().optional(),
-      mockup_urls: z.array(z.string().url()).optional(),
-      mockup_status: z.enum(["loading", "ready", "error"]).optional(),
-      error: z.string().optional(),
-    }),
-  }),
-  appProxyErrorSchema,
-]);
-
 export const templateConfigRequestSchema = z.object({
   shop_id: z.string().min(1),
   template_id: z.string().min(1),
@@ -98,6 +77,64 @@ export const templateConfigResponseSchema = z.union([
   appProxyErrorSchema,
 ]);
 
+// Regeneration schemas
+export const regeneratePreviewRequestSchema = z.object({
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+  template_id: z.string().min(1),
+  session_id: z.string().min(1),
+  previous_job_id: z.string().min(1),
+  fake_generation: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+});
+
+export const regeneratePreviewResponseSchema = z.union([
+  z.object({
+    data: z.object({
+      job_id: z.string().min(1),
+      status: z.enum(["pending", "processing", "succeeded", "failed"]),
+      tries_remaining: z.number().int().min(0).optional(),
+      per_product_tries_remaining: z.number().int().min(0).optional(),
+      per_session_tries_remaining: z.number().int().min(0).optional(),
+      reset_at: z.string().datetime().optional(),
+      reset_in_minutes: z.number().int().min(0).optional(),
+      cost_usd: z.number().optional(),
+    }),
+  }),
+  appProxyErrorSchema,
+]);
+
+// Extended status response with limit info
+export const generatePreviewStatusResponseSchema = z.union([
+  z.object({
+    data: z.object({
+      job_id: z.string().min(1),
+      status: z.enum([
+        "pending",
+        "processing",
+        "succeeded",
+        "failed",
+        "mockups_failed",
+      ]),
+      preview_url: z.string().url().optional(),
+      design_url: z.string().url().optional(),
+      mockup_urls: z.array(z.string().url()).optional(),
+      mockup_status: z.enum(["loading", "ready", "error"]).optional(),
+      error: z.string().optional(),
+      // Limit tracking fields
+      tries_remaining: z.number().int().min(0).optional(),
+      per_product_tries_remaining: z.number().int().min(0).optional(),
+      per_session_tries_remaining: z.number().int().min(0).optional(),
+      reset_at: z.string().datetime().optional(),
+      reset_in_minutes: z.number().int().min(0).optional(),
+      can_regenerate: z.boolean().optional(),
+    }),
+  }),
+  appProxyErrorSchema,
+]);
+
 export type GeneratePreviewRequest = z.infer<
   typeof generatePreviewRequestSchema
 >;
@@ -109,4 +146,10 @@ export type GeneratePreviewStatusResponse = z.infer<
 >;
 export type TemplateConfigResponse = z.infer<
   typeof templateConfigResponseSchema
+>;
+export type RegeneratePreviewRequest = z.infer<
+  typeof regeneratePreviewRequestSchema
+>;
+export type RegeneratePreviewResponse = z.infer<
+  typeof regeneratePreviewResponseSchema
 >;

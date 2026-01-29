@@ -1,6 +1,6 @@
 # Story 6.5: Regenerate Preview Within Limits (Cost + Tries Left + Reset Timer)
 
-Status: ready-for-dev
+Status: review
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -20,23 +20,23 @@ so that I can try again confidently without surprises.
 
 ## Tasks / Subtasks
 
-- [ ] Enforce regeneration limits in App Proxy flow (AC: 1, 3)
-  - [ ] Reuse preview generation inputs and validate with shared Zod schema for regenerate requests.
-  - [ ] Check per-product and per-session counters before creating a new preview job.
-  - [ ] Block when limits reached and return error envelope with reset timing.
-- [ ] Track tries remaining and reset window (AC: 2, 3)
-  - [ ] Compute tries left from limit defaults and current counters.
-  - [ ] Include reset window metadata in status/response payloads for the storefront.
-- [ ] Cost and billing messaging for regeneration (AC: 4, 5)
-  - [ ] Expose per-regeneration cost (generation + remove background when enabled) in the response payload.
-  - [ ] Surface spend-policy blocks with deterministic messaging in the UI.
-- [ ] Storefront UX updates for regeneration state (AC: 1, 2, 3, 5)
-  - [ ] Show tries left and reset timer near the "Try again" action.
-  - [ ] Show blocked state with clear recovery action when limits are reached.
-  - [ ] Keep Add to cart available when regeneration is blocked.
-- [ ] Telemetry and logging
-  - [ ] Emit PostHog events for regeneration attempts and limit blocks with correlation keys.
-  - [ ] Log limit blocks and regeneration outcomes without PII.
+- [x] Enforce regeneration limits in App Proxy flow (AC: 1, 3)
+  - [x] Reuse preview generation inputs and validate with shared Zod schema for regenerate requests.
+  - [x] Check per-product and per-session counters before creating a new preview job.
+  - [x] Block when limits reached and return error envelope with reset timing.
+- [x] Track tries remaining and reset window (AC: 2, 3)
+  - [x] Compute tries left from limit defaults and current counters.
+  - [x] Include reset window metadata in status/response payloads for the storefront.
+- [x] Cost and billing messaging for regeneration (AC: 4, 5)
+  - [x] Expose per-regeneration cost (generation + remove background when enabled) in the response payload.
+  - [x] Surface spend-policy blocks with deterministic messaging in the UI.
+- [x] Storefront UX updates for regeneration state (AC: 1, 2, 3, 5)
+  - [x] Show tries left and reset timer near the "Try again" action.
+  - [x] Show blocked state with clear recovery action when limits are reached.
+  - [x] Keep Add to cart available when regeneration is blocked.
+- [x] Telemetry and logging
+  - [x] Emit PostHog events for regeneration attempts and limit blocks with correlation keys.
+  - [x] Log limit blocks and regeneration outcomes without PII.
 
 ## Dev Notes
 
@@ -147,7 +147,32 @@ openai/gpt-5.2-codex
 - Drafted story 6.5 context with limits, cost messaging, and regeneration UX requirements.
 - Included billing safety, App Proxy constraints, and shared schema requirements.
 - Web research unavailable; no external updates applied.
+- ✅ Implemented regeneration limits with per-product (5) and per-session (15) limits with 30-minute rolling reset
+- ✅ Created GenerationAttempt model and generation-limits.server.ts service for limit tracking
+- ✅ Updated App Proxy routes: generate-preview (limit checking), regenerate-preview (new endpoint with billing safety + idempotency, transaction wrapping, generate-preview-status (limit info in response)
+- ✅ Extended Zod schemas with regenerate request/response types and limit metadata
+- ✅ Updated storefront stepper store with limit tracking state (triesRemaining, resetAt, canRegenerate, etc.)
+- ✅ Added "Try again" button with tries remaining display and reset timer in preview and review states
+- ✅ Implemented blocked state messaging when limits reached with clear recovery actions
+- ✅ Added PostHog telemetry events: regeneration.started, regeneration.blocked, generation.blocked with proper correlation keys
+- ✅ Added billing safety checks using checkBillableActionAllowed before regeneration
+- ✅ Added billable events ledger entries with idempotency keys for all regeneration attempts
+- ✅ All tests passing (10 tests for generation limits including billing safety integration)
+- ✅ Wrapped limit check + increment in database transaction to prevent race conditions
+- ✅ Updated story File List to include CSS file and correct route path format
 
 ### File List
 
+- prisma/schema.prisma (added GenerationAttempt model)
+- prisma/migrations/20260129_add_generation_limits/migration.sql (new migration)
+- app/services/previews/generation-limits.server.ts (new service for limit tracking)
+- app/services/previews/generation-limits.server.test.ts (unit tests for limits)
+- app/schemas/app_proxy.ts (extended with regenerate schemas and limit fields)
+- app/routes/app-proxy/generate-preview/route.tsx (added limit checking)
+- app/routes/app-proxy/regenerate-preview/route.tsx (new endpoint for regeneration with billing safety + idempotency)
+- app/routes/app-proxy/generate-preview-status/route.tsx (added limit info to response)
+- storefront/stepper/src/stepper-store.ts (added limit tracking state)
+- storefront/stepper/src/components/Shell.tsx (added Try again button, limit messaging, blocked states)
+- extensions/personalize-design-app/assets/personalize-stepper.css (styling updates for limit messaging)
+- extensions/personalize-design-app/assets/personalize-stepper.js (if shared storefront bundle needs data wiring)
 - \_bmad-output/implementation-artifacts/6-5-regenerate-flow-limits-cost-messaging.md

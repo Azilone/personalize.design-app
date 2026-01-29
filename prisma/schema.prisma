@@ -60,6 +60,17 @@ model ShopStorefrontPersonalization {
   @@map("shop_storefront_personalization")
 }
 
+model ShopGenerationLimits {
+  shop_id              String   @id
+  per_product_limit    Int      @default(5)
+  per_session_limit    Int      @default(15)
+  reset_window_minutes Int      @default(30)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  @@map("shop_generation_limits")
+}
+
 model ShopPrintifyIntegration {
   shop_id                String   @id
   token_ciphertext       String
@@ -324,4 +335,23 @@ enum BillableEventStatus {
   confirmed
   failed
   waived
+}
+
+model GenerationAttempt {
+  id                  String   @id @default(cuid())
+  shop_id             String
+  session_id          String
+  product_id          String
+  attempt_count       Int      @default(0)
+  first_attempt_at    DateTime @default(now())
+  last_attempt_at     DateTime @updatedAt
+  reset_window_minutes Int     @default(30)
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@unique([shop_id, session_id, product_id])
+  @@index([shop_id, session_id])
+  @@index([shop_id, product_id])
+  @@index([last_attempt_at])
+  @@map("generation_attempts")
 }

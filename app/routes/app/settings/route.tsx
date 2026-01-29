@@ -19,6 +19,7 @@ import { getShopIdFromSession } from "../../../lib/tenancy";
 import { buildEmbeddedSearch } from "../../../lib/embedded-search";
 import logger from "../../../lib/logger";
 import {
+  generationLimitsActionSchema,
   printifyActionSchema,
   storefrontPersonalizationActionSchema,
 } from "../../../schemas/admin";
@@ -42,6 +43,10 @@ import {
   getStorefrontPersonalizationSettings,
   upsertStorefrontPersonalizationSettings,
 } from "../../../services/shops/storefront-personalization.server";
+import {
+  getShopGenerationLimits,
+  upsertShopGenerationLimits,
+} from "../../../services/shops/generation-limits.server";
 
 type LoaderData = {
   printifyIntegration: Omit<
@@ -51,6 +56,11 @@ type LoaderData = {
   shopInvalid: boolean;
   storefrontPersonalizationEnabled: boolean | null;
   spendSafetyConfigured: boolean;
+  generationLimits: {
+    perProductLimit: number;
+    perSessionLimit: number;
+    resetWindowMinutes: number;
+  };
 };
 
 type SettingsActionData =
@@ -74,6 +84,11 @@ type SettingsActionData =
       scope: "button_styles";
       success?: boolean;
       error?: { code: string; message: string };
+    }
+  | {
+      scope: "generation_limits";
+      success?: boolean;
+      error?: { code: string; message: string };
     };
 
 const spendSafetyErrorMessage =
@@ -82,11 +97,12 @@ const spendSafetyErrorMessage =
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
   const shopId = getShopIdFromSession(session);
-  const [printifyIntegration, storefrontSettings, readinessSignals] =
+  const [printifyIntegration, storefrontSettings, readinessSignals, limits] =
     await Promise.all([
       getPrintifyIntegrationWithToken(shopId),
       getStorefrontPersonalizationSettings(shopId),
       getShopReadinessSignals(shopId),
+      getShopGenerationLimits(shopId),
     ]);
 
   if (!printifyIntegration) {
@@ -95,6 +111,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shopInvalid: false,
       storefrontPersonalizationEnabled: storefrontSettings.enabled,
       spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
+      generationLimits: limits,
     } satisfies LoaderData;
   }
 
@@ -119,6 +136,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shopInvalid: true,
         storefrontPersonalizationEnabled: storefrontSettings.enabled,
         spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
+        generationLimits: limits,
       } satisfies LoaderData;
     }
 
@@ -132,6 +150,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shopInvalid: false,
       storefrontPersonalizationEnabled: storefrontSettings.enabled,
       spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
+      generationLimits: limits,
     } satisfies LoaderData;
   } catch (error) {
     if (
@@ -148,6 +167,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
         shopInvalid: true,
         storefrontPersonalizationEnabled: storefrontSettings.enabled,
         spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
+        generationLimits: limits,
       } satisfies LoaderData;
     }
 
@@ -165,6 +185,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       shopInvalid: false,
       storefrontPersonalizationEnabled: storefrontSettings.enabled,
       spendSafetyConfigured: readinessSignals.spendSafetyConfigured,
+      generationLimits: limits,
     } satisfies LoaderData;
   }
 };
@@ -219,6 +240,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       scope: "storefront",
       success: true,
       savedChoice: wantsEnabled ? "enabled" : "disabled",
+    } satisfies SettingsActionData);
+  }
+
+  if (intent === "generation_limits_save") {
+    const parsed = generationLimitsActionSchema.safeParse(formData);
+
+    if (!parsed.success) {
+      return data(
+        {
+          scope: "generation_limits",
+          error: { code: "invalid_request", message: "Invalid request." },
+        } satisfies SettingsActionData,
+        { status: 400 },
+      );
+    }
+
+    await upsertShopGenerationLimits({
+      shopId,
+      perProductLimit: parsed.data.per_product_limit,
+      perSessionLimit: parsed.data.per_session_limit,
+      resetWindowMinutes: parsed.data.reset_window_minutes,
+    });
+
+    return data({
+      scope: "generation_limits",
+      success: true,
     } satisfies SettingsActionData);
   }
 
@@ -363,6 +410,7 @@ export default function Settings() {
     shopInvalid,
     storefrontPersonalizationEnabled,
     spendSafetyConfigured,
+    generationLimits,
   } = useLoaderData<typeof loader>();
   const actionData = useActionData<
     typeof action
@@ -376,6 +424,8 @@ export default function Settings() {
   const printifyAction = actionData?.scope === "printify" ? actionData : null;
   const storefrontAction =
     actionData?.scope === "storefront" ? actionData : null;
+  const generationLimitsAction =
+    actionData?.scope === "generation_limits" ? actionData : null;
 
   const isSubmittingPrintifyConnect =
     navigation.state === "submitting" &&
@@ -386,6 +436,9 @@ export default function Settings() {
   const isSubmittingStorefront =
     navigation.state === "submitting" &&
     navigation.formData?.get("intent") === "storefront_personalization_choice";
+  const isSubmittingLimits =
+    navigation.state === "submitting" &&
+    navigation.formData?.get("intent") === "generation_limits_save";
 
   const errorMessage = printifyAction?.error?.message ?? null;
   const successMessage =
@@ -428,6 +481,13 @@ export default function Settings() {
       : storefrontPersonalizationEnabled
         ? "enabled"
         : "disabled";
+
+  const generationLimitsErrorMessage =
+    generationLimitsAction?.error?.message ?? null;
+  const generationLimitsSuccessMessage =
+    generationLimitsAction && generationLimitsAction.success
+      ? "Generation limits updated."
+      : null;
 
   return (
     <s-page heading="Settings">
@@ -621,6 +681,55 @@ export default function Settings() {
                 loading={isSubmittingStorefront}
               >
                 Save choice
+              </s-button>
+            </s-stack>
+          </Form>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Generation limits">
+        <s-stack direction="block" gap="base">
+          {generationLimitsErrorMessage ? (
+            <s-banner tone="critical">
+              <s-text>{generationLimitsErrorMessage}</s-text>
+            </s-banner>
+          ) : null}
+          {generationLimitsSuccessMessage ? (
+            <s-banner tone="success">
+              <s-text>{generationLimitsSuccessMessage}</s-text>
+            </s-banner>
+          ) : null}
+          <s-paragraph>
+            Control how many times buyers can generate previews before the limit
+            resets.
+          </s-paragraph>
+          <Form method="post">
+            <input type="hidden" name="intent" value="generation_limits_save" />
+            <s-stack direction="block" gap="base">
+              <s-text-field
+                label="Per-product limit"
+                name="per_product_limit"
+                defaultValue={String(generationLimits.perProductLimit)}
+                placeholder="5"
+              />
+              <s-text-field
+                label="Per-session limit"
+                name="per_session_limit"
+                defaultValue={String(generationLimits.perSessionLimit)}
+                placeholder="15"
+              />
+              <s-text-field
+                label="Reset window (minutes)"
+                name="reset_window_minutes"
+                defaultValue={String(generationLimits.resetWindowMinutes)}
+                placeholder="30"
+              />
+              <s-button
+                type="submit"
+                variant="primary"
+                loading={isSubmittingLimits}
+              >
+                Save limits
               </s-button>
             </s-stack>
           </Form>

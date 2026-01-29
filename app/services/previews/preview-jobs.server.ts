@@ -136,7 +136,33 @@ export const createPreviewJob = async (
   });
 
   if (existing) {
-    return mapPreviewJob(existing);
+    const record = await prisma.previewJob.update({
+      where: {
+        shop_id_job_id: {
+          shop_id: params.shopId,
+          job_id: params.jobId,
+        },
+      },
+      data: {
+        product_id: params.productId,
+        template_id: params.templateId,
+        type: params.type,
+        input_image_url: params.inputImageUrl ?? null,
+        input_text: params.inputText ?? null,
+        variable_values: params.variableValues ?? Prisma.DbNull,
+        cover_print_area: params.coverPrintArea ?? false,
+        design_url: null,
+        design_storage_key: null,
+        mockup_urls: Prisma.DbNull,
+        temp_printify_product_id: null,
+        session_id: params.sessionId ?? existing.session_id ?? null,
+        status: "queued",
+        error_message: null,
+        mockup_error_message: null,
+      },
+    });
+
+    return mapPreviewJob(record);
   }
 
   const record = await prisma.previewJob.create({
