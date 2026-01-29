@@ -6,6 +6,7 @@ import {
   Loader2,
   Plus,
   RefreshCw,
+  ShoppingCart,
   Type,
   X,
 } from "lucide-react";
@@ -79,6 +80,9 @@ export const Shell = () => {
     resetInMinutes,
     canRegenerate,
     regenerationCostUsd,
+    addToCartStatus,
+    addToCartError,
+    cartUrl,
     setPreviewJobId,
     setGenerationStatus,
     setPreviewUrl,
@@ -95,6 +99,9 @@ export const Shell = () => {
     setCanRegenerate,
     setRegenerationCostUsd,
     setSessionId,
+    setAddToCartStatus,
+    setAddToCartError,
+    setCartUrl,
     resetPreview,
   } = useStepperStore();
   const isDesktop = useMediaQuery("(min-width: 1024px)");
@@ -184,9 +191,12 @@ export const Shell = () => {
       setSelectedMockupIndex(0);
       setError(null);
       setFakeGeneration(false);
+      setAddToCartStatus("idle");
+      setAddToCartError(null);
+      setCartUrl(null);
       resetPreview();
     }
-  }, [isOpen, resetPreview]);
+  }, [isOpen, resetPreview, setAddToCartError, setAddToCartStatus, setCartUrl]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -947,8 +957,85 @@ export const Shell = () => {
     }
   };
 
-  const handleSaveDesign = () => {
-    close();
+  const handleAddToCart = async () => {
+    // Check prerequisites
+    if (!config.variantId) {
+      setAddToCartStatus("error");
+      setAddToCartError(
+        "Product variant not selected. Please select a variant.",
+      );
+      return;
+    }
+
+    if (!previewJobId) {
+      setAddToCartStatus("error");
+      setAddToCartError(
+        "No design preview available. Please generate a design first.",
+      );
+      return;
+    }
+
+    // Use previewJobId as personalization_id (sessionId/jobId)
+    const personalizationId = previewJobId;
+    const normalizedVariantId = (() => {
+      if (config.variantId?.startsWith("gid://")) {
+        const match = config.variantId.match(/\/ProductVariant\/(\d+)/);
+        return match?.[1] ?? null;
+      }
+      return config.variantId ?? null;
+    })();
+
+    if (!normalizedVariantId) {
+      setAddToCartStatus("error");
+      setAddToCartError("Invalid product variant. Please refresh the page.");
+      return;
+    }
+
+    setAddToCartStatus("loading");
+    setAddToCartError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("id", normalizedVariantId);
+      formData.append("quantity", "1");
+      formData.append("properties[personalization_id]", personalizationId);
+
+      const response = await fetch("/cart/add.js", {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => null)) as {
+          description?: string;
+          message?: string;
+        } | null;
+        const fallbackMessage =
+          payload?.description ||
+          payload?.message ||
+          "Failed to add to cart. Please try again.";
+        setAddToCartStatus("error");
+        setAddToCartError(fallbackMessage);
+        return;
+      }
+
+      setAddToCartStatus("success");
+      setCartUrl("/cart");
+
+      // Close modal on success after a brief delay to show success state
+      setTimeout(() => {
+        close();
+        window.location.href = "/cart";
+      }, 1500);
+    } catch (error) {
+      setAddToCartStatus("error");
+      setAddToCartError(
+        error instanceof Error
+          ? error.message
+          : "Failed to add to cart. Please try again.",
+      );
+    }
   };
 
   const TitleComponent = isDesktop ? DialogTitle : SheetTitle;
@@ -1342,12 +1429,33 @@ export const Shell = () => {
                   )}
                 </Button>
                 <Button
-                  onClick={handleSaveDesign}
+                  onClick={handleAddToCart}
+                  disabled={addToCartStatus === "loading" || !previewJobId}
                   className="w-full bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90 h-[48px] text-[16px]"
                   size="lg"
                 >
-                  Save design
+                  {addToCartStatus === "loading" ? (
+                    <>
+                      <Loader2 className="mr-[8px] size-[16px] animate-spin" />
+                      Adding...
+                    </>
+                  ) : addToCartStatus === "success" ? (
+                    <>
+                      <ShoppingCart className="mr-[8px] size-[16px]" />
+                      Added!
+                    </>
+                  ) : (
+                    <>
+                      <ShoppingCart className="mr-[8px] size-[16px]" />
+                      Add to cart
+                    </>
+                  )}
                 </Button>
+                {addToCartError && (
+                  <p className="text-[12px] font-medium text-destructive">
+                    {addToCartError}
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -1487,6 +1595,11 @@ export const Shell = () => {
                     {regenerationError}
                   </p>
                 )}
+                {addToCartError && (
+                  <p className="mt-[12px] text-[12px] font-medium text-destructive">
+                    {addToCartError}
+                  </p>
+                )}
               </div>
               <div className="border-t border-border p-[24px]">
                 <div className="flex gap-[12px]">
@@ -1499,11 +1612,27 @@ export const Shell = () => {
                     Back
                   </Button>
                   <Button
-                    onClick={handleSaveDesign}
+                    onClick={handleAddToCart}
+                    disabled={addToCartStatus === "loading" || !previewJobId}
                     className="flex-1 bg-[#1a3a4a] text-white hover:bg-[#1a3a4a]/90 h-[48px] text-[16px]"
                     size="lg"
                   >
-                    Save design
+                    {addToCartStatus === "loading" ? (
+                      <>
+                        <Loader2 className="mr-[8px] size-[16px] animate-spin" />
+                        Adding...
+                      </>
+                    ) : addToCartStatus === "success" ? (
+                      <>
+                        <ShoppingCart className="mr-[8px] size-[16px]" />
+                        Added!
+                      </>
+                    ) : (
+                      <>
+                        <ShoppingCart className="mr-[8px] size-[16px]" />
+                        Add to cart
+                      </>
+                    )}
                   </Button>
                 </div>
               </div>

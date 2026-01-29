@@ -1,6 +1,6 @@
 # Story 6.5: Regenerate Preview Within Limits (Cost + Tries Left + Reset Timer)
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 

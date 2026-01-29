@@ -247,10 +247,15 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const parsed = generationLimitsActionSchema.safeParse(formData);
 
     if (!parsed.success) {
+      const issues = parsed.error.issues;
+      const firstIssue = issues[0];
+      const message = firstIssue
+        ? `${firstIssue.path.join(".")}: ${firstIssue.message}`
+        : "Invalid request.";
       return data(
         {
           scope: "generation_limits",
-          error: { code: "invalid_request", message: "Invalid request." },
+          error: { code: "invalid_request", message },
         } satisfies SettingsActionData,
         { status: 400 },
       );
@@ -711,18 +716,21 @@ export default function Settings() {
                 name="per_product_limit"
                 defaultValue={String(generationLimits.perProductLimit)}
                 placeholder="5"
+                details="Must be between 1 and 50"
               />
               <s-text-field
                 label="Per-session limit"
                 name="per_session_limit"
                 defaultValue={String(generationLimits.perSessionLimit)}
                 placeholder="15"
+                details="Must be between 1 and 200, and greater than or equal to per-product limit"
               />
               <s-text-field
                 label="Reset window (minutes)"
                 name="reset_window_minutes"
                 defaultValue={String(generationLimits.resetWindowMinutes)}
                 placeholder="30"
+                details="Must be between 5 and 240 minutes"
               />
               <s-button
                 type="submit"

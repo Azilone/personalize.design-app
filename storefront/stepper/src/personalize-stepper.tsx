@@ -20,6 +20,7 @@ if (mount) {
   // Read data attributes
   const shopDomain = mount.dataset.shopDomain;
   const productId = mount.dataset.productGid || mount.dataset.productId;
+  const variantId = mount.dataset.variantGid || mount.dataset.variantId;
   const productTitle = mount.dataset.productTitle;
   const variantTitle = mount.dataset.variantTitle;
   const productImageUrl = mount.dataset.productImage;
@@ -57,6 +58,7 @@ if (mount) {
     console.info("[pd-stepper] dataset", {
       shopDomain,
       productId,
+      variantId,
       templateId,
       personalizationEnabled,
       textEnabled,
@@ -70,6 +72,7 @@ if (mount) {
   useStepperStore.getState().setConfig({
     shopDomain,
     productId,
+    variantId,
     productTitle,
     variantTitle,
     productImageUrl,

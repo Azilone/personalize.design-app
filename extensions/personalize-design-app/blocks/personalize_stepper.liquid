@@ -74,6 +74,8 @@
     data-product-id="{{ product.id }}"
     data-product-gid="{{ product.admin_graphql_api_id }}"
     data-product-title="{{ product.title | escape }}"
+    data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+    data-variant-gid="{{ product.selected_or_first_available_variant.admin_graphql_api_id }}"
     data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
     {% if product.featured_image %}
       data-product-image="{{ product.featured_image | image_url: width: 1400 }}"

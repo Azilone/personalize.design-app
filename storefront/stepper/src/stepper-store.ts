@@ -19,6 +19,7 @@ type StepperState = {
   config: {
     shopDomain?: string;
     productId?: string;
+    variantId?: string;
     productTitle?: string;
     variantTitle?: string;
     productImageUrl?: string;
@@ -47,6 +48,10 @@ type StepperState = {
   mockupUrls: string[];
   mockupStatus: "idle" | "loading" | "ready" | "error";
   mockupError: string | null;
+  // Add-to-cart state
+  addToCartStatus: "idle" | "loading" | "success" | "error";
+  addToCartError: string | null;
+  cartUrl: string | null;
   // Limit tracking
   triesRemaining: number | null;
   perProductTriesRemaining: number | null;
@@ -77,6 +82,9 @@ type StepperState = {
   setMockupUrls: (urls: string[]) => void;
   setMockupStatus: (status: StepperState["mockupStatus"]) => void;
   setMockupError: (error: string | null) => void;
+  setAddToCartStatus: (status: StepperState["addToCartStatus"]) => void;
+  setAddToCartError: (error: string | null) => void;
+  setCartUrl: (url: string | null) => void;
   setTriesRemaining: (triesRemaining: number | null) => void;
   setPerProductTriesRemaining: (
     perProductTriesRemaining: number | null,
@@ -126,6 +134,10 @@ export const useStepperStore = create<StepperState>((set) => ({
   mockupUrls: [],
   mockupStatus: "idle",
   mockupError: null,
+  // Add-to-cart defaults
+  addToCartStatus: "idle",
+  addToCartError: null,
+  cartUrl: null,
   // Limit tracking defaults
   triesRemaining: null,
   perProductTriesRemaining: null,
@@ -174,6 +186,9 @@ export const useStepperStore = create<StepperState>((set) => ({
   setMockupUrls: (mockupUrls) => set({ mockupUrls }),
   setMockupStatus: (mockupStatus) => set({ mockupStatus }),
   setMockupError: (mockupError) => set({ mockupError }),
+  setAddToCartStatus: (addToCartStatus) => set({ addToCartStatus }),
+  setAddToCartError: (addToCartError) => set({ addToCartError }),
+  setCartUrl: (cartUrl) => set({ cartUrl }),
   setTriesRemaining: (triesRemaining) => set({ triesRemaining }),
   setPerProductTriesRemaining: (perProductTriesRemaining) =>
     set({ perProductTriesRemaining }),
