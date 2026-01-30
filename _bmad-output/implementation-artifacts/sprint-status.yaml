@@ -87,7 +87,7 @@ development_status:
 
   epic-7: in-progress
   7-1-detect-paid-orders-with-personalization-id-webhook-idempotent-intake: done
-  7-2-final-print-ready-asset-generated-preview-persist-retrieve: backlog
+  7-2-final-print-ready-asset-generated-preview-persist-retrieve: ready-for-dev
   7-3-submit-to-printify-track-status-visibility: backlog
   7-4-operator-reprocess-failed-order-line-diagnostics: backlog
   epic-7-retrospective: optional

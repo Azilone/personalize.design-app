@@ -1042,8 +1042,8 @@ export const Shell = () => {
   const DescriptionComponent = isDesktop ? DialogDescription : SheetDescription;
 
   const content = (
-    <div className="flex h-full flex-col font-['Helvetica',_'Arial',_sans-serif]">
-      <div className="flex items-center justify-between border-b border-border px-[20px] py-[16px] lg:px-[32px] lg:py-[24px]">
+    <div className="pd-shell flex h-full flex-col font-['Helvetica',_'Arial',_sans-serif]">
+      <div className="pd-shell-header flex items-center justify-between border-b border-border px-[20px] py-[16px] lg:px-[32px] lg:py-[24px]">
         <div className="min-w-0 flex-1 mr-4">
           <TitleComponent className="text-[20px] font-bold text-foreground lg:text-[30px] truncate">
             {title}
@@ -1063,8 +1063,8 @@ export const Shell = () => {
           </button>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
-        <div className="flex w-full flex-1 flex-col border-b border-border lg:border-b-0 lg:border-r min-h-[55vh] lg:min-h-0 overflow-y-auto">
+      <div className="pd-shell-body flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <div className="pd-shell-canvas flex w-full flex-1 flex-col border-b border-border lg:border-b-0 lg:border-r min-h-[55vh] lg:min-h-0 overflow-y-auto">
           <div className="flex items-center justify-between px-[20px] pt-[20px] lg:px-[32px] lg:pt-[24px]">
             <span className="text-[16px] text-muted-foreground lg:text-[18px]">
               {modalState === "review"
@@ -1098,7 +1098,7 @@ export const Shell = () => {
                   minScratchPercentage={40}
                   onComplete={handleScratchComplete}
                   gradientColors={["#1a3a4a", "#2d5a6a", "#4a7a8a"]}
-                  className="overflow-hidden rounded-lg"
+                  className="pd-shell-canvas-frame pd-shell-canvas-frame--tight overflow-hidden rounded-lg"
                 >
                   <div className="relative h-full w-full bg-muted">
                     <img
@@ -1111,7 +1111,7 @@ export const Shell = () => {
               </div>
             ) : (
               <div className="flex flex-col items-center gap-[16px] text-muted-foreground animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out">
-                <div className="relative h-full w-full max-w-full lg:max-w-[800px]">
+                <div className="pd-shell-canvas-frame relative h-full w-full max-w-full lg:max-w-[800px]">
                   <img
                     src={mainImageUrl}
                     alt={config.productTitle ?? "Product"}
@@ -1161,7 +1161,7 @@ export const Shell = () => {
             </div>
           )}
         </div>
-        <div className="flex flex-1 w-full flex-col lg:h-full lg:w-[400px] min-h-0">
+        <div className="pd-shell-form flex flex-1 w-full flex-col lg:h-full lg:w-[400px] min-h-0">
           {modalState === "editing" && (
             <>
               <div className="flex-1 overflow-y-auto p-[20px] lg:p-[32px]">

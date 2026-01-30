@@ -131,6 +131,39 @@
   margin-bottom: 6px;
 }
 
+.pd-shell {
+  color: var(--foreground);
+  background-color: var(--background);
+}
+
+.pd-shell-header {
+  background: linear-gradient(180deg, rgba(250, 250, 250, 0.98), #ffffff 70%);
+}
+
+.pd-shell-body {
+  background-color: var(--background);
+}
+
+.pd-shell-canvas {
+  background: linear-gradient(180deg, #f6f6f4 0%, #f1f1ef 100%);
+}
+
+.pd-shell-form {
+  background-color: #ffffff;
+}
+
+.pd-shell-canvas-frame {
+  background-color: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 16px;
+  box-shadow: 0 16px 40px rgba(15, 23, 42, 0.08);
+}
+
+.pd-shell-canvas-frame--tight {
+  padding: 0;
+}
+
 .pd-personalize-button:not(.pd-theme-classes-applied) {
   /* Use theme-detected styles by default, fallback to defaults */
   background-color: var(--pd-theme-bg-color);
