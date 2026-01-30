@@ -32,6 +32,11 @@ export const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 export const TEST_UPLOADS_BUCKET = "test-uploads";
 
 /**
+ * Bucket name for generated designs (final print-ready assets).
+ */
+export const GENERATED_DESIGNS_BUCKET = "generated-designs";
+
+/**
  * Signed URL expiry time in seconds (30 minutes).
  */
 export const SIGNED_URL_EXPIRY_SECONDS = 30 * 60;
@@ -352,6 +357,7 @@ export async function uploadFileAndGetReadUrl(
 
 export async function createSignedReadUrl(
   storageKey: string,
+  bucket: string = TEST_UPLOADS_BUCKET,
 ): Promise<SignedReadUrlResult> {
   const expiresAt = new Date(Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000);
   const supabase = getSupabaseClient();
@@ -372,7 +378,7 @@ export async function createSignedReadUrl(
   }
 
   const { data: readData, error: readError } = await supabase.storage
-    .from(TEST_UPLOADS_BUCKET)
+    .from(bucket)
     .createSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
 
   if (readError || !readData?.signedUrl) {
@@ -386,4 +392,56 @@ export async function createSignedReadUrl(
     readUrl: readData.signedUrl,
     expiresAt,
   };
+}
+
+/**
+ * Check if a file exists in storage.
+ *
+ * @param storageKey - The storage key/path to check
+ * @param bucket - The bucket name (defaults to TEST_UPLOADS_BUCKET)
+ * @returns True if file exists, false otherwise
+ * @throws StorageError on storage errors
+ */
+export async function fileExists(
+  storageKey: string,
+  bucket: string = TEST_UPLOADS_BUCKET,
+): Promise<boolean> {
+  const supabase = getSupabaseClient();
+
+  if (!supabase) {
+    if (process.env.NODE_ENV === "production") {
+      throw new StorageError(
+        "storage_error",
+        "Supabase storage is not configured.",
+        false,
+      );
+    }
+
+    // In dev without Supabase, return false (file cannot exist without storage)
+    return false;
+  }
+
+  // Create a signed URL - will throw StorageError if signing fails
+  const { readUrl } = await createSignedReadUrl(storageKey, bucket);
+
+  // Use HEAD request to check existence
+  const response = await fetch(readUrl, {
+    method: "HEAD",
+    cache: "no-store",
+  });
+
+  if (response.ok) {
+    return true;
+  }
+
+  if (response.status === 404) {
+    return false;
+  }
+
+  // Throw on other errors (403, 500, etc) to ensure we don't assume missing file on failure
+  throw new StorageError(
+    "storage_error",
+    `Failed to check file existence: ${response.status} ${response.statusText}`,
+    true,
+  );
 }

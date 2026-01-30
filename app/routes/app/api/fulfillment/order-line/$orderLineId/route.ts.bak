@@ -1,0 +1,121 @@
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { data } from "react-router";
+
+import { authenticate } from "../../../../../shopify.server";
+import { getShopIdFromSession } from "../../../../../lib/tenancy";
+import prisma from "../../../../../db.server";
+
+export const loader = async ({ request, params }: LoaderFunctionArgs) => {
+  const { session } = await authenticate.admin(request);
+  const shopId = getShopIdFromSession(session);
+  const orderLineId = params.orderLineId
+    ? decodeURIComponent(params.orderLineId)
+    : null;
+
+  if (!orderLineId) {
+    return data(
+      {
+        error: {
+          code: "invalid_request",
+          message: "orderLineId is required",
+        },
+      },
+      { status: 400 },
+    );
+  }
+
+  if (!shopId) {
+    return data(
+      {
+        error: {
+          code: "unauthorized",
+          message: "Authentication required",
+        },
+      },
+      { status: 401 },
+    );
+  }
+
+  try {
+    const orderLine = await prisma.orderLineProcessing.findUnique({
+      where: {
+        shop_id_order_line_id: {
+          shop_id: shopId,
+          order_line_id: orderLineId,
+        },
+      },
+      select: {
+        id: true,
+        shop_id: true,
+        order_id: true,
+        order_line_id: true,
+        status: true,
+        personalization_id: true,
+        final_asset_storage_key: true,
+        final_asset_bucket: true,
+        final_asset_checksum: true,
+        final_asset_persisted_at: true,
+        final_asset_error_code: true,
+        final_asset_error_message: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+
+    if (!orderLine) {
+      return data(
+        {
+          error: {
+            code: "not_found",
+            message: "Order line processing record not found",
+          },
+        },
+        { status: 404 },
+      );
+    }
+
+    return data({
+      success: true,
+      order_line: {
+        id: orderLine.id,
+        shop_id: orderLine.shop_id,
+        order_id: orderLine.order_id,
+        order_line_id: orderLine.order_line_id,
+        status: orderLine.status,
+        personalization_id: orderLine.personalization_id,
+        asset: orderLine.final_asset_storage_key
+          ? {
+              storage_key: orderLine.final_asset_storage_key,
+              bucket: orderLine.final_asset_bucket,
+              checksum: orderLine.final_asset_checksum,
+              persisted_at: orderLine.final_asset_persisted_at?.toISOString(),
+            }
+          : null,
+        error: orderLine.final_asset_error_code
+          ? {
+              code: orderLine.final_asset_error_code,
+              message: orderLine.final_asset_error_message,
+            }
+          : null,
+        created_at: orderLine.created_at.toISOString(),
+        updated_at: orderLine.updated_at.toISOString(),
+      },
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return data(
+      {
+        error: {
+          code: "internal_error",
+          message: "An unexpected error occurred",
+          details: message,
+        },
+      },
+      { status: 500 },
+    );
+  }
+};
+
+export const headers: HeadersFunction = () => ({
+  "Cache-Control": "no-store",
+});

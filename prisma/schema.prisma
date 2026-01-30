@@ -331,6 +331,15 @@ model OrderLineProcessing {
   idempotency_key    String   @unique
   status             String   // pending, processing, succeeded, failed
   personalization_id String
+
+  // Final print-ready asset reference (AC: 1, 2)
+  final_asset_storage_key String?
+  final_asset_bucket      String?
+  final_asset_checksum    String?
+  final_asset_persisted_at DateTime?
+  final_asset_error_code  String?
+  final_asset_error_message String?
+
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 

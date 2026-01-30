@@ -10,6 +10,13 @@ import {
   trackBillableEventWaived,
 } from "../../posthog/events";
 import { getOfflineShopifyAdmin } from "../../shopify/admin.server";
+import {
+  resolveAssetByPersonalizationId,
+  AssetResolutionError,
+  type ResolvedAsset,
+  RECOVERY_GUIDANCE,
+} from "../../fulfillment/asset-resolution.server";
+import { GENERATED_DESIGNS_BUCKET } from "../../supabase/storage";
 
 const ORDER_FEE_MILLS = 250; // $0.25 in mills
 
@@ -358,6 +365,118 @@ export const processOrderLine = inngest.createFunction(
           }
         });
       }
+
+      // Resolve and persist final print-ready asset
+      const resolvedAsset = await step.run("persist-final-asset", async () => {
+        try {
+          // Resolve personalization_id to stored preview asset
+          const asset = await resolveAssetByPersonalizationId(
+            payload.shop_id,
+            payload.order_line_id,
+            payload.personalization_id,
+          );
+
+          // Persist final asset reference to order_line_processing
+          await prisma.orderLineProcessing.updateMany({
+            where: {
+              shop_id: payload.shop_id,
+              order_line_id: payload.order_line_id,
+            },
+            data: {
+              final_asset_storage_key: asset.storageKey,
+              final_asset_bucket: asset.bucket,
+              final_asset_persisted_at: new Date(),
+            },
+          });
+
+          // Emit PostHog event for asset persistence
+          captureEvent("fulfillment.asset.persisted", {
+            shop_id: payload.shop_id,
+            order_id: payload.order_id,
+            order_line_id: payload.order_line_id,
+            personalization_id: payload.personalization_id,
+            job_id: asset.jobId,
+            storage_key: asset.storageKey,
+            bucket: asset.bucket,
+            template_id: asset.templateId,
+            product_id: asset.productId,
+          });
+
+          logger.info(
+            {
+              shop_id: payload.shop_id,
+              order_line_id: payload.order_line_id,
+              personalization_id: payload.personalization_id,
+              storage_key: asset.storageKey,
+              bucket: asset.bucket,
+            },
+            "Final asset persisted successfully",
+          );
+
+          return asset;
+        } catch (error) {
+          if (error instanceof AssetResolutionError) {
+            // Log structured error for ops visibility
+            logger.error(
+              {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+                personalization_id: payload.personalization_id,
+                error_code: error.code,
+                error_message: error.message,
+                retryable: error.retryable,
+              },
+              "Asset resolution failed",
+            );
+
+            // Update order line processing with error details
+            await prisma.orderLineProcessing.updateMany({
+              where: {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+              },
+              data: {
+                final_asset_error_code: error.code,
+                final_asset_error_message: error.message,
+              },
+            });
+
+            // Emit PostHog error event
+            captureEvent("fulfillment.asset.failed", {
+              shop_id: payload.shop_id,
+              order_id: payload.order_id,
+              order_line_id: payload.order_line_id,
+              personalization_id: payload.personalization_id,
+              error_code: error.code,
+              error_message: error.message,
+            });
+
+            // Only retry if error is marked as retryable
+            if (error.retryable) {
+              // Re-throw to trigger Inngest retry
+              throw error;
+            } else {
+              // Non-retryable errors: mark as failed and continue
+              // These are permanent failures (asset not found, invalid personalization_id)
+              logger.warn(
+                {
+                  shop_id: payload.shop_id,
+                  order_line_id: payload.order_line_id,
+                  personalization_id: payload.personalization_id,
+                  error_code: error.code,
+                },
+                "Asset resolution failed with non-retryable error - marking as failed",
+              );
+              // Return to allow workflow to continue to mark-succeeded step
+              // But status will already reflect error in final_asset_error_code
+              return;
+            }
+          }
+
+          // Re-throw unexpected errors
+          throw error;
+        }
+      });
 
       // Update processing record to succeeded
       await step.run("mark-succeeded", async () => {

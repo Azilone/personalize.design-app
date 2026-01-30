@@ -12,6 +12,9 @@ import {
   validateFileSize,
   generateStorageKey,
   generateSignedUrls,
+  createSignedReadUrl,
+  fileExists,
+  GENERATED_DESIGNS_BUCKET,
   ALLOWED_FILE_TYPES,
   MAX_FILE_SIZE_BYTES,
   StorageError,
@@ -31,6 +34,14 @@ vi.mock("@supabase/supabase-js", () => ({
           data: { signedUrl: "https://mock.supabase.co/read/test-key" },
           error: null,
         }),
+        list: vi.fn().mockImplementation((path, options) => {
+          // Return the searched file as found
+          const searchName = options?.search;
+          return Promise.resolve({
+            data: searchName ? [{ name: searchName }] : [{ name: "photo.jpg" }],
+            error: null,
+          });
+        }),
       })),
     },
   })),
@@ -40,6 +51,15 @@ describe("Supabase storage", () => {
   beforeEach(() => {
     // Reset the cached Supabase client before each test
     resetSupabaseClientForTesting();
+    // Mock global fetch
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+      }),
+    );
   });
 
   describe("ALLOWED_FILE_TYPES", () => {
@@ -241,6 +261,50 @@ describe("Supabase storage", () => {
       expect(result.expiresAt.getTime()).toBeLessThanOrEqual(
         expectedExpiry + 1000,
       );
+    });
+  });
+
+  describe("createSignedReadUrl", () => {
+    it("should generate signed read URL with default bucket", async () => {
+      const result = await createSignedReadUrl("test/shop-123/photo.jpg");
+
+      expect(result).toHaveProperty("readUrl");
+      expect(result).toHaveProperty("expiresAt");
+      expect(result.readUrl).toMatch(/\/read\//);
+      expect(result.expiresAt).toBeInstanceOf(Date);
+    });
+
+    it("should generate signed read URL with custom bucket", async () => {
+      const result = await createSignedReadUrl(
+        "designs/shop-123/job.png",
+        "generated-designs",
+      );
+
+      expect(result).toHaveProperty("readUrl");
+      expect(result.readUrl).toMatch(/\/read\//);
+    });
+  });
+
+  describe("fileExists", () => {
+    it("should return true when file exists", async () => {
+      const result = await fileExists("test/shop-123/photo.jpg");
+
+      expect(result).toBe(true);
+    });
+
+    it("should return true with custom bucket", async () => {
+      const result = await fileExists(
+        "designs/shop-123/job.png",
+        "generated-designs",
+      );
+
+      expect(result).toBe(true);
+    });
+  });
+
+  describe("GENERATED_DESIGNS_BUCKET constant", () => {
+    it("should have correct bucket name", () => {
+      expect(GENERATED_DESIGNS_BUCKET).toBe("generated-designs");
     });
   });
 });
