@@ -291,15 +291,11 @@
   /**
    * Initialize the theme style detector
    */
-  function init() {
-    // Find our root element
-    const rootElement = document.getElementById("pd-stepper-root");
+  function initRoot(rootElement) {
     if (!rootElement) {
-      console.log("[PD Theme Detector] Root element not found, skipping");
       return;
     }
 
-    // Check if theme style is enabled
     const useThemeStyle = rootElement.dataset.useThemeStyle !== "false";
     if (!useThemeStyle) {
       console.log(
@@ -308,10 +304,8 @@
       return;
     }
 
-    // Get custom selector from data attribute
     const customSelector = rootElement.dataset.customButtonSelector;
 
-    // Find the Add to Cart button
     const addToCartButton = findAddToCartButton(customSelector);
     if (!addToCartButton) {
       console.log(
@@ -320,21 +314,16 @@
       return;
     }
 
-    // Get normal styles
     const normalStyles = getElementStyles(addToCartButton);
     console.log("[PD Theme Detector] Copied normal styles:", normalStyles);
 
-    // Get hover styles
     const hoverStyles = getHoverStyles(addToCartButton);
     console.log("[PD Theme Detector] Copied hover styles:", hoverStyles);
 
-    // Apply normal styles
     applyStylesAsCustomProperties(rootElement, normalStyles);
 
-    // Apply theme button classes for better parity (pseudo elements, etc.)
     applyThemeClasses(addToCartButton, rootElement);
 
-    // Apply hover styles with hover prefix
     Object.keys(hoverStyles).forEach((prop) => {
       const customPropName = CONFIG.cssCustomProperties[prop];
       if (customPropName) {
@@ -345,7 +334,6 @@
       }
     });
 
-    // If no hover styles were found, sample computed hover styles on interaction
     if (Object.keys(hoverStyles).length === 0) {
       const sampleHoverStyles = () => {
         const hoveredStyles = getElementStyles(addToCartButton);
@@ -374,10 +362,19 @@
       });
     }
 
-    // Add a class to indicate theme styles have been applied
     rootElement.classList.add("pd-theme-styles-applied");
 
     console.log("[PD Theme Detector] Theme styles applied successfully");
+  }
+
+  function init() {
+    const rootElements = document.querySelectorAll("[data-pd-stepper-root]");
+    if (!rootElements.length) {
+      console.log("[PD Theme Detector] Root element not found, skipping");
+      return;
+    }
+
+    rootElements.forEach((rootElement) => initRoot(rootElement));
   }
 
   // Run when DOM is ready
@@ -391,7 +388,7 @@
   // Also run when Shopify section loads (for theme editor)
   if (window.Shopify && window.Shopify.designMode) {
     document.addEventListener("shopify:section:load", function (event) {
-      if (event.target.querySelector("#pd-stepper-root")) {
+      if (event.target.querySelector("[data-pd-stepper-root]")) {
         setTimeout(init, 100);
       }
     });

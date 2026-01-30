@@ -80,14 +80,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { shop_id: shopId, template_id: parsed.data.template_id, error },
         "Failed to publish template",
       );
+
+      // Check if this is a validation error from the service
+      const errorMessage = error instanceof Error ? error.message : "";
+      const isValidationError = errorMessage.includes(
+        "Cannot publish template:",
+      );
+
       return data(
         {
           error: {
-            code: "internal_error",
-            message: "Failed to publish template.",
+            code: isValidationError ? "validation_error" : "internal_error",
+            message: isValidationError
+              ? errorMessage.replace("Cannot publish template: ", "")
+              : "Failed to publish template. Please try again.",
           },
         },
-        { status: 500 },
+        { status: isValidationError ? 400 : 500 },
       );
     }
   }

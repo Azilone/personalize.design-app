@@ -140,3 +140,50 @@ export const validateVariableNames = (
 
   return { valid: true };
 };
+
+// --- Template Publishing Validation ---
+
+export type TemplateValidationError = {
+  field: string;
+  message: string;
+};
+
+export type TemplateValidationResult = {
+  valid: boolean;
+  errors: TemplateValidationError[];
+};
+
+/**
+ * Validates if a template is complete enough to be published.
+ * Returns validation errors for missing required fields.
+ */
+export const validateTemplateForPublishing = ({
+  prompt,
+  generationModelIdentifier,
+}: {
+  prompt: string | null;
+  generationModelIdentifier: string | null;
+}): TemplateValidationResult => {
+  const errors: TemplateValidationError[] = [];
+
+  if (!prompt || prompt.trim() === "") {
+    errors.push({
+      field: "prompt",
+      message:
+        "A prompt template is required to publish. Please define what the AI should generate.",
+    });
+  }
+
+  if (!generationModelIdentifier) {
+    errors.push({
+      field: "generationModelIdentifier",
+      message:
+        "A generation model must be selected to publish. Please choose an AI model for image generation.",
+    });
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+  };
+};

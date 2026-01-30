@@ -1,101 +1,258 @@
 {% comment %}
   Personalize Button Block
   This block renders the personalize button on product pages.
-  It supports both personalized products and preview mode in the theme editor.
+  It fetches configuration from the app's database via App Proxy API.
 {% endcomment %}
 
-{% comment %}Load assets once per page to avoid duplicate execution{% endcomment %}
-<script>
-  window.__pd_stepper_assets_loaded =
-    window.__pd_stepper_assets_loaded || {};
-  if (!window.__pd_stepper_assets_loaded["personalize-stepper"]) {
-    window.__pd_stepper_assets_loaded["personalize-stepper"] = true;
-    const head = document.head || document.getElementsByTagName("head")[0];
-    const css = document.createElement("link");
-    css.rel = "stylesheet";
-    css.href = "{{ 'personalize-stepper.css' | asset_url }}";
-    head.appendChild(css);
-    const themeScript = document.createElement("script");
-    themeScript.src = "{{ 'theme-style-detector.js' | asset_url }}";
-    themeScript.defer = true;
-    head.appendChild(themeScript);
-    const stepperScript = document.createElement("script");
-    stepperScript.src = "{{ 'personalize-stepper.js' | asset_url }}";
-    stepperScript.defer = true;
-    head.appendChild(stepperScript);
-  }
-</script>
-
-{% assign pd_config = product.metafields.personalize_design.config %}
-{% assign show_preview = block.settings.show_preview | default: true %}
+{% assign shop_domain = shop.permanent_domain %}
+{% assign product_id = product.id %}
 {% assign is_editor = request.design_mode %}
-{% assign is_preview = false %}
 
-{% comment %}Extract config from metafields if available{% endcomment %}
-{% if pd_config %}
-  {% if pd_config.value %}
-    {% assign template_id = pd_config.value.template_id | default: pd_config.value.templateId %}
-    {% assign personalization_enabled = pd_config.value.personalization_enabled %}
-    {% assign text_enabled = pd_config.value.text_enabled | default: pd_config.value.textEnabled %}
-  {% elsif pd_config.template_id %}
-    {% assign template_id = pd_config.template_id %}
-    {% assign personalization_enabled = pd_config.personalization_enabled %}
-    {% assign text_enabled = pd_config.text_enabled %}
-  {% endif %}
-{% endif %}
+{% comment %}Check if we're in theme editor{% endcomment %}
+{% assign is_theme_editor = is_editor %}
 
-{% comment %}Preview mode overrides{% endcomment %}
-{% if show_preview and is_editor and template_id == blank %}
-  {% assign template_id = "preview" %}
-  {% assign personalization_enabled = true %}
-  {% assign text_enabled = true %}
-  {% assign is_preview = true %}
-{% endif %}
+{% comment %}App Proxy base URL{% endcomment %}
+{% assign app_proxy_url = '/apps/personalize' %}
 
 {% comment %}
-  Determine if we should render the block:
-  1. Product has a valid template and personalization is enabled
-  2. Preview mode is enabled AND we're in the theme editor
+  Render a container that will be populated by JavaScript after fetching config from API.
+  This ensures the single source of truth is the app's database.
 {% endcomment %}
-{% assign should_render = false %}
-{% if template_id != blank and personalization_enabled %}
-  {% assign should_render = true %}
-{% elsif show_preview and is_editor %}
-  {% assign should_render = true %}
-{% endif %}
+<div
+  id="pd-stepper-container-{{ block.id }}"
+  data-pd-stepper-container
+  {{ block.shopify_attributes }}
+  data-shop-domain="{{ shop_domain }}"
+  data-product-id="{{ product_id }}"
+  data-product-gid="{{ product.admin_graphql_api_id }}"
+  data-product-title="{{ product.title | escape }}"
+  data-variant-id="{{ product.selected_or_first_available_variant.id }}"
+  data-variant-gid="{{ product.selected_or_first_available_variant.admin_graphql_api_id }}"
+  data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
+  {% if product.featured_image %}
+    data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
+  {% endif %}
+  data-app-proxy-url="{{ app_proxy_url }}"
+  data-is-theme-editor="{{ is_theme_editor }}"
+  data-button-text="{{ block.settings.button_text | escape }}"
+  data-button-text-applied="{{ block.settings.button_text_applied | escape }}"
+  data-button-extra-classes="{{ block.settings.button_extra_classes | escape }}"
+  data-button-extra-classes-applied="{{ block.settings.button_extra_classes_applied | escape }}"
+  data-use-theme-style="{{ block.settings.use_theme_style }}"
+  data-custom-button-selector="{{ block.settings.custom_button_selector | escape }}"
+  data-button-bg-color="{{ block.settings.button_bg_color }}"
+  data-button-text-color="{{ block.settings.button_text_color }}"
+  data-button-padding="{{ block.settings.button_padding | escape }}"
+  data-button-font-size="{{ block.settings.button_font_size | escape }}"
+  style="display: none;"
+>
+  <div id="pd-stepper-root-{{ block.id }}" data-pd-stepper-root></div>
+</div>
 
-{% if should_render %}
+<script>
+(function() {
+  const container = document.getElementById('pd-stepper-container-{{ block.id }}');
+  if (!container) return;
 
-  <div
-    id="pd-stepper-root"
-    data-pd-stepper
-    {{ block.shopify_attributes }}
-    data-shop-domain="{{ shop.permanent_domain }}"
-    data-product-id="{{ product.id }}"
-    data-product-gid="{{ product.admin_graphql_api_id }}"
-    data-product-title="{{ product.title | escape }}"
-    data-variant-id="{{ product.selected_or_first_available_variant.id }}"
-    data-variant-gid="{{ product.selected_or_first_available_variant.admin_graphql_api_id }}"
-    data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
-    {% if product.featured_image %}
-      data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
-    {% endif %}
-    data-template-id="{{ template_id }}"
-    data-personalization-enabled="{{ personalization_enabled }}"
-    data-text-enabled="{{ text_enabled }}"
-    data-is-preview="{{ is_preview }}"
-    data-button-text="{{ block.settings.button_text | escape }}"
-    data-button-text-applied="{{ block.settings.button_text_applied | escape }}"
-    data-button-extra-classes="{{ block.settings.button_extra_classes | escape }}"
-    data-button-extra-classes-applied="{{ block.settings.button_extra_classes_applied | escape }}"
-    data-use-theme-style="{{ block.settings.use_theme_style }}"
-    data-custom-button-selector="{{ block.settings.custom_button_selector | escape }}"
-    data-button-bg-color="{{ block.settings.button_bg_color }}"
-    data-button-text-color="{{ block.settings.button_text_color }}"
-    data-button-padding="{{ block.settings.button_padding | escape }}"
-    data-button-font-size="{{ block.settings.button_font_size | escape }}"
-  ></div>
-{% endif %}
+  const root = container.querySelector('[data-pd-stepper-root]');
+  if (!root) return;
+
+  const shopDomain = container.dataset.shopDomain;
+  const productId = container.dataset.productId;
+  const productGid = container.dataset.productGid;
+  const appProxyUrl = container.dataset.appProxyUrl;
+  const isThemeEditor = container.dataset.isThemeEditor === 'true';
+
+  // Cache key for sessionStorage (5 minute cache)
+  const productIdForConfig = productGid || productId;
+  const cacheKey = `pd_config_${shopDomain}_${productIdForConfig}`;
+  const cacheExpiryKey = `pd_config_expiry_${shopDomain}_${productIdForConfig}`;
+  const CACHE_DURATION_MS = 5 * 60 * 1000; // 5 minutes
+
+  function loadAssets() {
+    const win = window;
+    win.__pd_stepper_mount_queue = win.__pd_stepper_mount_queue || [];
+
+    if (win.__pd_stepper_assets_loaded && typeof win.__pd_stepper_mount === 'function') {
+      win.__pd_stepper_mount(root);
+      return;
+    }
+
+    win.__pd_stepper_mount_queue.push(root);
+
+    if (win.__pd_stepper_assets_loading) {
+      return;
+    }
+    win.__pd_stepper_assets_loading = true;
+
+    const head = document.head || document.getElementsByTagName("head")[0];
+    
+    const existingStepperScript = document.getElementById('pd-stepper-script');
+    if (existingStepperScript) {
+      return;
+    }
+    
+    // Load CSS
+    const cssId = 'pd-stepper-css';
+    let css = document.getElementById(cssId);
+    if (!css) {
+      css = document.createElement("link");
+      css.id = cssId;
+      css.rel = "stylesheet";
+      css.href = "{{ 'personalize-stepper.css' | asset_url }}";
+      head.appendChild(css);
+    }
+
+    // Load theme style detector
+    const themeScriptId = 'pd-theme-detector-script';
+    let themeScript = document.getElementById(themeScriptId);
+    if (!themeScript) {
+      themeScript = document.createElement("script");
+      themeScript.id = themeScriptId;
+      themeScript.src = "{{ 'theme-style-detector.js' | asset_url }}";
+      themeScript.defer = true;
+      head.appendChild(themeScript);
+    }
+
+    // Load stepper script with onload callback
+    const stepperScriptId = 'pd-stepper-script';
+    const stepperScript = document.createElement("script");
+    stepperScript.id = stepperScriptId;
+    stepperScript.src = "{{ 'personalize-stepper.js' | asset_url }}";
+    stepperScript.defer = true;
+    stepperScript.onload = function() {
+      win.__pd_stepper_assets_loaded = true;
+      win.__pd_stepper_assets_loading = false;
+      if (typeof win.__pd_stepper_mount === 'function') {
+        win.__pd_stepper_mount(root);
+      }
+    };
+    stepperScript.onerror = function() {
+      win.__pd_stepper_assets_loading = false;
+      console.error('[Personalize Design] Failed to load stepper script');
+    };
+    head.appendChild(stepperScript);
+  }
+
+  function initializeStepper(config) {
+    
+    // Set data attributes for the React app
+    root.dataset.shopDomain = container.dataset.shopDomain;
+    root.dataset.productId = container.dataset.productId;
+    root.dataset.productGid = container.dataset.productGid;
+    root.dataset.productTitle = container.dataset.productTitle;
+    root.dataset.variantId = container.dataset.variantId;
+    root.dataset.variantGid = container.dataset.variantGid;
+    root.dataset.variantTitle = container.dataset.variantTitle;
+    root.dataset.productImage = container.dataset.productImage || '';
+    root.dataset.templateId = config.template_id;
+    root.dataset.personalizationEnabled = config.personalization_enabled;
+    root.dataset.textEnabled = config.text_enabled;
+    root.dataset.isPreview = config.is_preview;
+    root.dataset.buttonText = container.dataset.buttonText;
+    root.dataset.buttonTextApplied = container.dataset.buttonTextApplied;
+    root.dataset.buttonExtraClasses = container.dataset.buttonExtraClasses;
+    root.dataset.buttonExtraClassesApplied = container.dataset.buttonExtraClassesApplied;
+    root.dataset.useThemeStyle = container.dataset.useThemeStyle;
+    root.dataset.customButtonSelector = container.dataset.customButtonSelector;
+    root.dataset.buttonBgColor = container.dataset.buttonBgColor;
+    root.dataset.buttonTextColor = container.dataset.buttonTextColor;
+    root.dataset.buttonPadding = container.dataset.buttonPadding;
+    root.dataset.buttonFontSize = container.dataset.buttonFontSize;
+
+    // Show container and load assets
+    container.style.display = '';
+    loadAssets();
+  }
+
+  function checkCache() {
+    try {
+      const cached = sessionStorage.getItem(cacheKey);
+      const expiry = sessionStorage.getItem(cacheExpiryKey);
+      
+      if (cached && expiry) {
+        const now = Date.now();
+        if (now < parseInt(expiry)) {
+          return JSON.parse(cached);
+        }
+        // Cache expired, clear it
+        sessionStorage.removeItem(cacheKey);
+        sessionStorage.removeItem(cacheExpiryKey);
+      }
+    } catch (e) {
+      // sessionStorage not available or error
+    }
+    return null;
+  }
+
+  function setCache(config) {
+    try {
+      sessionStorage.setItem(cacheKey, JSON.stringify(config));
+      sessionStorage.setItem(cacheExpiryKey, String(Date.now() + CACHE_DURATION_MS));
+    } catch (e) {
+      // sessionStorage not available or error
+    }
+  }
+
+  function fetchConfig() {
+    // Check cache first
+    const cached = checkCache();
+    if (cached) {
+      initializeStepper(cached);
+      return;
+    }
+
+    // If in theme editor, show preview mode
+    if (isThemeEditor) {
+      const previewConfig = {
+        template_id: 'preview',
+        personalization_enabled: true,
+        text_enabled: true,
+        is_preview: true
+      };
+      setCache(previewConfig);
+      initializeStepper(previewConfig);
+      return;
+    }
+
+    // Fetch from API
+    const apiUrl = `${appProxyUrl}/product-config?shop_id=${encodeURIComponent(shopDomain)}&product_id=${encodeURIComponent(productIdForConfig)}`;
+    
+    fetch(apiUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
+      .then(data => {
+        if (data.data) {
+          // Product is configured
+          const config = {
+            template_id: data.data.template_id,
+            personalization_enabled: data.data.personalization_enabled,
+            text_enabled: data.data.text_enabled,
+            is_preview: false
+          };
+          setCache(config);
+          initializeStepper(config);
+        } else {
+          // Product not configured - keep container hidden
+          // Optionally remove the container from DOM
+          container.remove();
+        }
+      })
+      .catch(error => {
+        console.error('[Personalize Design] Failed to fetch product config:', error);
+        // On error, don't show the button (fail closed)
+        container.remove();
+      });
+  }
+
+  // Start fetching config
+  fetchConfig();
+})();
+</script>
 
 {% schema %}
 {
@@ -105,18 +262,7 @@
   "settings": [
     {
       "type": "paragraph",
-      "content": "The button will only appear for personalizable products published from Personalize Design. We recommend adding the button in the product default page below the variant picker."
-    },
-    {
-      "type": "header",
-      "content": "Editor Preview"
-    },
-    {
-      "type": "checkbox",
-      "id": "show_preview",
-      "label": "Show button preview in theme editor",
-      "default": true,
-      "info": "When enabled, displays a preview button in the theme editor even for non-personalized products. This helps you style the button. The preview only appears in the editor, not on the live store."
+      "content": "The button will only appear for personalizable products published from Personalize Design. Configuration is fetched from the app's database in real-time."
     },
     {
       "type": "header",

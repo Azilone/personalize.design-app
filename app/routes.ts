@@ -20,6 +20,7 @@ export default [
     route("retry-mockups", "./routes/app-proxy/retry-mockups/route.tsx"),
     route("template-config", "./routes/app-proxy/template-config/route.tsx"),
     route("button-styles", "./routes/app-proxy/button-styles/route.tsx"),
+    route("product-config", "./routes/app-proxy/product-config/route.tsx"),
   ]),
   route("api/inngest", "./routes/inngest/route.tsx", {
     id: "routes/inngest/api",

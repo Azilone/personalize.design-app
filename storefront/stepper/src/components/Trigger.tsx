@@ -73,27 +73,8 @@ export const Trigger = () => {
   };
 
   return (
-    <div style={{ position: "relative" }}>
-      {config.isPreview && (
-        <div
-          style={{
-            position: "absolute",
-            top: "-20px",
-            left: "0",
-            right: "0",
-            textAlign: "center",
-            fontSize: "11px",
-            color: "#666",
-            backgroundColor: "rgba(255, 255, 255, 0.9)",
-            padding: "2px 8px",
-            borderRadius: "4px",
-            pointerEvents: "none",
-            zIndex: 10,
-          }}
-        >
-          Preview
-        </div>
-      )}
+    <div className="pd-trigger-wrapper">
+      {config.isPreview && <div className="pd-preview-label">Preview</div>}
       <button
         ref={triggerRef}
         onClick={handleClick}

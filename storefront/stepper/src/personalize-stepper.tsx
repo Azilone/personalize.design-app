@@ -1,4 +1,5 @@
 import { createRoot } from "react-dom/client";
+import type { Root } from "react-dom/client";
 
 import "./personalize-stepper.css";
 import { useStepperStore } from "./stepper-store";
@@ -6,18 +7,24 @@ import { Trigger } from "./components/Trigger";
 import { Shell } from "./components/Shell";
 
 const StepperApp = () => {
+  const { config } = useStepperStore();
+  const isPreview = config.isPreview === true;
+
   return (
     <>
       <Trigger />
-      <Shell />
+      {!isPreview && <Shell />}
     </>
   );
 };
 
-const mount = document.querySelector<HTMLElement>("#pd-stepper-root");
+type StepperMount = HTMLElement & {
+  __pd_stepper_root?: Root;
+};
 
-if (mount) {
-  // Read data attributes
+const roots = new WeakMap<HTMLElement, Root>();
+
+const initializeFromDataset = (mount: HTMLElement) => {
   const shopDomain = mount.dataset.shopDomain;
   const productId = mount.dataset.productGid || mount.dataset.productId;
   const variantId = mount.dataset.variantGid || mount.dataset.variantId;
@@ -37,10 +44,8 @@ if (mount) {
       ? undefined
       : textEnabledRaw === "true";
 
-  // Check if this is a preview mode (theme editor)
   const isPreview = mount.dataset.isPreview === "true";
 
-  // Read button style settings from block
   const useThemeStyle = mount.dataset.useThemeStyle !== "false";
   const buttonText = mount.dataset.buttonText || "Personalize";
   const buttonTextApplied =
@@ -68,7 +73,6 @@ if (mount) {
     });
   }
 
-  // Initialize store
   useStepperStore.getState().setConfig({
     shopDomain,
     productId,
@@ -82,7 +86,6 @@ if (mount) {
     isPreview,
   });
 
-  // Initialize button styles
   useStepperStore.getState().setButtonStyles({
     useThemeStyle,
     buttonText,
@@ -94,6 +97,54 @@ if (mount) {
     buttonPadding,
     buttonFontSize,
   });
+};
 
-  createRoot(mount).render(<StepperApp />);
+const mountStepper = (mount: StepperMount) => {
+  initializeFromDataset(mount);
+
+  const existingRoot = mount.__pd_stepper_root || roots.get(mount);
+  if (existingRoot) {
+    existingRoot.render(<StepperApp />);
+    return;
+  }
+
+  const root = createRoot(mount);
+  mount.__pd_stepper_root = root;
+  roots.set(mount, root);
+  root.render(<StepperApp />);
+};
+
+const mountAll = () => {
+  const mounts = document.querySelectorAll<HTMLElement>(
+    "[data-pd-stepper-root]",
+  );
+  mounts.forEach((mount) => mountStepper(mount as StepperMount));
+};
+
+if (typeof window !== "undefined") {
+  const win = window as unknown as {
+    __pd_stepper_mount?: (mount?: HTMLElement) => void;
+    __pd_stepper_mount_queue?: HTMLElement[];
+    __pd_stepper_assets_loaded?: boolean;
+    __pd_stepper_assets_loading?: boolean;
+  };
+
+  win.__pd_stepper_mount = (mount?: HTMLElement) => {
+    if (mount) {
+      mountStepper(mount as StepperMount);
+      return;
+    }
+    mountAll();
+  };
+
+  const queued = win.__pd_stepper_mount_queue;
+  if (Array.isArray(queued) && queued.length > 0) {
+    queued.forEach((mount) => mountStepper(mount as StepperMount));
+    win.__pd_stepper_mount_queue = [];
+  }
+
+  win.__pd_stepper_assets_loaded = true;
+  win.__pd_stepper_assets_loading = false;
 }
+
+mountAll();

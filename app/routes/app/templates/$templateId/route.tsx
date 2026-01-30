@@ -33,6 +33,7 @@ import {
   type DesignTemplateDto,
   type TestGenerationOutput,
 } from "../../../../services/templates/templates.server";
+import { validateTemplateForPublishing } from "../../../../lib/prompt-variables";
 import { getAllModelConfigs } from "../../../../services/fal/registry";
 import { inngest } from "../../../../services/inngest/client.server";
 import {
@@ -636,6 +637,17 @@ export default function TemplateEditPage() {
   const deleted =
     actionData && typeof actionData === "object" && "deleted" in actionData;
 
+  // Check if template is ready to be published
+  const publishValidation = template
+    ? validateTemplateForPublishing({
+        prompt: template.prompt,
+        generationModelIdentifier: template.generationModelIdentifier,
+      })
+    : { valid: false, errors: [] };
+
+  const missingPublishRequirements =
+    template?.status === "draft" && !publishValidation.valid;
+
   const [isGenerationInProgress, setIsGenerationInProgress] = useState(false);
 
   const [liveTestResults, setLiveTestResults] =
@@ -870,6 +882,26 @@ export default function TemplateEditPage() {
           {success ? (
             <s-banner tone="success">
               <s-text>Template updated successfully!</s-text>
+            </s-banner>
+          ) : null}
+
+          {missingPublishRequirements ? (
+            <s-banner tone="warning">
+              <s-stack direction="block" gap="small">
+                <s-text>
+                  <strong>
+                    This template is not ready to be published yet.
+                  </strong>
+                </s-text>
+                <s-text>
+                  Before publishing, you need to complete the following:
+                </s-text>
+                <ul style={{ margin: 0, paddingLeft: "1.5rem" }}>
+                  {publishValidation.errors.map((error, index) => (
+                    <li key={index}>{error.message}</li>
+                  ))}
+                </ul>
+              </s-stack>
             </s-banner>
           ) : null}
 

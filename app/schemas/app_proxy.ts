@@ -153,3 +153,24 @@ export type RegeneratePreviewRequest = z.infer<
 export type RegeneratePreviewResponse = z.infer<
   typeof regeneratePreviewResponseSchema
 >;
+
+// Product config schemas
+export const productConfigRequestSchema = z.object({
+  shop_id: z.string().min(1),
+  product_id: z.string().min(1),
+});
+
+export const productConfigResponseSchema = z.union([
+  z.object({
+    data: z
+      .object({
+        template_id: z.string().min(1),
+        personalization_enabled: z.boolean(),
+        text_enabled: z.boolean(),
+      })
+      .nullable(),
+  }),
+  appProxyErrorSchema,
+]);
+
+export type ProductConfigResponse = z.infer<typeof productConfigResponseSchema>;

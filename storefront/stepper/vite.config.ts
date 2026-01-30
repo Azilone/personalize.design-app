@@ -29,6 +29,7 @@ export default defineConfig({
         ),
       },
       output: {
+        format: "iife",
         entryFileNames: "[name].js",
         assetFileNames: (assetInfo) => {
           if (assetInfo.name && assetInfo.name.endsWith(".css")) {

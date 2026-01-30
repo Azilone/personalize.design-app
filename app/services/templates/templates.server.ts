@@ -13,6 +13,11 @@ import {
   DEFAULT_TEMPLATE_ASPECT_RATIO,
   type TemplateAspectRatio,
 } from "../../lib/template-aspect-ratios";
+import {
+  validateTemplateForPublishing,
+  type TemplateValidationResult,
+  type TemplateValidationError,
+} from "../../lib/prompt-variables";
 
 // --- Constants ---
 
@@ -423,22 +428,22 @@ export const publishTemplate = async (
   }
 
   // Validate template completeness before publishing
-  if (!existing.prompt) {
-    logger.warn(
-      { shop_id: shopId, template_id: templateId },
-      "Cannot publish template without prompt",
-    );
-    throw new Error("Template must have a prompt defined to be published");
-  }
+  const validation = validateTemplateForPublishing({
+    prompt: existing.prompt,
+    generationModelIdentifier: existing.generation_model_identifier,
+  });
 
-  if (!existing.generation_model_identifier) {
+  if (!validation.valid) {
+    const errorMessages = validation.errors.map((e) => e.message).join(" ");
     logger.warn(
-      { shop_id: shopId, template_id: templateId },
-      "Cannot publish template without generation model",
+      {
+        shop_id: shopId,
+        template_id: templateId,
+        validation_errors: validation.errors,
+      },
+      "Cannot publish template - validation failed",
     );
-    throw new Error(
-      "Template must have a generation model configured to be published",
-    );
+    throw new Error(`Cannot publish template: ${errorMessages}`);
   }
 
   logger.info(

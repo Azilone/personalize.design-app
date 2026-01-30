@@ -20,7 +20,7 @@
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-#pd-stepper-root,
+[data-pd-stepper-root],
 .pd-stepper-theme {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -43,20 +43,20 @@
   --ring: oklch(0.708 0 0);
   --radius: 0.625rem;
 
-  color: var(--foreground);
-  background-color: var(--background);
+  color: inherit;
+  background-color: transparent;
   font-family: var(--font-sans);
 }
 
 @layer base {
-  #pd-stepper-root *,
+  [data-pd-stepper-root] *,
   .pd-stepper-theme * {
     @apply border-border;
   }
 }
 
 /* Button styles with CSS custom properties for theme integration */
-#pd-stepper-root,
+[data-pd-stepper-root],
 .pd-stepper-theme {
   /* Default button styles (Dawn theme defaults) */
   --pd-button-bg-color: #121212;
@@ -117,6 +117,18 @@
   align-items: center;
   justify-content: center;
   width: 100%;
+}
+
+.pd-trigger-wrapper {
+  width: 100%;
+}
+
+.pd-preview-label {
+  font-size: 11px;
+  text-align: center;
+  color: currentColor;
+  opacity: 0.6;
+  margin-bottom: 6px;
 }
 
 .pd-personalize-button:not(.pd-theme-classes-applied) {
@@ -182,8 +194,8 @@
 }
 
 /* Custom style mode - override with block settings */
-#pd-stepper-root[data-use-theme-style="false"] .pd-personalize-button,
-#pd-stepper-root .pd-personalize-button.pd-custom-style {
+[data-pd-stepper-root][data-use-theme-style="false"] .pd-personalize-button,
+[data-pd-stepper-root] .pd-personalize-button.pd-custom-style {
   background-color: var(--pd-button-bg-color);
   color: var(--pd-button-text-color);
   border-radius: var(--pd-button-border-radius);
@@ -195,9 +207,10 @@
   box-shadow: var(--pd-button-box-shadow);
 }
 
-#pd-stepper-root[data-use-theme-style="false"]
+[data-pd-stepper-root][data-use-theme-style="false"]
   .pd-personalize-button:hover:not(:disabled),
-#pd-stepper-root .pd-personalize-button.pd-custom-style:hover:not(:disabled) {
+[data-pd-stepper-root]
+  .pd-personalize-button.pd-custom-style:hover:not(:disabled) {
   background-color: var(--pd-button-hover-bg-color);
   color: var(--pd-button-hover-text-color);
   box-shadow: var(--pd-button-hover-box-shadow);
