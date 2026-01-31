@@ -37,7 +37,7 @@ import { cn, formatVariableLabel } from "../lib/utils";
 type ModalState = "editing" | "generating" | "reveal" | "preview" | "review";
 
 const PLACEHOLDER_IMAGE_URL =
-  "https://placehold.co/600x400?text=Heretext+Hello+World";
+  "https://placehold.co/600x400.png?text=Heretext+Hello+World";
 const APP_PROXY_BASE = "/apps/personalize";
 
 const MOCKUP_LOADING_TIMEOUT_MS = 30000;

@@ -30,7 +30,7 @@ import logger from "../../../lib/logger";
 import { captureEvent } from "../../../lib/posthog.server";
 
 const DEV_PLACEHOLDER_PREVIEW_URL =
-  "https://placehold.co/600x400?text=600x400";
+  "https://placehold.co/600x400.png?text=600x400";
 
 const parseVariableValues = (value?: string | null): Record<string, string> => {
   if (!value) {
@@ -129,7 +129,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-   const template = await getTemplate(template_id, shopId);
+  const template = await getTemplate(template_id, shopId);
   const costUsd =
     MVP_PRICE_USD_PER_GENERATION +
     (template?.removeBackgroundEnabled ? REMOVE_BG_PRICE_USD : 0);

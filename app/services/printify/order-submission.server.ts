@@ -93,54 +93,6 @@ const printifyUploadDetailsSchema = z.object({
   preview_url: z.string().optional(),
 });
 
-const printifyUploadResponseSchema = z.object({
-  id: z.union([z.string(), z.number()]),
-});
-
-const resolveUploadFileName = (imageUrl: string): string => {
-  try {
-    const url = new URL(imageUrl);
-    const pathname = url.pathname.split("/").pop();
-    if (pathname && pathname.includes(".")) {
-      return pathname;
-    }
-  } catch {
-    // Ignore URL parsing failures.
-  }
-
-  return `order-${Date.now()}.png`;
-};
-
-const uploadPrintifyImageFromUrl = async (
-  token: string,
-  imageUrl: string,
-): Promise<string> => {
-  const response = await fetchPrintify(
-    `${PRINTIFY_BASE_URL}/uploads/images.json`,
-    token,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        file_name: resolveUploadFileName(imageUrl),
-        url: imageUrl,
-      }),
-    },
-  );
-
-  await assertPrintifyOk(response, "Unable to upload image to Printify.");
-
-  const payload = (await response.json()) as unknown;
-  const parsed = printifyUploadResponseSchema.safeParse(payload);
-  if (!parsed.success) {
-    throw new PrintifyRequestError(
-      "unexpected_response",
-      "Printify upload response was invalid.",
-    );
-  }
-
-  return String(parsed.data.id);
-};
 
 const getPrintifyUploadUrl = async (
   token: string,
@@ -340,43 +292,7 @@ export async function submitOrderToPrintify(
     // Build Printify order payload
     // Note: Using "external" mode to reference existing product with custom artwork
     const printAreaKey = input.printAreaPosition ?? "front";
-    let resolvedAssetUrl = assetUrl;
-
-    let orderUploadId: string | null = null;
-
-    try {
-      orderUploadId = await uploadPrintifyImageFromUrl(token, assetUrl);
-    } catch (error) {
-      logger.warn(
-        {
-          error: error instanceof Error ? error.message : String(error),
-        },
-        "Failed to upload order artwork to Printify; falling back",
-      );
-    }
-
-    if (orderUploadId) {
-      const uploadUrl = await getPrintifyUploadUrl(token, orderUploadId);
-      if (uploadUrl) {
-        resolvedAssetUrl = uploadUrl;
-        logger.info(
-          { printify_upload_id: orderUploadId },
-          "Using Printify upload URL for order artwork",
-        );
-      }
-    } else if (input.printifyUploadId) {
-      const uploadUrl = await getPrintifyUploadUrl(
-        token,
-        input.printifyUploadId,
-      );
-      if (uploadUrl) {
-        resolvedAssetUrl = uploadUrl;
-        logger.info(
-          { printify_upload_id: input.printifyUploadId },
-          "Using preview Printify upload URL for order artwork",
-        );
-      }
-    }
+    const resolvedAssetUrl = assetUrl;
 
     const printAreaImage = {
       src: resolvedAssetUrl,

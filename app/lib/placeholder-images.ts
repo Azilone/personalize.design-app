@@ -29,5 +29,5 @@ const normalizePlaceholderSize = (size: PlaceholderSize): PlaceholderSize => {
 
 export const buildPlaceholderUrl = (size: PlaceholderSize): string => {
   const normalized = normalizePlaceholderSize(size);
-  return `https://placehold.co/${normalized.width}x${normalized.height}`;
+  return `https://placehold.co/${normalized.width}x${normalized.height}.png`;
 };
