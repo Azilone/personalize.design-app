@@ -99,7 +99,8 @@ export const InputStep = ({ previewUrl }: InputStepProps) => {
               <p className="text-xs text-muted-foreground">
                 {templateConfig?.templateName
                   ? `Add an image for ${templateConfig.templateName}.`
-                  : "Add an image to personalize your product."}
+                  : "Add an image to personalize your product."}{" "}
+                Max 4096x4096px.
               </p>
 
               <div className="flex flex-wrap items-center gap-3">

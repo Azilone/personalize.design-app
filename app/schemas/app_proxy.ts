@@ -26,6 +26,7 @@ const appProxyErrorSchema = z.object({
 export const generatePreviewRequestSchema = z.object({
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
+  variant_id: z.string().optional(),
   template_id: z.string().min(1),
   session_id: z.string().min(1),
   image_file: z
@@ -81,6 +82,7 @@ export const templateConfigResponseSchema = z.union([
 export const regeneratePreviewRequestSchema = z.object({
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
+  variant_id: z.string().optional(),
   template_id: z.string().min(1),
   session_id: z.string().min(1),
   previous_job_id: z.string().min(1),

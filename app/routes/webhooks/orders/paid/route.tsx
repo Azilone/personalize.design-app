@@ -210,6 +210,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     const order = parseResult.data;
     const orderId = String(order.id);
+    const shippingLines = order.shipping_lines ?? [];
 
     // Check for duplicate webhook by webhook ID (network layer idempotency)
     const existingWebhook = await prisma.orderLineProcessing.findFirst({
@@ -253,6 +254,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     const eligibleLines: Array<{
       lineItem: {
         id: string | number;
+        product_id?: string | number;
+        variant_id?: string | number;
+        quantity: number;
         properties?: Array<{ name: string; value: string }>;
       };
       personalizationId: string;
@@ -410,6 +414,34 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           });
 
         // Trigger Inngest workflow for fulfillment
+        // Get line item details for Printify submission (Story 7.3)
+        const productId = lineItem.product_id
+          ? String(lineItem.product_id)
+          : undefined;
+        const variantId = lineItem.variant_id
+          ? Number(lineItem.variant_id)
+          : undefined;
+        const quantity = lineItem.quantity ?? 1;
+
+        // Build shipping address from order (Story 7.3)
+        const shippingAddress = order.shipping_address
+          ? {
+              first_name: order.shipping_address.first_name ?? null,
+              last_name: order.shipping_address.last_name ?? null,
+              address1: order.shipping_address.address1 ?? null,
+              address2: order.shipping_address.address2 ?? null,
+              city: order.shipping_address.city ?? null,
+              region:
+                order.shipping_address.province_code ??
+                order.shipping_address.province ??
+                null,
+              zip: order.shipping_address.zip ?? null,
+              country_code: order.shipping_address.country_code ?? null,
+              phone: order.shipping_address.phone ?? null,
+              email: order.email ?? order.customer?.email ?? null,
+            }
+          : undefined;
+
         await inngest.send({
           name: "fulfillment/process.order.line",
           data: {
@@ -421,6 +453,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
             billable_event_idempotency_key: orderFeeIdempotencyKey,
             plan_status: planStatus,
             should_charge_order_fee: billableEventStatus === "pending",
+            // Story 7.3: Include product/shipping info for Printify
+            product_id: productId,
+            variant_id: variantId,
+            quantity,
+            shipping_address: shippingAddress,
+            shipping_lines: shippingLines.map((line) => ({
+              title: line.title,
+              code: line.code ?? null,
+              price: line.price ?? null,
+            })),
           },
         });
 

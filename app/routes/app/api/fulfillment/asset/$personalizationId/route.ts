@@ -1,12 +1,12 @@
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { data } from "react-router";
 
-import { authenticate } from "../../../../shopify.server";
-import { getShopIdFromSession } from "../../../../lib/tenancy";
+import { authenticate } from "../../../../../../shopify.server";
+import { getShopIdFromSession } from "../../../../../../lib/tenancy";
 import {
   retrieveAssetForFulfillment,
   AssetResolutionError,
-} from "../../../../services/fulfillment/asset-resolution.server";
+} from "../../../../../../services/fulfillment/asset-resolution.server";
 
 export const loader = async ({ request, params }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);

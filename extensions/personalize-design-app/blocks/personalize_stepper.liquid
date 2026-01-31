@@ -25,12 +25,16 @@
   data-shop-domain="{{ shop_domain }}"
   data-product-id="{{ product_id }}"
   data-product-gid="{{ product.admin_graphql_api_id }}"
+  data-product-handle="{{ product.handle }}"
   data-product-title="{{ product.title | escape }}"
   data-variant-id="{{ product.selected_or_first_available_variant.id }}"
   data-variant-gid="{{ product.selected_or_first_available_variant.admin_graphql_api_id }}"
   data-variant-title="{{ product.selected_or_first_available_variant.title | escape }}"
   {% if product.featured_image %}
     data-product-image="{{ product.featured_image | image_url: width: 1400 }}"
+  {% endif %}
+  {% if product.selected_or_first_available_variant.image %}
+    data-variant-image="{{ product.selected_or_first_available_variant.image | image_url: width: 1400 }}"
   {% endif %}
   data-app-proxy-url="{{ app_proxy_url }}"
   data-is-theme-editor="{{ is_theme_editor }}"
@@ -47,6 +51,9 @@
   style="display: none;"
 >
   <div id="pd-stepper-root-{{ block.id }}" data-pd-stepper-root></div>
+  <script type="application/json" data-pd-product-json>
+    {{ product | json }}
+  </script>
 </div>
 
 <script>
@@ -60,6 +67,7 @@
   const shopDomain = container.dataset.shopDomain;
   const productId = container.dataset.productId;
   const productGid = container.dataset.productGid;
+  const productHandle = container.dataset.productHandle;
   const appProxyUrl = container.dataset.appProxyUrl;
   const isThemeEditor = container.dataset.isThemeEditor === 'true';
 
@@ -135,7 +143,16 @@
   }
 
   function initializeStepper(config) {
-    
+    const currentImage = getCurrentProductImage();
+    if (currentImage) {
+      const existingVariantImage = container.dataset.variantImage;
+      const existingProductImage = container.dataset.productImage;
+      if (!existingVariantImage || existingVariantImage === existingProductImage) {
+        container.dataset.variantImage = currentImage;
+        container.dataset.productImage = currentImage;
+      }
+    }
+
     // Set data attributes for the React app
     root.dataset.shopDomain = container.dataset.shopDomain;
     root.dataset.productId = container.dataset.productId;
@@ -251,6 +268,350 @@
 
   // Start fetching config
   fetchConfig();
+
+  // Function to get the currently displayed product image
+  function getCurrentProductImage() {
+    // Try multiple selectors to find the main product image
+    const selectors = [
+      '.product__media img',
+      '.product-media img', 
+      '[data-product-media] img',
+      '.product-single__media img',
+      '.product-media-wrapper img',
+      '.product-gallery img',
+      '.product-images img',
+      'figure.product-media img',
+      '.media img',
+      'img[src*="cdn.shopify.com"]'
+    ];
+    
+    for (const selector of selectors) {
+      const img = document.querySelector(selector);
+      if (img && img.src && !img.src.includes('placeholder')) {
+        return img.src;
+      }
+    }
+    
+    // Fallback: get any image in the product section
+    const productSection = document.querySelector('section[data-section-type="product"], [data-section-id]');
+    if (productSection) {
+      const img = productSection.querySelector('img[src*="cdn.shopify.com"]');
+      if (img) return img.src;
+    }
+    
+    return null;
+  }
+
+  function getProductData() {
+    if (container.__pdProductData) {
+      return container.__pdProductData;
+    }
+
+    const jsonEl = container.querySelector('[data-pd-product-json]');
+    if (!jsonEl || !jsonEl.textContent) {
+      return null;
+    }
+
+    try {
+      const data = JSON.parse(jsonEl.textContent);
+      container.__pdProductData = data;
+      return data;
+    } catch (error) {
+      console.warn('[Personalize Design] Failed to parse product JSON:', error);
+      return null;
+    }
+  }
+
+  function getVariantImageUrl(variant) {
+    if (!variant) return '';
+
+    const featuredImage = variant.featured_image;
+    if (featuredImage) {
+      if (typeof featuredImage === 'string') return featuredImage;
+      if (featuredImage.src) return featuredImage.src;
+      if (featuredImage.url) return featuredImage.url;
+    }
+
+    const image = variant.image;
+    if (image) {
+      if (typeof image === 'string') return image;
+      if (image.src) return image.src;
+      if (image.url) return image.url;
+    }
+
+    return '';
+  }
+
+  function updateVariantById(variantId) {
+    if (!variantId) return;
+
+    const productData = getProductData();
+    const variantFromProduct =
+      productData && productData.variants
+        ? productData.variants.find((variant) => String(variant.id) === String(variantId))
+        : null;
+
+    if (variantFromProduct) {
+      updateVariantData(variantFromProduct);
+      return;
+    }
+
+    fetch(`/variants/${variantId}.json`)
+      .then((response) => response.json())
+      .then((data) => {
+        if (data && data.variant) {
+          updateVariantData(data.variant);
+        }
+      })
+      .catch(() => {
+        updateVariantData({
+          id: variantId,
+          admin_graphql_api_id: `gid://shopify/ProductVariant/${variantId}`,
+          title: ''
+        });
+      });
+  }
+
+  // Listen for variant changes and update data attributes
+  function updateVariantData(variant) {
+    if (!variant) return;
+    
+    // Get variant image URL - try multiple sources
+    let variantImage = '';
+    variantImage = getVariantImageUrl(variant);
+    if (!variantImage && variant.image_url) {
+      variantImage = variant.image_url;
+    }
+    
+    // If no variant-specific image, try to get the currently displayed product image
+    // This catches the case where the theme updates the main image when variant changes
+    if (!variantImage) {
+      variantImage = getCurrentProductImage();
+      if (variantImage) {
+        console.log('[Personalize Design] Using currently displayed image:', variantImage.substring(0, 100));
+      }
+    }
+    
+    // Update container dataset
+    container.dataset.variantId = variant.id;
+    container.dataset.variantGid = variant.admin_graphql_api_id || `gid://shopify/ProductVariant/${variant.id}`;
+    container.dataset.variantTitle = variant.title || '';
+    if (variantImage) {
+      container.dataset.variantImage = variantImage;
+    }
+    
+    // Update root dataset (for React app)
+    if (root) {
+      root.dataset.variantId = variant.id;
+      root.dataset.variantGid = variant.admin_graphql_api_id || `gid://shopify/ProductVariant/${variant.id}`;
+      root.dataset.variantTitle = variant.title || '';
+      if (variantImage) {
+        root.dataset.variantImage = variantImage;
+      }
+    }
+    
+    // Dispatch custom event for React app
+    container.dispatchEvent(new CustomEvent('pd:variantchange', {
+      detail: {
+        variantId: variant.id,
+        variantGid: variant.admin_graphql_api_id || `gid://shopify/ProductVariant/${variant.id}`,
+        variantTitle: variant.title,
+        variantImage: variantImage
+      },
+      bubbles: true
+    }));
+    
+    console.log('[Personalize Design] Variant updated:', variant.title, 'Image:', variantImage ? variantImage.substring(0, 100) + '...' : 'none');
+  }
+
+  // Listen for Shopify's variant:change event
+  document.addEventListener('variant:change', function(event) {
+    if (event.detail && event.detail.variant) {
+      // Wait a bit for the theme to update the image
+      setTimeout(() => {
+        updateVariantData(event.detail.variant);
+      }, 100);
+    }
+  });
+
+  function getClosestProductForm() {
+    const section = container.closest('[data-section-id], section, .shopify-section');
+    if (section) {
+      const form = section.querySelector('form[action*="/cart/add"]');
+      if (form) return form;
+    }
+
+    return document.querySelector('form[action*="/cart/add"]');
+  }
+
+  function getSelectedOptionsFromForm(form) {
+    const productData = getProductData();
+    if (!productData || !Array.isArray(productData.options)) {
+      return null;
+    }
+
+    const valuesByName = new Map();
+    const optionInputs = form.querySelectorAll('input[name^="options["], select[name^="options["]');
+
+    optionInputs.forEach((input) => {
+      const nameMatch = input.name && input.name.match(/^options\[(.+)\]$/);
+      if (!nameMatch) return;
+      if (input.type === 'radio' && !input.checked) return;
+      if (input.tagName === 'SELECT') {
+        const selected = input.options[input.selectedIndex];
+        if (!selected) return;
+        valuesByName.set(nameMatch[1], selected.value);
+        return;
+      }
+
+      if (input.value) {
+        valuesByName.set(nameMatch[1], input.value);
+      }
+    });
+
+    if (valuesByName.size === 0) {
+      return null;
+    }
+
+    const ordered = productData.options.map((optionName) => valuesByName.get(optionName));
+    if (ordered.some((value) => !value)) {
+      return null;
+    }
+
+    return ordered;
+  }
+
+  function resolveVariantFromOptions(selectedOptions) {
+    const productData = getProductData();
+    if (!productData || !Array.isArray(productData.variants)) {
+      return null;
+    }
+
+    return productData.variants.find((variant) => {
+      const options = Array.isArray(variant.options)
+        ? variant.options
+        : [variant.option1, variant.option2, variant.option3].filter(Boolean);
+
+      if (options.length < selectedOptions.length) {
+        return false;
+      }
+
+      return selectedOptions.every((option, index) => options[index] === option);
+    }) || null;
+  }
+
+  function watchVariantSelection() {
+    const form = getClosestProductForm();
+    if (!form) return;
+
+    const getInitialVariantId = () => {
+      const urlVariantId = new URLSearchParams(window.location.search).get('variant');
+      if (urlVariantId) return urlVariantId;
+      const idInput = form.querySelector('[name="id"]');
+      if (idInput && idInput.value) return idInput.value;
+      return container.dataset.variantId || null;
+    };
+
+    const applyInitialVariant = () => {
+      const initialId = getInitialVariantId();
+      if (initialId) {
+        updateVariantById(initialId);
+      }
+    };
+
+    if (!getProductData() && productHandle) {
+      fetch(`/products/${productHandle}.js`)
+        .then((response) => response.json())
+        .then((data) => {
+          container.__pdProductData = data;
+          applyInitialVariant();
+        })
+        .catch(() => {
+          applyInitialVariant();
+        });
+    } else {
+      applyInitialVariant();
+    }
+
+    const idInput = form.querySelector('[name="id"]');
+    let lastSeenVariantId = container.dataset.variantId;
+
+    const handleVariantIdChange = () => {
+      const nextId = idInput && idInput.value ? idInput.value : null;
+      if (!nextId || nextId === lastSeenVariantId) return;
+      lastSeenVariantId = nextId;
+      updateVariantById(nextId);
+    };
+
+    if (idInput) {
+      idInput.addEventListener('change', handleVariantIdChange);
+      idInput.addEventListener('input', handleVariantIdChange);
+      const observer = new MutationObserver(handleVariantIdChange);
+      observer.observe(idInput, { attributes: true, attributeFilter: ['value'] });
+      handleVariantIdChange();
+    }
+
+    form.addEventListener('change', () => {
+      if (idInput && idInput.value) {
+        handleVariantIdChange();
+        return;
+      }
+
+      const selectedOptions = getSelectedOptionsFromForm(form);
+      if (!selectedOptions) return;
+      const resolved = resolveVariantFromOptions(selectedOptions);
+      if (resolved) {
+        updateVariantData(resolved);
+      }
+    });
+  }
+
+  watchVariantSelection();
+
+  // Also listen for URL changes (some themes update URL without dispatching event)
+  let lastVariantId = container.dataset.variantId;
+  const observer = new MutationObserver(function(mutations) {
+    const urlParams = new URLSearchParams(window.location.search);
+    const variantId = urlParams.get('variant');
+    
+    if (variantId && variantId !== lastVariantId) {
+      lastVariantId = variantId;
+      // Fetch variant details from Shopify's global object if available
+      if (window.Shopify && window.Shopify.routes && window.Shopify.routes.root) {
+        fetch(`${window.Shopify.routes.root}variants/${variantId}.json`)
+          .then(r => r.json())
+          .then(data => {
+            if (data.variant) {
+              updateVariantData(data.variant);
+            }
+          })
+          .catch(() => {
+            // Fallback: just update the ID
+            updateVariantData({
+              id: variantId,
+              admin_graphql_api_id: `gid://shopify/ProductVariant/${variantId}`,
+              title: ''
+            });
+          });
+      }
+    }
+  });
+  
+  observer.observe(document.querySelector('body'), {
+    childList: true,
+    subtree: true
+  });
+
+  // Check for variant in URL on load
+  const initialVariantId = new URLSearchParams(window.location.search).get('variant');
+  if (initialVariantId && initialVariantId !== container.dataset.variantId) {
+    lastVariantId = initialVariantId;
+    updateVariantData({
+      id: initialVariantId,
+      admin_graphql_api_id: `gid://shopify/ProductVariant/${initialVariantId}`,
+      title: ''
+    });
+  }
 })();
 </script>
 

@@ -10,6 +10,7 @@ import {
   type PreviewGeneratePayload,
 } from "../types";
 import { generateImage } from "../../previews/image-generation.server";
+import { generateFakeImage } from "../../previews/image-generation.server";
 import { generateMockups } from "../../previews/mockup-generation.server";
 import {
   getPreviewJobById,
@@ -18,6 +19,8 @@ import {
 import { getTemplate } from "../../templates/templates.server";
 import { calculateFalImageSize } from "../../fal/image-size.server";
 import { getPrintifyProductDetails } from "../../printify/product-details.server";
+import type { PrintifyProductDetails } from "../../printify/product-details.server";
+import type { PrintifyProductVariant } from "../../printify/product-details.server";
 import { getPrintifyVariantPrintArea } from "../../printify/print-area.server";
 import { deleteProduct } from "../../printify/temp-product.server";
 import { buildPlaceholderUrl } from "../../../lib/placeholder-images";
@@ -26,6 +29,7 @@ import logger from "../../../lib/logger";
 import { captureEvent } from "../../../lib/posthog.server";
 import { getModelConfig } from "../../fal/registry";
 import { TEMPLATE_ASPECT_RATIO_LABELS } from "../../../lib/template-aspect-ratios";
+import { getOfflineShopifyAdmin } from "../../shopify/admin.server";
 import {
   MVP_GENERATION_MODEL_ID,
   MVP_PRICE_USD_PER_GENERATION,
@@ -47,8 +51,150 @@ const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
 
 const selectPreviewVariant = (
-  variants: Array<{ id: number; price: number; isEnabled: boolean }>,
-) => variants.find((variant) => variant.isEnabled) ?? variants[0];
+  variants: PrintifyProductVariant[],
+): PrintifyProductVariant | undefined =>
+  variants.find((variant) => variant.isEnabled) ?? variants[0];
+
+const fetchShopifyVariantTitle = async (
+  shopId: string,
+  variantId: string,
+): Promise<{ id: string; title: string } | null> => {
+  try {
+    const admin = await getOfflineShopifyAdmin(shopId);
+    const response = await admin.graphql(
+      `#graphql
+        query getVariant($id: ID!) {
+          productVariant(id: $id) {
+            id
+            title
+          }
+        }
+      `,
+      {
+        variables: {
+          id: variantId.startsWith("gid://")
+            ? variantId
+            : `gid://shopify/ProductVariant/${variantId}`,
+        },
+      },
+    );
+
+    if (!response.ok) {
+      return null;
+    }
+
+    const json = (await response.json()) as {
+      data?: {
+        productVariant?: {
+          id: string;
+          title: string;
+        } | null;
+      };
+      errors?: Array<{ message?: string }>;
+    };
+
+    if (json.errors?.length || !json.data?.productVariant) {
+      return null;
+    }
+
+    return {
+      id: json.data.productVariant.id,
+      title: json.data.productVariant.title,
+    };
+  } catch (error) {
+    logger.error(
+      { variant_id: variantId, error: String(error) },
+      "Error fetching Shopify variant for mockups",
+    );
+    return null;
+  }
+};
+
+const resolvePreviewVariant = async (input: {
+  shopId: string;
+  shopifyProductId: string;
+  shopifyVariantId?: string;
+  printifyProductId: string;
+  printifyProduct: PrintifyProductDetails;
+}): Promise<PrintifyProductVariant | null> => {
+  const fallback = selectPreviewVariant(input.printifyProduct.variants);
+  if (!input.shopifyVariantId) {
+    return fallback ?? null;
+  }
+
+  const cached = await prisma.shopProductVariant.findUnique({
+    where: {
+      shop_id_shopify_variant_id: {
+        shop_id: input.shopId,
+        shopify_variant_id: input.shopifyVariantId,
+      },
+    },
+  });
+
+  if (cached) {
+    const cachedId = Number(cached.printify_variant_id);
+    const matched = input.printifyProduct.variants.find(
+      (variant) => variant.id === cachedId && variant.isEnabled,
+    );
+    if (matched) {
+      return matched;
+    }
+  }
+
+  const shopifyVariant = await fetchShopifyVariantTitle(
+    input.shopId,
+    input.shopifyVariantId,
+  );
+
+  if (!shopifyVariant) {
+    return fallback ?? null;
+  }
+
+  const match = input.printifyProduct.variants.find(
+    (variant) => variant.isEnabled && variant.title === shopifyVariant.title,
+  );
+
+  if (!match) {
+    logger.warn(
+      {
+        shop_id: input.shopId,
+        shopify_variant_id: input.shopifyVariantId,
+        shopify_variant_title: shopifyVariant.title,
+        printify_product_id: input.printifyProductId,
+        available_variants: input.printifyProduct.variants
+          .filter((variant) => variant.isEnabled)
+          .map((variant) => variant.title),
+      },
+      "No matching Printify variant found for mockups",
+    );
+    return fallback ?? null;
+  }
+
+  await prisma.shopProductVariant.upsert({
+    where: {
+      shop_id_shopify_variant_id: {
+        shop_id: input.shopId,
+        shopify_variant_id: input.shopifyVariantId,
+      },
+    },
+    create: {
+      shop_id: input.shopId,
+      shopify_product_id: input.shopifyProductId,
+      shopify_variant_id: input.shopifyVariantId,
+      printify_product_id: input.printifyProductId,
+      printify_variant_id: String(match.id),
+      variant_title: shopifyVariant.title,
+    },
+    update: {
+      shopify_product_id: input.shopifyProductId,
+      printify_product_id: input.printifyProductId,
+      printify_variant_id: String(match.id),
+      variant_title: shopifyVariant.title,
+    },
+  });
+
+  return match;
+};
 
 const resolvePreviewImageScale = (input: {
   coverPrintArea: boolean;
@@ -204,7 +350,13 @@ export const previewGenerate = inngest.createFunction(
           getPrintifyProductDetails(payload.shop_id, printifyProductId),
       );
 
-      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      const previewVariant = await resolvePreviewVariant({
+        shopId: payload.shop_id,
+        shopifyProductId: payload.product_id,
+        shopifyVariantId: payload.variant_id,
+        printifyProductId,
+        printifyProduct,
+      });
       if (!previewVariant) {
         throw new NonRetriableError("No Printify variants available.");
       }
@@ -372,6 +524,7 @@ export const previewGenerate = inngest.createFunction(
               job_id: payload.job_id,
               shop_id: payload.shop_id,
               product_id: payload.product_id,
+              variant_id: payload.variant_id,
               template_id: payload.template_id,
               design_url: generationResult.designUrl,
               design_storage_key: generationResult.storageKey,
@@ -699,7 +852,13 @@ export const previewFakeGenerate = inngest.createFunction(
           getPrintifyProductDetails(payload.shop_id, printifyProductId),
       );
 
-      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      const previewVariant = await resolvePreviewVariant({
+        shopId: payload.shop_id,
+        shopifyProductId: payload.product_id,
+        shopifyVariantId: payload.variant_id,
+        printifyProductId,
+        printifyProduct,
+      });
       if (!previewVariant) {
         throw new NonRetriableError("No Printify variants available.");
       }
@@ -766,14 +925,63 @@ export const previewFakeGenerate = inngest.createFunction(
         wait(FAKE_GENERATION_DELAY_MS),
       );
 
-      const placeholderUrl = `${buildPlaceholderUrl(imageSize)}?text=Hello+World`;
+      // Generate fake image and upload to Supabase Storage (1:1 with real generation)
+      let fakeGenerationResult;
+      try {
+        fakeGenerationResult = await step.run("generate-fake-image", async () =>
+          generateFakeImage({
+            imageSize,
+            shopId: payload.shop_id,
+            text: "Fake Preview",
+          }),
+        );
+      } catch (error) {
+        const errorMessage =
+          error instanceof Error
+            ? error.message
+            : "Fake image generation failed";
+
+        // Mark job as failed immediately for UX feedback
+        await step.run("mark-fake-generation-failed", async () =>
+          updatePreviewJob({
+            jobId: payload.job_id,
+            shopId: payload.shop_id,
+            status: "failed",
+            errorMessage,
+          }),
+        );
+
+        logger.error(
+          {
+            shop_id: payload.shop_id,
+            job_id: payload.job_id,
+            error: errorMessage,
+            fake_generation: true,
+          },
+          "Fake image generation failed - marking job as failed",
+        );
+
+        captureEvent("generation.failed", {
+          shop_id: payload.shop_id,
+          job_id: payload.job_id,
+          template_id: payload.template_id,
+          product_id: payload.product_id,
+          preview_type: payload.type,
+          error: errorMessage,
+          fake_generation: true,
+        });
+
+        // Non-retryable error - fail fast for UX
+        throw new NonRetriableError(errorMessage);
+      }
 
       await step.run("mark-processing", async () =>
         updatePreviewJob({
           jobId: payload.job_id,
           shopId: payload.shop_id,
           status: "processing",
-          designUrl: placeholderUrl,
+          designUrl: fakeGenerationResult.designUrl,
+          designStorageKey: fakeGenerationResult.storageKey,
           errorMessage: null,
         }),
       );
@@ -784,7 +992,8 @@ export const previewFakeGenerate = inngest.createFunction(
             jobId: payload.job_id,
             shopId: payload.shop_id,
             status: "done",
-            designUrl: placeholderUrl,
+            designUrl: fakeGenerationResult.designUrl,
+            designStorageKey: fakeGenerationResult.storageKey,
             errorMessage: null,
           }),
         );
@@ -793,6 +1002,7 @@ export const previewFakeGenerate = inngest.createFunction(
           {
             shop_id: payload.shop_id,
             job_id: payload.job_id,
+            storage_key: fakeGenerationResult.storageKey,
             fake_generation: true,
           },
           "Preview fake generation completed",
@@ -815,9 +1025,10 @@ export const previewFakeGenerate = inngest.createFunction(
               job_id: payload.job_id,
               shop_id: payload.shop_id,
               product_id: payload.product_id,
+              variant_id: payload.variant_id,
               template_id: payload.template_id,
-              design_url: placeholderUrl,
-              design_storage_key: null,
+              design_url: fakeGenerationResult.designUrl,
+              design_storage_key: fakeGenerationResult.storageKey,
               cover_print_area: coverPrintArea,
               image_width: imageSize.width,
               image_height: imageSize.height,
@@ -844,7 +1055,7 @@ export const previewFakeGenerate = inngest.createFunction(
 
         return {
           job_id: payload.job_id,
-          design_url: placeholderUrl,
+          design_url: fakeGenerationResult.designUrl,
         };
       }
 
@@ -853,7 +1064,8 @@ export const previewFakeGenerate = inngest.createFunction(
           jobId: payload.job_id,
           shopId: payload.shop_id,
           status: "creating_mockups",
-          designUrl: placeholderUrl,
+          designUrl: fakeGenerationResult.designUrl,
+          designStorageKey: fakeGenerationResult.storageKey,
           errorMessage: null,
         }),
       );
@@ -866,7 +1078,7 @@ export const previewFakeGenerate = inngest.createFunction(
 
       const mockups = await step.run("generate-mockups", async () =>
         generateMockups({
-          designUrl: placeholderUrl,
+          designUrl: fakeGenerationResult.designUrl,
           blueprintId: printifyProduct.blueprintId,
           printProviderId: printifyProduct.printProviderId,
           variants: [previewVariant],
@@ -887,7 +1099,8 @@ export const previewFakeGenerate = inngest.createFunction(
           jobId: payload.job_id,
           shopId: payload.shop_id,
           status: "done",
-          designUrl: placeholderUrl,
+          designUrl: fakeGenerationResult.designUrl,
+          designStorageKey: fakeGenerationResult.storageKey,
           mockupUrls: mockups.mockupUrls,
           tempPrintifyProductId: mockups.tempProductId,
           errorMessage: null,
@@ -899,6 +1112,7 @@ export const previewFakeGenerate = inngest.createFunction(
           shop_id: payload.shop_id,
           job_id: payload.job_id,
           mockup_count: mockups.mockupUrls.length,
+          storage_key: fakeGenerationResult.storageKey,
           fake_generation: true,
         },
         "Preview fake generation completed",
@@ -906,7 +1120,7 @@ export const previewFakeGenerate = inngest.createFunction(
 
       return {
         job_id: payload.job_id,
-        design_url: placeholderUrl,
+        design_url: fakeGenerationResult.designUrl,
         mockup_urls: mockups.mockupUrls,
       };
     } catch (error) {
@@ -1088,7 +1302,13 @@ export const mockupsRetry = inngest.createFunction(
           getPrintifyProductDetails(payload.shop_id, printifyProductId),
       );
 
-      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      const previewVariant = await resolvePreviewVariant({
+        shopId: payload.shop_id,
+        shopifyProductId: job.productId,
+        shopifyVariantId: job.variantId ?? undefined,
+        printifyProductId,
+        printifyProduct,
+      });
       if (!previewVariant) {
         throw new NonRetriableError("No Printify variants available.");
       }
@@ -1222,6 +1442,7 @@ const mockupsGeneratePayloadSchema = z.object({
   job_id: z.string().min(1),
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
+  variant_id: z.string().optional(),
   template_id: z.string().min(1),
   design_url: z.string().url(),
   design_storage_key: z.string().nullable().optional(),
@@ -1296,7 +1517,13 @@ export const mockupsGenerate = inngest.createFunction(
           getPrintifyProductDetails(payload.shop_id, printifyProductId),
       );
 
-      const previewVariant = selectPreviewVariant(printifyProduct.variants);
+      const previewVariant = await resolvePreviewVariant({
+        shopId: payload.shop_id,
+        shopifyProductId: payload.product_id,
+        shopifyVariantId: payload.variant_id,
+        printifyProductId,
+        printifyProduct,
+      });
       if (!previewVariant) {
         throw new NonRetriableError("No Printify variants available.");
       }

@@ -164,7 +164,8 @@ export const useStepperStore = create<StepperState>((set) => ({
       }
       return { isOpen: false };
     }),
-  setConfig: (config) => set({ config }),
+  setConfig: (config) =>
+    set((state) => ({ config: { ...state.config, ...config } })),
   setTemplateConfig: (templateConfig) => set({ templateConfig }),
   setFile: (file) => set({ file }),
   setGraphicFile: (graphicFile) => set({ graphicFile }),

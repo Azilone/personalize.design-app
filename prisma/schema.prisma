@@ -195,6 +195,24 @@ model ShopProduct {
   @@map("shop_products")
 }
 
+model ShopProductVariant {
+  id                  String   @id @default(cuid())
+  shop_id             String
+  shopify_product_id  String
+  shopify_variant_id  String
+  printify_product_id String
+  printify_variant_id String
+  variant_title       String
+  synced_at           DateTime @default(now())
+  created_at          DateTime @default(now())
+  updated_at          DateTime @updatedAt
+
+  @@index([shop_id])
+  @@index([shop_id, shopify_product_id])
+  @@unique([shop_id, shopify_variant_id])
+  @@map("shop_product_variants")
+}
+
 model ProductTemplateAssignment {
   id                       String   @id @default(cuid())
   shop_id                  String
@@ -215,6 +233,7 @@ model PreviewJob {
   job_id                   String
   shop_id                  String
   product_id               String
+  variant_id               String?
   template_id              String
   type                     PreviewJobType
 
@@ -340,11 +359,30 @@ model OrderLineProcessing {
   final_asset_error_code  String?
   final_asset_error_message String?
 
+  // Printify fulfillment tracking (Story 7.3)
+  printify_order_id           String?   // Printify order ID from submission response
+  printify_order_number       Int?      // Printify order number for display
+  printify_submit_status      String?   // pending, succeeded, failed
+  printify_submit_idempotency_key String? @unique // Idempotency key for submission
+  printify_submitted_at       DateTime? // When submitted to Printify
+  printify_error_code         String?   // Error code if submission failed
+  printify_error_message      String?   // Error message if submission failed
+  printify_order_status        String?  // Printify order status from webhooks
+  printify_order_status_updated_at DateTime?
+  printify_last_event          String?
+  printify_last_event_at       DateTime?
+  printify_tracking_number     String?
+  printify_tracking_url        String?
+  printify_tracking_carrier    String?
+  printify_shipped_at          DateTime?
+  printify_delivered_at        DateTime?
+
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
 
   @@index([shop_id, order_line_id])
   @@index([status])
+  @@index([printify_submit_status])
   @@map("order_line_processing")
 }
 

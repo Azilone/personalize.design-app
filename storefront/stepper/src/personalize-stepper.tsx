@@ -30,7 +30,9 @@ const initializeFromDataset = (mount: HTMLElement) => {
   const variantId = mount.dataset.variantGid || mount.dataset.variantId;
   const productTitle = mount.dataset.productTitle;
   const variantTitle = mount.dataset.variantTitle;
-  const productImageUrl = mount.dataset.productImage;
+  // Use variant image if available, otherwise fall back to product image
+  const variantImageUrl = mount.dataset.variantImage;
+  const productImageUrl = variantImageUrl || mount.dataset.productImage;
   const templateIdRaw = mount.dataset.templateId;
   const templateId = templateIdRaw ? templateIdRaw : undefined;
   const personalizationEnabledRaw = mount.dataset.personalizationEnabled;
@@ -112,6 +114,47 @@ const mountStepper = (mount: StepperMount) => {
   mount.__pd_stepper_root = root;
   roots.set(mount, root);
   root.render(<StepperApp />);
+
+  // Listen for variant changes from the parent container
+  const container = mount.closest("[data-pd-stepper-container]");
+  if (container) {
+    container.addEventListener("pd:variantchange", (event: Event) => {
+      const customEvent = event as CustomEvent<{
+        variantId: string;
+        variantGid: string;
+        variantTitle: string;
+        variantImage?: string;
+      }>;
+
+      const { variantId, variantGid, variantTitle, variantImage } =
+        customEvent.detail;
+
+      // Update the dataset
+      mount.dataset.variantId = variantId;
+      mount.dataset.variantGid = variantGid;
+      mount.dataset.variantTitle = variantTitle;
+      if (variantImage) {
+        mount.dataset.variantImage = variantImage;
+      }
+
+      // Update the Zustand store
+      useStepperStore.getState().setConfig({
+        variantId: variantGid || variantId,
+        variantTitle,
+        // Use variant image if available, otherwise keep existing product image
+        productImageUrl: variantImage || mount.dataset.productImage,
+      });
+
+      if (import.meta.env?.DEV) {
+        // eslint-disable-next-line no-console
+        console.info("[pd-stepper] Variant updated:", {
+          variantId,
+          variantTitle,
+          variantImage: variantImage ? "present" : "not present",
+        });
+      }
+    });
+  }
 };
 
 const mountAll = () => {

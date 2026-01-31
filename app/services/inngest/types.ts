@@ -67,6 +67,7 @@ export const previewGeneratePayloadSchema = z.object({
   job_id: z.string().min(1),
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
+  variant_id: z.string().optional(),
   template_id: z.string().min(1),
   type: z.enum(["buyer", "merchant", "template_test"]),
   image_url: z.string().url().optional(),
@@ -82,6 +83,7 @@ export const previewFakeGeneratePayloadSchema = z.object({
   job_id: z.string().min(1),
   shop_id: z.string().min(1),
   product_id: z.string().min(1),
+  variant_id: z.string().optional(),
   template_id: z.string().min(1),
   type: z.enum(["buyer", "merchant", "template_test"]),
   image_url: z.string().url().optional(),
@@ -108,3 +110,50 @@ export const productsSyncPayloadSchema = z.object({
 });
 
 export type ProductsSyncPayload = z.infer<typeof productsSyncPayloadSchema>;
+
+// ============================================================================
+// Fulfillment Payloads (Story 7.3)
+// ============================================================================
+
+/**
+ * Shipping address for Printify submission.
+ */
+export const fulfillmentShippingAddressSchema = z.object({
+  first_name: z.string().nullable(),
+  last_name: z.string().nullable(),
+  address1: z.string().nullable(),
+  address2: z.string().nullable(),
+  city: z.string().nullable(),
+  region: z.string().nullable(), // province/state
+  zip: z.string().nullable(),
+  country_code: z.string().nullable(),
+  phone: z.string().nullable(),
+  email: z.string().nullable(),
+});
+
+export type FulfillmentShippingAddress = z.infer<
+  typeof fulfillmentShippingAddressSchema
+>;
+
+/**
+ * Payload for order line fulfillment processing (extended with shipping for Story 7.3).
+ */
+export const processOrderLinePayloadSchema = z.object({
+  shop_id: z.string().min(1),
+  order_id: z.string().min(1),
+  order_line_id: z.string().min(1),
+  personalization_id: z.string().min(1),
+  idempotency_key: z.string().min(1),
+  billable_event_idempotency_key: z.string().min(1),
+  plan_status: z.string(),
+  should_charge_order_fee: z.boolean(),
+  // Extended for Story 7.3 - shipping info for Printify
+  product_id: z.string().optional(),
+  variant_id: z.number().optional(),
+  quantity: z.number().optional(),
+  shipping_address: fulfillmentShippingAddressSchema.optional(),
+});
+
+export type ProcessOrderLinePayload = z.infer<
+  typeof processOrderLinePayloadSchema
+>;

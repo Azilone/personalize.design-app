@@ -1,6 +1,7 @@
 import { validateBrowserSupport } from "./browser-support";
 
 export const MAX_SIZE = 10 * 1024 * 1024; // 10MB
+export const MAX_IMAGE_DIMENSION = 4096; // fal.ai max dimension
 export const ALLOWED_TYPES = [
   "image/jpeg",
   "image/png",
@@ -8,6 +9,32 @@ export const ALLOWED_TYPES = [
   "image/heic",
   "image/avif",
 ];
+
+/**
+ * Gets image dimensions from a file.
+ * @param file - The image file
+ * @returns Promise resolving to { width, height }
+ */
+export function getImageDimensions(
+  file: File,
+): Promise<{ width: number; height: number }> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve({ width: img.width, height: img.height });
+    };
+
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
+
+    img.src = url;
+  });
+}
 
 /**
  * Validates a file on the client side.
@@ -32,6 +59,27 @@ export async function validateFile(file: File): Promise<string | null> {
   // Check file size
   if (file.size > MAX_SIZE) {
     return "File size exceeds 10MB limit.";
+  }
+
+  // Check image dimensions
+  try {
+    const dimensions = await getImageDimensions(file);
+    if (
+      dimensions.width > MAX_IMAGE_DIMENSION ||
+      dimensions.height > MAX_IMAGE_DIMENSION
+    ) {
+      return `Image dimensions are too large (${dimensions.width}x${dimensions.height}). Maximum allowed is ${MAX_IMAGE_DIMENSION}x${MAX_IMAGE_DIMENSION} pixels.`;
+    }
+  } catch {
+    // If we can't read dimensions, we'll let the server handle it
+    // but log this for debugging
+    if (import.meta.env?.DEV) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        "[validation] Could not read image dimensions for",
+        file.name,
+      );
+    }
   }
 
   return null;

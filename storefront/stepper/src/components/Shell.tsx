@@ -692,6 +692,9 @@ export const Shell = () => {
     const formData = new FormData();
     formData.append("shop_id", config.shopDomain);
     formData.append("product_id", config.productId);
+    if (config.variantId) {
+      formData.append("variant_id", config.variantId);
+    }
     formData.append("template_id", config.templateId);
     formData.append("session_id", jobId);
     formData.append("image_file", file);
@@ -856,6 +859,9 @@ export const Shell = () => {
       const formData = new FormData();
       formData.append("shop_id", config.shopDomain);
       formData.append("product_id", config.productId);
+      if (config.variantId) {
+        formData.append("variant_id", config.variantId);
+      }
       formData.append("template_id", config.templateId);
       formData.append("session_id", activeSessionId);
       formData.append("previous_job_id", previewJobId);

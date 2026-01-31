@@ -12,6 +12,7 @@ import {
 
 export type PrintifyProductVariant = {
   id: number;
+  title: string;
   price: number;
   isEnabled: boolean;
 };
@@ -24,6 +25,7 @@ export type PrintifyProductDetails = {
 
 const printifyProductVariantSchema = z.object({
   id: z.number(),
+  title: z.string(),
   price: z.number().optional(),
   is_enabled: z.boolean().optional(),
 });
@@ -54,10 +56,7 @@ export const getPrintifyProductDetails = async (
     { method: "GET" },
   );
 
-  await assertPrintifyOk(
-    response,
-    "Unable to fetch Printify product details.",
-  );
+  await assertPrintifyOk(response, "Unable to fetch Printify product details.");
 
   const payload = (await response.json()) as unknown;
   const parsed = printifyProductDetailsSchema.safeParse(payload);
@@ -70,6 +69,7 @@ export const getPrintifyProductDetails = async (
 
   const variants = parsed.data.variants.map((variant) => ({
     id: variant.id,
+    title: variant.title,
     price: variant.price ?? 0,
     isEnabled: variant.is_enabled ?? true,
   }));

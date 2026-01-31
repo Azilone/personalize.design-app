@@ -88,6 +88,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const {
     shop_id,
     product_id,
+    variant_id,
     template_id,
     session_id,
     image_file,
@@ -250,6 +251,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       jobId,
       shopId,
       productId: normalizedProductId,
+      variantId: variant_id,
       templateId: template_id,
       type: "buyer",
       sessionId: session_id,
@@ -263,6 +265,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       job_id: jobId,
       shop_id: shopId,
       product_id: normalizedProductId,
+      variant_id,
       template_id,
       type: "buyer" as const,
       image_url: uploadResult.readUrl,

@@ -299,6 +299,7 @@ export async function uploadFileAndGetReadUrl(
   sizeBytes: number,
   fileBuffer: Buffer,
   contentType: string,
+  bucket: string = GENERATED_DESIGNS_BUCKET,
 ): Promise<UploadResult> {
   const extension = getFileExtension(originalFilename);
   validateFileType(extension);
@@ -326,7 +327,7 @@ export async function uploadFileAndGetReadUrl(
   }
 
   const { error: uploadError } = await supabase.storage
-    .from(TEST_UPLOADS_BUCKET)
+    .from(bucket)
     .upload(storageKey, fileBuffer, {
       contentType,
       upsert: true,
@@ -337,7 +338,7 @@ export async function uploadFileAndGetReadUrl(
   }
 
   const { data: readData, error: readError } = await supabase.storage
-    .from(TEST_UPLOADS_BUCKET)
+    .from(bucket)
     .createSignedUrl(storageKey, SIGNED_URL_EXPIRY_SECONDS);
 
   if (readError || !readData?.signedUrl) {
@@ -357,7 +358,7 @@ export async function uploadFileAndGetReadUrl(
 
 export async function createSignedReadUrl(
   storageKey: string,
-  bucket: string = TEST_UPLOADS_BUCKET,
+  bucket: string = GENERATED_DESIGNS_BUCKET,
 ): Promise<SignedReadUrlResult> {
   const expiresAt = new Date(Date.now() + SIGNED_URL_EXPIRY_SECONDS * 1000);
   const supabase = getSupabaseClient();
@@ -398,13 +399,13 @@ export async function createSignedReadUrl(
  * Check if a file exists in storage.
  *
  * @param storageKey - The storage key/path to check
- * @param bucket - The bucket name (defaults to TEST_UPLOADS_BUCKET)
+ * @param bucket - The bucket name (defaults to GENERATED_DESIGNS_BUCKET)
  * @returns True if file exists, false otherwise
  * @throws StorageError on storage errors
  */
 export async function fileExists(
   storageKey: string,
-  bucket: string = TEST_UPLOADS_BUCKET,
+  bucket: string = GENERATED_DESIGNS_BUCKET,
 ): Promise<boolean> {
   const supabase = getSupabaseClient();
 

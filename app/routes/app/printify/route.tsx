@@ -34,6 +34,7 @@ import {
   clearPrintifyIntegration,
   type PrintifyIntegration,
 } from "../../../services/printify/integration.server";
+import { ensurePrintifyWebhooks } from "../../../services/printify/webhooks.server";
 
 type LoaderData = {
   integration: Omit<PrintifyIntegration, "createdAt" | "updatedAt"> | null;
@@ -201,6 +202,38 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       printifyShopTitle: selectedShop.shopTitle,
       printifySalesChannel: selectedShop.salesChannel,
     });
+
+    const baseUrl = process.env.SHOPIFY_APP_URL ?? new URL(request.url).origin;
+    if (baseUrl) {
+      try {
+        await ensurePrintifyWebhooks({
+          token,
+          printifyShopId: selectedShop.shopId,
+          baseUrl,
+          topics: [
+            "order:created",
+            "order:updated",
+            "order:shipment:created",
+            "order:shipment:delivered",
+          ],
+          secret: process.env.PRINTIFY_WEBHOOK_SECRET || undefined,
+        });
+      } catch (error) {
+        logger.warn(
+          {
+            shop_id: shopId,
+            printify_shop_id: selectedShop.shopId,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Printify connected but webhook setup failed",
+        );
+      }
+    } else {
+      logger.warn(
+        { shop_id: shopId },
+        "SHOPIFY_APP_URL not set; skipping Printify webhook setup",
+      );
+    }
 
     logger.info(
       { shop_id: shopId, printify_shop_id: selectedShop.shopId },

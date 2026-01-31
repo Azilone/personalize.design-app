@@ -254,7 +254,7 @@ describe("Orders Paid Webhook Integration", () => {
 
       // Import and test schema validation
       const { OrderPaidPayloadSchema } =
-        await import("../../../schemas/webhooks");
+        await import("../../../../schemas/webhooks");
       const result = OrderPaidPayloadSchema.safeParse(validPayload);
 
       expect(result.success).toBe(true);
@@ -273,7 +273,7 @@ describe("Orders Paid Webhook Integration", () => {
       };
 
       const { OrderPaidPayloadSchema } =
-        await import("../../../schemas/webhooks");
+        await import("../../../../schemas/webhooks");
       const result = OrderPaidPayloadSchema.safeParse(invalidPayload);
 
       expect(result.success).toBe(false);

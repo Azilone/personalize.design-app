@@ -9,6 +9,7 @@ export type CreatePreviewJobParams = {
   jobId: string;
   shopId: string;
   productId: string;
+  variantId?: string;
   templateId: string;
   type: PreviewJobType;
   sessionId?: string;
@@ -35,6 +36,7 @@ export type PreviewJobRecord = {
   jobId: string;
   shopId: string;
   productId: string;
+  variantId: string | null;
   templateId: string;
   type: PreviewJobType;
   inputImageUrl: string | null;
@@ -84,6 +86,7 @@ const mapPreviewJob = (record: {
   job_id: string;
   shop_id: string;
   product_id: string;
+  variant_id: string | null;
   template_id: string;
   type: PreviewJobType;
   input_image_url: string | null;
@@ -105,6 +108,7 @@ const mapPreviewJob = (record: {
   jobId: record.job_id,
   shopId: record.shop_id,
   productId: record.product_id,
+  variantId: record.variant_id ?? null,
   templateId: record.template_id,
   type: record.type,
   inputImageUrl: record.input_image_url,
@@ -145,6 +149,7 @@ export const createPreviewJob = async (
       },
       data: {
         product_id: params.productId,
+        variant_id: params.variantId ?? existing.variant_id ?? null,
         template_id: params.templateId,
         type: params.type,
         input_image_url: params.inputImageUrl ?? null,
@@ -170,6 +175,7 @@ export const createPreviewJob = async (
       job_id: params.jobId,
       shop_id: params.shopId,
       product_id: params.productId,
+      variant_id: params.variantId ?? null,
       template_id: params.templateId,
       type: params.type,
       input_image_url: params.inputImageUrl ?? null,

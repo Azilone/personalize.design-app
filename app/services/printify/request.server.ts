@@ -12,22 +12,48 @@ export const fetchPrintify = async (
   token: string,
   init: RequestInit,
 ): Promise<Response> => {
-  try {
-    return await fetch(url, {
-      ...init,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "User-Agent": getPrintifyUserAgent(),
-        Accept: "application/json",
-        ...(init.headers ?? {}),
-      },
-    });
-  } catch {
-    throw new PrintifyRequestError(
-      "unexpected_response",
-      "Unable to reach Printify API.",
-    );
+  const delaysMs = [0, 400, 1200];
+  let lastError: unknown;
+
+  for (const delay of delaysMs) {
+    if (delay) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+
+    try {
+      const response = await fetch(url, {
+        ...init,
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "User-Agent": getPrintifyUserAgent(),
+          Accept: "application/json",
+          ...(init.headers ?? {}),
+        },
+      });
+
+      if (response.status === 429 || response.status >= 500) {
+        lastError = new PrintifyRequestError(
+          response.status === 429 ? "rate_limited" : "unexpected_response",
+          "Temporary Printify error.",
+          response.status,
+        );
+        continue;
+      }
+
+      return response;
+    } catch (error) {
+      lastError = error;
+    }
   }
+
+  if (lastError instanceof PrintifyRequestError) {
+    throw lastError;
+  }
+
+  throw new PrintifyRequestError(
+    "unexpected_response",
+    "Unable to reach Printify API.",
+  );
 };
 
 export const assertPrintifyOk = async (
