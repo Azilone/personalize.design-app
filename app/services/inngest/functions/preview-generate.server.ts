@@ -18,6 +18,7 @@ import {
 } from "../../previews/preview-jobs.server";
 import { getTemplate } from "../../templates/templates.server";
 import { calculateFalImageSize } from "../../fal/image-size.server";
+import { buildPrintAreaTransform } from "../../printify/print-area-transform.server";
 import { getPrintifyProductDetails } from "../../printify/product-details.server";
 import type { PrintifyProductDetails } from "../../printify/product-details.server";
 import type { PrintifyProductVariant } from "../../printify/product-details.server";
@@ -45,7 +46,7 @@ import {
   getBillableEventByIdempotencyKey,
 } from "../../shopify/billable-events.server";
 
-const FAKE_GENERATION_DELAY_MS = 5000;
+const FAKE_GENERATION_DELAY_MS = 1500;
 
 const wait = (ms: number): Promise<void> =>
   new Promise((resolve) => setTimeout(resolve, ms));
@@ -196,22 +197,6 @@ const resolvePreviewVariant = async (input: {
   return match;
 };
 
-const resolvePreviewImageScale = (input: {
-  coverPrintArea: boolean;
-  imageSize: { width: number; height: number };
-  printAreaDimensions: { width: number; height: number } | null;
-}): number | null => {
-  if (input.coverPrintArea || !input.printAreaDimensions) {
-    return null;
-  }
-
-  const imageAspectRatio = input.imageSize.width / input.imageSize.height;
-  const maxScaleByHeight =
-    (input.printAreaDimensions.height * imageAspectRatio) /
-    input.printAreaDimensions.width;
-
-  return Math.min(1, maxScaleByHeight);
-};
 
 const buildPrompt = (
   templatePrompt: string,
@@ -300,8 +285,6 @@ export const previewGenerate = inngest.createFunction(
     }
 
     const payload = parsed.data;
-    const coverPrintArea =
-      payload.type === "buyer" ? false : (payload.cover_print_area ?? false);
     const inputImageUrl = resolveInputImageUrl(payload);
     const inputText = resolveInputText(payload);
     const variableValues = payload.variable_values ?? {};
@@ -326,6 +309,9 @@ export const previewGenerate = inngest.createFunction(
       if (!template?.prompt) {
         throw new NonRetriableError("Template prompt is missing.");
       }
+
+      const coverPrintArea =
+        template?.coverPrintArea ?? payload.cover_print_area ?? false;
 
       const shopProduct = await step.run("load-shop-product", async () =>
         prisma.shopProduct.findUnique({
@@ -567,7 +553,7 @@ export const previewGenerate = inngest.createFunction(
         }),
       );
 
-      const previewImageScale = resolvePreviewImageScale({
+      const printAreaTransform = buildPrintAreaTransform({
         coverPrintArea,
         imageSize,
         printAreaDimensions,
@@ -581,7 +567,10 @@ export const previewGenerate = inngest.createFunction(
           variants: [previewVariant],
           printArea: {
             position: printAreaDimensions?.position ?? "front",
-            scale: previewImageScale ?? undefined,
+            scale: printAreaTransform.scale,
+            x: printAreaTransform.x,
+            y: printAreaTransform.y,
+            angle: printAreaTransform.angle,
             width: printAreaDimensions?.width ?? imageSize.width,
             height: printAreaDimensions?.height ?? imageSize.height,
           },
@@ -600,6 +589,11 @@ export const previewGenerate = inngest.createFunction(
           designStorageKey: generationResult.storageKey,
           mockupUrls: mockups.mockupUrls,
           tempPrintifyProductId: mockups.tempProductId,
+          printifyUploadId: mockups.uploadId,
+          printAreaX: printAreaTransform.x,
+          printAreaY: printAreaTransform.y,
+          printAreaScale: printAreaTransform.scale,
+          printAreaAngle: printAreaTransform.angle,
           errorMessage: null,
         }),
       );
@@ -809,8 +803,6 @@ export const previewFakeGenerate = inngest.createFunction(
     }
 
     const payload = parsed.data;
-    const coverPrintArea =
-      payload.type === "buyer" ? false : (payload.cover_print_area ?? false);
     const inputImageUrl = resolveInputImageUrl(payload);
     const inputText = resolveInputText(payload);
     const variableValues = payload.variable_values ?? {};
@@ -828,6 +820,9 @@ export const previewFakeGenerate = inngest.createFunction(
       if (!template?.prompt) {
         throw new NonRetriableError("Template prompt is missing.");
       }
+
+      const coverPrintArea =
+        template?.coverPrintArea ?? payload.cover_print_area ?? false;
 
       const shopProduct = await step.run("load-shop-product", async () =>
         prisma.shopProduct.findUnique({
@@ -1070,7 +1065,7 @@ export const previewFakeGenerate = inngest.createFunction(
         }),
       );
 
-      const previewImageScale = resolvePreviewImageScale({
+      const printAreaTransform = buildPrintAreaTransform({
         coverPrintArea: effectiveCoverPrintArea,
         imageSize,
         printAreaDimensions,
@@ -1084,7 +1079,10 @@ export const previewFakeGenerate = inngest.createFunction(
           variants: [previewVariant],
           printArea: {
             position: printAreaDimensions?.position ?? "front",
-            scale: previewImageScale ?? undefined,
+            scale: printAreaTransform.scale,
+            x: printAreaTransform.x,
+            y: printAreaTransform.y,
+            angle: printAreaTransform.angle,
             width: printAreaDimensions?.width ?? imageSize.width,
             height: printAreaDimensions?.height ?? imageSize.height,
           },
@@ -1103,6 +1101,11 @@ export const previewFakeGenerate = inngest.createFunction(
           designStorageKey: fakeGenerationResult.storageKey,
           mockupUrls: mockups.mockupUrls,
           tempPrintifyProductId: mockups.tempProductId,
+          printifyUploadId: mockups.uploadId,
+          printAreaX: printAreaTransform.x,
+          printAreaY: printAreaTransform.y,
+          printAreaScale: printAreaTransform.scale,
+          printAreaAngle: printAreaTransform.angle,
           errorMessage: null,
         }),
       );
@@ -1360,6 +1363,7 @@ export const mockupsRetry = inngest.createFunction(
           status: "done",
           mockupUrls: mockups.mockupUrls,
           tempPrintifyProductId: mockups.tempProductId,
+          printifyUploadId: mockups.uploadId,
           errorMessage: null,
         }),
       );
@@ -1537,7 +1541,7 @@ export const mockupsGenerate = inngest.createFunction(
         }),
       );
 
-      const previewImageScale = resolvePreviewImageScale({
+      const printAreaTransform = buildPrintAreaTransform({
         coverPrintArea: payload.cover_print_area,
         imageSize: { width: payload.image_width, height: payload.image_height },
         printAreaDimensions,
@@ -1551,7 +1555,10 @@ export const mockupsGenerate = inngest.createFunction(
           variants: [previewVariant],
           printArea: {
             position: printAreaDimensions?.position ?? "front",
-            scale: previewImageScale ?? undefined,
+            scale: printAreaTransform.scale,
+            x: printAreaTransform.x,
+            y: printAreaTransform.y,
+            angle: printAreaTransform.angle,
             width: printAreaDimensions?.width ?? payload.image_width,
             height: printAreaDimensions?.height ?? payload.image_height,
           },
@@ -1570,6 +1577,11 @@ export const mockupsGenerate = inngest.createFunction(
           designStorageKey: payload.design_storage_key,
           mockupUrls: mockups.mockupUrls,
           tempPrintifyProductId: mockups.tempProductId,
+          printifyUploadId: mockups.uploadId,
+          printAreaX: printAreaTransform.x,
+          printAreaY: printAreaTransform.y,
+          printAreaScale: printAreaTransform.scale,
+          printAreaAngle: printAreaTransform.angle,
           errorMessage: null,
         }),
       );

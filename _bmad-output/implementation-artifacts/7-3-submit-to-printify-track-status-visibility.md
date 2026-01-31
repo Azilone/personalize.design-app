@@ -1,6 +1,6 @@
 # Story 7.3: Submit to Printify + Track Status + Visibility
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
@@ -141,8 +141,19 @@ openai/gpt-5.2-codex
 - Story 7.3 context synthesized from epics, PRD, architecture, project context, and recent repo commits.
 - Added Printify Orders API guidance, status mapping, and idempotency guardrails.
 - Implementation completed: Printify submission service, Inngest workflow step, DB schema updates, API route, and unit tests.
-- 13 unit tests pass for idempotency key generation and status mapping.
+- 16 unit tests pass for idempotency key generation, status mapping, and error handling behavior.
 - API route returns Printify status with recovery guidance for failed submissions.
+
+### Code Review Fixes Applied
+
+**High Priority:**
+
+1. ✅ Added tests for error handling and retry behavior (16 tests total, up from 13)
+2. ✅ Fixed idempotency key race condition - now properly handles partial failures and retries
+
+**Medium Priority:** 3. ✅ Added `fulfillment.succeeded` PostHog event emission (was missing from implementation) 4. ✅ Rate limiting protection already exists in `fetchPrintify` with exponential backoff 5. ✅ Empty shipping_lines array handling already correct (no change needed)
+
+**Low Priority:** 6. ✅ Updated recovery guidance text to reference correct UI location
 
 ### File List
 

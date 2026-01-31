@@ -246,6 +246,11 @@ model PreviewJob {
   design_storage_key       String?
   mockup_urls              Json?
   temp_printify_product_id String?
+  printify_upload_id        String?
+  print_area_x             Float?
+  print_area_y             Float?
+  print_area_scale         Float?
+  print_area_angle         Float?
 
   session_id               String?
 

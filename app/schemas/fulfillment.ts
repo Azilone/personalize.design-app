@@ -188,7 +188,7 @@ export const PRINTIFY_RECOVERY_GUIDANCE: Record<
   string
 > = {
   printify_not_configured:
-    "Printify integration is not configured. Go to Settings and connect your Printify account.",
+    "Printify integration is not configured. Go to the Printify section in the app and connect your Printify account.",
   printify_api_error:
     "Printify API returned an error. This is usually temporary. Retry the order or contact support if the issue persists.",
   printify_rate_limited:

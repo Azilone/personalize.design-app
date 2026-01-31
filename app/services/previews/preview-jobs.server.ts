@@ -27,6 +27,11 @@ export type UpdatePreviewJobParams = {
   designStorageKey?: string | null;
   mockupUrls?: string[] | null;
   tempPrintifyProductId?: string | null;
+  printifyUploadId?: string | null;
+  printAreaX?: number | null;
+  printAreaY?: number | null;
+  printAreaScale?: number | null;
+  printAreaAngle?: number | null;
   errorMessage?: string | null;
   mockupErrorMessage?: string | null;
 };
@@ -47,6 +52,11 @@ export type PreviewJobRecord = {
   designStorageKey: string | null;
   mockupUrls: string[];
   tempPrintifyProductId: string | null;
+  printifyUploadId: string | null;
+  printAreaX: number | null;
+  printAreaY: number | null;
+  printAreaScale: number | null;
+  printAreaAngle: number | null;
   sessionId: string | null;
   status: PreviewJobStatus;
   errorMessage: string | null;
@@ -97,6 +107,11 @@ const mapPreviewJob = (record: {
   design_storage_key: string | null;
   mockup_urls: unknown;
   temp_printify_product_id: string | null;
+  printify_upload_id: string | null;
+  print_area_x: number | null;
+  print_area_y: number | null;
+  print_area_scale: number | null;
+  print_area_angle: number | null;
   session_id: string | null;
   status: PreviewJobStatus;
   error_message: string | null;
@@ -119,6 +134,11 @@ const mapPreviewJob = (record: {
   designStorageKey: record.design_storage_key,
   mockupUrls: normalizeMockupUrls(record.mockup_urls),
   tempPrintifyProductId: record.temp_printify_product_id,
+  printifyUploadId: record.printify_upload_id,
+  printAreaX: record.print_area_x,
+  printAreaY: record.print_area_y,
+  printAreaScale: record.print_area_scale,
+  printAreaAngle: record.print_area_angle,
   sessionId: record.session_id,
   status: record.status,
   errorMessage: record.error_message,
@@ -159,8 +179,13 @@ export const createPreviewJob = async (
         design_url: null,
         design_storage_key: null,
         mockup_urls: Prisma.DbNull,
-        temp_printify_product_id: null,
-        session_id: params.sessionId ?? existing.session_id ?? null,
+      temp_printify_product_id: null,
+      printify_upload_id: null,
+      print_area_x: null,
+      print_area_y: null,
+      print_area_scale: null,
+      print_area_angle: null,
+      session_id: params.sessionId ?? existing.session_id ?? null,
         status: "queued",
         error_message: null,
         mockup_error_message: null,
@@ -186,6 +211,11 @@ export const createPreviewJob = async (
       design_storage_key: null,
       mockup_urls: Prisma.DbNull,
       temp_printify_product_id: null,
+      printify_upload_id: null,
+      print_area_x: null,
+      print_area_y: null,
+      print_area_scale: null,
+      print_area_angle: null,
       session_id: params.sessionId ?? null,
       status: "queued",
       error_message: null,
@@ -214,6 +244,11 @@ export const updatePreviewJob = async (
           ? Prisma.DbNull
           : (params.mockupUrls ?? undefined),
       temp_printify_product_id: params.tempPrintifyProductId ?? undefined,
+      printify_upload_id: params.printifyUploadId ?? undefined,
+      print_area_x: params.printAreaX ?? undefined,
+      print_area_y: params.printAreaY ?? undefined,
+      print_area_scale: params.printAreaScale ?? undefined,
+      print_area_angle: params.printAreaAngle ?? undefined,
       error_message: params.errorMessage ?? undefined,
     },
   });

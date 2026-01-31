@@ -30,7 +30,7 @@ import logger from "../../../lib/logger";
 import { captureEvent } from "../../../lib/posthog.server";
 
 const DEV_PLACEHOLDER_PREVIEW_URL =
-  "https://placehold.co/600x400?text=Hello+World";
+  "https://placehold.co/600x400?text=600x400";
 
 const parseVariableValues = (value?: string | null): Record<string, string> => {
   if (!value) {
@@ -129,7 +129,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
-  const template = await getTemplate(template_id, shopId);
+   const template = await getTemplate(template_id, shopId);
   const costUsd =
     MVP_PRICE_USD_PER_GENERATION +
     (template?.removeBackgroundEnabled ? REMOVE_BG_PRICE_USD : 0);
@@ -200,7 +200,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
   }
 
-  const jobId = session_id;
+  const jobId = crypto.randomUUID();
 
   try {
     const variableValues = parseVariableValues(variable_values_json);
@@ -258,7 +258,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       inputImageUrl: uploadResult.readUrl,
       inputText: text_input || undefined,
       variableValues,
-      coverPrintArea: false,
+      coverPrintArea: template?.coverPrintArea ?? false,
     });
 
     const basePayload = {

@@ -32,8 +32,13 @@ export interface SubmitOrderInput {
   orderId: string;
   orderLineId: string;
   assetUrl: string;
+  printifyUploadId?: string | null;
   idempotencyKey: string;
   printAreaPosition?: string;
+  printAreaX?: number;
+  printAreaY?: number;
+  printAreaScale?: number;
+  printAreaAngle?: number;
   shippingMethodId?: number;
   // Customer details for Printify order
   customer: {
@@ -52,6 +57,8 @@ export interface SubmitOrderInput {
   };
   // Product/variant info for Printify
   printifyProductId: string;
+  printifyBlueprintId: number;
+  printifyPrintProviderId: number;
   variantId: number;
   quantity: number;
 }
@@ -65,6 +72,7 @@ export interface SubmitOrderResult {
   retryable?: boolean;
 }
 
+
 // ============================================================================
 // Printify API Response Schemas
 // ============================================================================
@@ -77,6 +85,118 @@ const printifyOrderResponseSchema = z.object({
   order_number: z.number().optional(),
   status: z.string().optional(),
 });
+
+const printifyUploadDetailsSchema = z.object({
+  id: z.union([z.string(), z.number()]).optional(),
+  url: z.string().optional(),
+  file_url: z.string().optional(),
+  preview_url: z.string().optional(),
+});
+
+const printifyUploadResponseSchema = z.object({
+  id: z.union([z.string(), z.number()]),
+});
+
+const resolveUploadFileName = (imageUrl: string): string => {
+  try {
+    const url = new URL(imageUrl);
+    const pathname = url.pathname.split("/").pop();
+    if (pathname && pathname.includes(".")) {
+      return pathname;
+    }
+  } catch {
+    // Ignore URL parsing failures.
+  }
+
+  return `order-${Date.now()}.png`;
+};
+
+const uploadPrintifyImageFromUrl = async (
+  token: string,
+  imageUrl: string,
+): Promise<string> => {
+  const response = await fetchPrintify(
+    `${PRINTIFY_BASE_URL}/uploads/images.json`,
+    token,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        file_name: resolveUploadFileName(imageUrl),
+        url: imageUrl,
+      }),
+    },
+  );
+
+  await assertPrintifyOk(response, "Unable to upload image to Printify.");
+
+  const payload = (await response.json()) as unknown;
+  const parsed = printifyUploadResponseSchema.safeParse(payload);
+  if (!parsed.success) {
+    throw new PrintifyRequestError(
+      "unexpected_response",
+      "Printify upload response was invalid.",
+    );
+  }
+
+  return String(parsed.data.id);
+};
+
+const getPrintifyUploadUrl = async (
+  token: string,
+  uploadId: string,
+): Promise<string | null> => {
+  try {
+    const response = await fetchPrintify(
+      `${PRINTIFY_BASE_URL}/uploads/${uploadId}.json`,
+      token,
+      { method: "GET" },
+    );
+
+    if (!response.ok) {
+      logger.warn(
+        { status: response.status, upload_id: uploadId },
+        "Unable to fetch Printify upload details",
+      );
+      return null;
+    }
+
+    const payload = (await response.json()) as unknown;
+    const parsed = printifyUploadDetailsSchema.safeParse(payload);
+    if (!parsed.success) {
+      logger.warn(
+        { upload_id: uploadId },
+        "Printify upload details response was invalid",
+      );
+      return null;
+    }
+
+    const url =
+      parsed.data.file_url ??
+      parsed.data.url ??
+      parsed.data.preview_url ??
+      null;
+
+    if (!url) {
+      logger.warn(
+        { upload_id: uploadId },
+        "Printify upload details missing URL",
+      );
+    }
+
+    return url;
+  } catch (error) {
+    logger.warn(
+      {
+        upload_id: uploadId,
+        error: error instanceof Error ? error.message : String(error),
+      },
+      "Failed to fetch Printify upload URL",
+    );
+    return null;
+  }
+};
+
 
 // ============================================================================
 // Idempotency Key Builders
@@ -220,17 +340,63 @@ export async function submitOrderToPrintify(
     // Build Printify order payload
     // Note: Using "external" mode to reference existing product with custom artwork
     const printAreaKey = input.printAreaPosition ?? "front";
+    let resolvedAssetUrl = assetUrl;
+
+    let orderUploadId: string | null = null;
+
+    try {
+      orderUploadId = await uploadPrintifyImageFromUrl(token, assetUrl);
+    } catch (error) {
+      logger.warn(
+        {
+          error: error instanceof Error ? error.message : String(error),
+        },
+        "Failed to upload order artwork to Printify; falling back",
+      );
+    }
+
+    if (orderUploadId) {
+      const uploadUrl = await getPrintifyUploadUrl(token, orderUploadId);
+      if (uploadUrl) {
+        resolvedAssetUrl = uploadUrl;
+        logger.info(
+          { printify_upload_id: orderUploadId },
+          "Using Printify upload URL for order artwork",
+        );
+      }
+    } else if (input.printifyUploadId) {
+      const uploadUrl = await getPrintifyUploadUrl(
+        token,
+        input.printifyUploadId,
+      );
+      if (uploadUrl) {
+        resolvedAssetUrl = uploadUrl;
+        logger.info(
+          { printify_upload_id: input.printifyUploadId },
+          "Using preview Printify upload URL for order artwork",
+        );
+      }
+    }
+
+    const printAreaImage = {
+      src: resolvedAssetUrl,
+      x: input.printAreaX ?? 0.5,
+      y: input.printAreaY ?? 0.5,
+      scale: input.printAreaScale ?? 1,
+      angle: input.printAreaAngle ?? 0,
+    };
     const orderPayload = {
       external_id: `${orderId}-${orderLineId}`,
       label: `Order ${orderId} - Line ${orderLineId}`,
       line_items: [
         {
-          product_id: input.printifyProductId,
+          print_provider_id: input.printifyPrintProviderId,
+          blueprint_id: input.printifyBlueprintId,
           variant_id: input.variantId,
           quantity: input.quantity,
-          print_areas: {
-            [printAreaKey]: assetUrl,
-          },
+            print_areas: {
+              [printAreaKey]: [printAreaImage],
+            },
         },
       ],
       shipping_method: input.shippingMethodId ?? 1,

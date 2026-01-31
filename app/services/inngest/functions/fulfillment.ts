@@ -11,13 +11,12 @@ import {
 } from "../../posthog/events";
 import { getOfflineShopifyAdmin } from "../../shopify/admin.server";
 import {
-  resolveAssetByPersonalizationId,
   AssetResolutionError,
   generateAssetSignedUrl,
   type ResolvedAsset,
   RECOVERY_GUIDANCE,
 } from "../../fulfillment/asset-resolution.server";
-import { GENERATED_DESIGNS_BUCKET } from "../../supabase/storage";
+import { ensurePrintReadyAsset } from "../../fulfillment/print-ready-asset.server";
 import {
   buildPrintifySubmitIdempotencyKey,
   submitOrderToPrintify,
@@ -31,8 +30,11 @@ import {
   type PrintifyShippingAddress,
 } from "../../printify/shipping.server";
 import { getPrintifyVariantPrintArea } from "../../printify/print-area.server";
+import { buildPrintAreaTransform } from "../../printify/print-area-transform.server";
 import { PRINTIFY_RECOVERY_GUIDANCE } from "../../../schemas/fulfillment";
 import type { PrintifySubmitErrorCode } from "../../../schemas/fulfillment";
+import { calculateFalImageSize } from "../../fal/image-size.server";
+import { getTemplate } from "../../templates/templates.server";
 
 const ORDER_FEE_MILLS = 250; // $0.25 in mills
 
@@ -619,121 +621,10 @@ export const processOrderLine = inngest.createFunction(
         });
       }
 
-      // Resolve and persist final print-ready asset
-      const resolvedAsset = await step.run("persist-final-asset", async () => {
-        try {
-          // Resolve personalization_id to stored preview asset
-          const asset = await resolveAssetByPersonalizationId(
-            payload.shop_id,
-            payload.order_line_id,
-            payload.personalization_id,
-          );
-
-          // Persist final asset reference to order_line_processing
-          await prisma.orderLineProcessing.updateMany({
-            where: {
-              shop_id: payload.shop_id,
-              order_line_id: payload.order_line_id,
-            },
-            data: {
-              final_asset_storage_key: asset.storageKey,
-              final_asset_bucket: asset.bucket,
-              final_asset_persisted_at: new Date(),
-            },
-          });
-
-          // Emit PostHog event for asset persistence
-          captureEvent("fulfillment.asset.persisted", {
-            shop_id: payload.shop_id,
-            order_id: payload.order_id,
-            order_line_id: payload.order_line_id,
-            personalization_id: payload.personalization_id,
-            job_id: asset.jobId,
-            storage_key: asset.storageKey,
-            bucket: asset.bucket,
-            template_id: asset.templateId,
-            product_id: asset.productId,
-          });
-
-          logger.info(
-            {
-              shop_id: payload.shop_id,
-              order_line_id: payload.order_line_id,
-              personalization_id: payload.personalization_id,
-              storage_key: asset.storageKey,
-              bucket: asset.bucket,
-            },
-            "Final asset persisted successfully",
-          );
-
-          return asset;
-        } catch (error) {
-          if (error instanceof AssetResolutionError) {
-            // Log structured error for ops visibility
-            logger.error(
-              {
-                shop_id: payload.shop_id,
-                order_line_id: payload.order_line_id,
-                personalization_id: payload.personalization_id,
-                error_code: error.code,
-                error_message: error.message,
-                retryable: error.retryable,
-              },
-              "Asset resolution failed",
-            );
-
-            // Update order line processing with error details
-            await prisma.orderLineProcessing.updateMany({
-              where: {
-                shop_id: payload.shop_id,
-                order_line_id: payload.order_line_id,
-              },
-              data: {
-                final_asset_error_code: error.code,
-                final_asset_error_message: error.message,
-              },
-            });
-
-            // Emit PostHog error event
-            captureEvent("fulfillment.asset.failed", {
-              shop_id: payload.shop_id,
-              order_id: payload.order_id,
-              order_line_id: payload.order_line_id,
-              personalization_id: payload.personalization_id,
-              error_code: error.code,
-              error_message: error.message,
-            });
-
-            // Only retry if error is marked as retryable
-            if (error.retryable) {
-              // Re-throw to trigger Inngest retry
-              throw error;
-            } else {
-              // Non-retryable errors: mark as failed and continue
-              // These are permanent failures (asset not found, invalid personalization_id)
-              logger.warn(
-                {
-                  shop_id: payload.shop_id,
-                  order_line_id: payload.order_line_id,
-                  personalization_id: payload.personalization_id,
-                  error_code: error.code,
-                },
-                "Asset resolution failed with non-retryable error - marking as failed",
-              );
-              // Return to allow workflow to continue to mark-succeeded step
-              // But status will already reflect error in final_asset_error_code
-              return;
-            }
-          }
-
-          // Re-throw unexpected errors
-          throw error;
-        }
-      });
-
       // ========================================================================
       // STORY 7.3: Submit order to Printify for fulfillment
       // ========================================================================
+      let resolvedAsset: ResolvedAsset | null = null;
       let printifySubmissionResult: {
         success: boolean;
         printifyOrderId?: string;
@@ -742,8 +633,9 @@ export const processOrderLine = inngest.createFunction(
         errorMessage?: string;
       } | null = null;
 
-      // Only submit to Printify if we have a resolved asset
-      if (resolvedAsset) {
+      // Submit to Printify for fulfillment
+      // Asset resolution happens inside the submission flow
+      {
         const fallbackResult = payload.shipping_address
           ? null
           : await fetchOrderShippingAddress({
@@ -814,131 +706,305 @@ export const processOrderLine = inngest.createFunction(
             errorMessage: message,
           };
         } else {
-          printifySubmissionResult = await step.run(
-            "submit-to-printify",
-            async () => {
-              const printifyIdempotencyKey = buildPrintifySubmitIdempotencyKey(
-                payload.shop_id,
-                payload.order_line_id,
-              );
+          const printifyIdempotencyKey = buildPrintifySubmitIdempotencyKey(
+            payload.shop_id,
+            payload.order_line_id,
+          );
 
-              // Check if already submitted (idempotency check)
-              const existingSubmission =
-                await prisma.orderLineProcessing.findFirst({
-                  where: {
-                    shop_id: payload.shop_id,
-                    order_line_id: payload.order_line_id,
-                    printify_submit_idempotency_key: printifyIdempotencyKey,
-                    printify_submit_status: "succeeded",
-                  },
-                  select: {
-                    printify_order_id: true,
-                    printify_order_number: true,
-                  },
-                });
+          // Check if already submitted (idempotency check)
+          // We check for any record with this idempotency key, regardless of status,
+          // to handle partial failures where DB was updated but Printify call failed
+          const existingSubmission = await prisma.orderLineProcessing.findFirst(
+            {
+              where: {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+                printify_submit_idempotency_key: printifyIdempotencyKey,
+              },
+              select: {
+                printify_order_id: true,
+                printify_order_number: true,
+                printify_submit_status: true,
+              },
+            },
+          );
 
-              if (existingSubmission?.printify_order_id) {
-                logger.info(
-                  {
-                    shop_id: payload.shop_id,
-                    order_line_id: payload.order_line_id,
-                    printify_order_id: existingSubmission.printify_order_id,
-                  },
-                  "Order already submitted to Printify (idempotent)",
-                );
-                return {
-                  success: true,
-                  printifyOrderId: existingSubmission.printify_order_id,
-                  printifyOrderNumber:
-                    existingSubmission.printify_order_number ?? undefined,
-                };
-              }
+          // Only return early if we have a confirmed successful submission with Printify order ID
+          if (
+            existingSubmission?.printify_submit_status === "succeeded" &&
+            existingSubmission?.printify_order_id
+          ) {
+            logger.info(
+              {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+                printify_order_id: existingSubmission.printify_order_id,
+              },
+              "Order already submitted to Printify (idempotent)",
+            );
 
-              // Get Printify integration to check configuration
-              const integration = await getPrintifyIntegrationWithToken(
-                payload.shop_id,
-              );
-              if (!integration) {
-                logger.warn(
-                  { shop_id: payload.shop_id },
-                  "Printify integration not configured - skipping submission",
-                );
+            // Emit succeeded event since we're returning cached success
+            captureEvent("fulfillment.succeeded", {
+              shop_id: payload.shop_id,
+              order_id: payload.order_id,
+              order_line_id: payload.order_line_id,
+              personalization_id: payload.personalization_id,
+              printify_order_id: existingSubmission.printify_order_id,
+            });
 
-                // Mark as failed with guidance
-                await prisma.orderLineProcessing.updateMany({
-                  where: {
-                    shop_id: payload.shop_id,
-                    order_line_id: payload.order_line_id,
-                  },
-                  data: {
-                    printify_submit_status: "failed",
-                    printify_submit_idempotency_key: printifyIdempotencyKey,
-                    printify_error_code: "printify_not_configured",
-                    printify_error_message:
-                      PRINTIFY_RECOVERY_GUIDANCE.printify_not_configured,
-                  },
-                });
+            return {
+              success: true,
+              printifyOrderId: existingSubmission.printify_order_id,
+              printifyOrderNumber:
+                existingSubmission.printify_order_number ?? undefined,
+            };
+          }
 
-                captureEvent("fulfillment.failed", {
+          // If we have a pending or failed record with this key, we should retry
+          // (don't return early - let the submission proceed)
+          if (existingSubmission) {
+            logger.info(
+              {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+                previous_status: existingSubmission.printify_submit_status,
+              },
+              "Retrying Printify submission with existing idempotency key",
+            );
+          }
+
+          // Get Printify integration to check configuration
+          const integration = await getPrintifyIntegrationWithToken(
+            payload.shop_id,
+          );
+          if (!integration) {
+            logger.warn(
+              { shop_id: payload.shop_id },
+              "Printify integration not configured - skipping submission",
+            );
+
+            // Mark as failed with guidance
+            await prisma.orderLineProcessing.updateMany({
+              where: {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+              },
+              data: {
+                printify_submit_status: "failed",
+                printify_submit_idempotency_key: printifyIdempotencyKey,
+                printify_error_code: "printify_not_configured",
+                printify_error_message:
+                  PRINTIFY_RECOVERY_GUIDANCE.printify_not_configured,
+              },
+            });
+
+            captureEvent("fulfillment.failed", {
+              shop_id: payload.shop_id,
+              order_id: payload.order_id,
+              order_line_id: payload.order_line_id,
+              personalization_id: payload.personalization_id,
+              error_code: "printify_not_configured",
+              error_message: "Printify integration not configured",
+            });
+
+            return {
+              success: false,
+              errorCode: "printify_not_configured" as PrintifySubmitErrorCode,
+              errorMessage: "Printify integration not configured",
+            };
+          }
+
+          // Mark as pending before submission
+          await prisma.orderLineProcessing.updateMany({
+            where: {
+              shop_id: payload.shop_id,
+              order_line_id: payload.order_line_id,
+            },
+            data: {
+              printify_submit_status: "pending",
+              printify_submit_idempotency_key: printifyIdempotencyKey,
+            },
+          });
+
+          // Get Printify product ID from shop_products table
+          // Normalize product_id to GID format (webhook sends numeric ID, DB stores GID)
+          const normalizedProductId = payload.product_id
+            ? payload.product_id.startsWith("gid://")
+              ? payload.product_id
+              : `gid://shopify/Product/${payload.product_id}`
+            : null;
+
+          const shopProduct = normalizedProductId
+            ? await prisma.shopProduct.findFirst({
+                where: {
                   shop_id: payload.shop_id,
-                  order_id: payload.order_id,
-                  order_line_id: payload.order_line_id,
-                  personalization_id: payload.personalization_id,
-                  error_code: "printify_not_configured",
-                  error_message: "Printify integration not configured",
-                });
+                  product_id: normalizedProductId,
+                },
+                select: {
+                  printify_product_id: true,
+                },
+              })
+            : null;
 
-                return {
-                  success: false,
-                  errorCode:
-                    "printify_not_configured" as PrintifySubmitErrorCode,
-                  errorMessage: "Printify integration not configured",
-                };
+          const printifyProductId = shopProduct?.printify_product_id ?? null;
+
+          if (!printifyProductId) {
+            logger.error(
+              {
+                shop_id: payload.shop_id,
+                product_id: payload.product_id,
+                normalized_product_id: normalizedProductId,
+              },
+              "Printify product ID not found for Shopify product",
+            );
+
+            await prisma.orderLineProcessing.updateMany({
+              where: {
+                shop_id: payload.shop_id,
+                order_line_id: payload.order_line_id,
+              },
+              data: {
+                printify_submit_status: "failed",
+                printify_error_code: "printify_order_rejected",
+                printify_error_message:
+                  "Product not configured for Printify fulfillment",
+              },
+            });
+
+            captureEvent("fulfillment.failed", {
+              shop_id: payload.shop_id,
+              order_id: payload.order_id,
+              order_line_id: payload.order_line_id,
+              personalization_id: payload.personalization_id,
+              error_code: "printify_order_rejected",
+              error_message: "Product not configured for Printify fulfillment",
+            });
+
+            return {
+              success: false,
+              errorCode: "printify_order_rejected" as PrintifySubmitErrorCode,
+              errorMessage: "Product not configured for Printify fulfillment",
+            };
+          }
+
+          const printifyProduct = await getPrintifyProductDetails(
+            payload.shop_id,
+            printifyProductId,
+          );
+
+          // Resolve Printify variant ID from Shopify variant ID
+          let printifyVariantId: number;
+          if (payload.variant_id && normalizedProductId) {
+            const variantMapping = await resolvePrintifyVariantId(
+              payload.shop_id,
+              normalizedProductId,
+              String(payload.variant_id),
+            );
+            if (variantMapping) {
+              printifyVariantId = Number(variantMapping.printifyVariantId);
+            } else {
+              // Fallback: use first enabled variant from Printify product
+              const firstEnabledVariant = printifyProduct.variants.find(
+                (v) => v.isEnabled,
+              );
+              if (!firstEnabledVariant) {
+                throw new Error(
+                  "No enabled variants found for Printify product",
+                );
               }
+              printifyVariantId = firstEnabledVariant.id;
+            }
+          } else {
+            // No variant_id provided - use first enabled variant
+            const firstEnabledVariant = printifyProduct.variants.find(
+              (v) => v.isEnabled,
+            );
+            if (!firstEnabledVariant) {
+              throw new Error("No enabled variants found for Printify product");
+            }
+            printifyVariantId = firstEnabledVariant.id;
+          }
 
-              // Mark as pending before submission
+          const printAreaFront = await getPrintifyVariantPrintArea({
+            shopId: payload.shop_id,
+            blueprintId: printifyProduct.blueprintId,
+            printProviderId: printifyProduct.printProviderId,
+            variantId: printifyVariantId,
+            position: "front",
+          });
+
+          const printAreaFallback =
+            printAreaFront ??
+            (await getPrintifyVariantPrintArea({
+              shopId: payload.shop_id,
+              blueprintId: printifyProduct.blueprintId,
+              printProviderId: printifyProduct.printProviderId,
+              variantId: printifyVariantId,
+            }));
+
+          const printAreaPosition =
+            printAreaFront?.position ?? printAreaFallback?.position ?? "front";
+
+          const printAreaDimensions = printAreaFront ?? printAreaFallback;
+
+          // Resolve and persist final print-ready asset
+          resolvedAsset = await step.run("persist-final-asset", async () => {
+            try {
+              const asset = await ensurePrintReadyAsset({
+                shopId: payload.shop_id,
+                orderLineId: payload.order_line_id,
+                personalizationId: payload.personalization_id,
+                printAreaDimensions,
+              });
+
               await prisma.orderLineProcessing.updateMany({
                 where: {
                   shop_id: payload.shop_id,
                   order_line_id: payload.order_line_id,
                 },
                 data: {
-                  printify_submit_status: "pending",
-                  printify_submit_idempotency_key: printifyIdempotencyKey,
+                  final_asset_storage_key: asset.storageKey,
+                  final_asset_bucket: asset.bucket,
+                  final_asset_persisted_at: new Date(),
                 },
               });
 
-              // Generate signed URL for the asset
-              const assetWithUrl = await generateAssetSignedUrl(resolvedAsset);
+              captureEvent("fulfillment.asset.persisted", {
+                shop_id: payload.shop_id,
+                order_id: payload.order_id,
+                order_line_id: payload.order_line_id,
+                personalization_id: payload.personalization_id,
+                job_id: asset.jobId,
+                storage_key: asset.storageKey,
+                bucket: asset.bucket,
+                template_id: asset.templateId,
+                product_id: asset.productId,
+              });
 
-              // Get Printify product ID from shop_products table
-              // Normalize product_id to GID format (webhook sends numeric ID, DB stores GID)
-              const normalizedProductId = payload.product_id
-                ? payload.product_id.startsWith("gid://")
-                  ? payload.product_id
-                  : `gid://shopify/Product/${payload.product_id}`
-                : null;
+              logger.info(
+                {
+                  shop_id: payload.shop_id,
+                  order_line_id: payload.order_line_id,
+                  personalization_id: payload.personalization_id,
+                  storage_key: asset.storageKey,
+                  bucket: asset.bucket,
+                },
+                "Final asset persisted successfully",
+              );
 
-              const shopProduct = normalizedProductId
-                ? await prisma.shopProduct.findFirst({
-                    where: {
-                      shop_id: payload.shop_id,
-                      product_id: normalizedProductId,
-                    },
-                    select: {
-                      printify_product_id: true,
-                    },
-                  })
-                : null;
-
-              if (!shopProduct?.printify_product_id) {
+              return asset;
+            } catch (error) {
+              if (error instanceof AssetResolutionError) {
                 logger.error(
                   {
                     shop_id: payload.shop_id,
-                    product_id: payload.product_id,
-                    normalized_product_id: normalizedProductId,
+                    order_line_id: payload.order_line_id,
+                    personalization_id: payload.personalization_id,
+                    error_code: error.code,
+                    error_message: error.message,
+                    retryable: error.retryable,
                   },
-                  "Printify product ID not found for Shopify product",
+                  "Asset resolution failed",
                 );
 
                 await prisma.orderLineProcessing.updateMany({
@@ -947,94 +1013,93 @@ export const processOrderLine = inngest.createFunction(
                     order_line_id: payload.order_line_id,
                   },
                   data: {
-                    printify_submit_status: "failed",
-                    printify_error_code: "printify_order_rejected",
-                    printify_error_message:
-                      "Product not configured for Printify fulfillment",
+                    final_asset_error_code: error.code,
+                    final_asset_error_message: error.message,
                   },
                 });
 
-                captureEvent("fulfillment.failed", {
+                captureEvent("fulfillment.asset.failed", {
                   shop_id: payload.shop_id,
                   order_id: payload.order_id,
                   order_line_id: payload.order_line_id,
                   personalization_id: payload.personalization_id,
-                  error_code: "printify_order_rejected",
-                  error_message:
-                    "Product not configured for Printify fulfillment",
+                  error_code: error.code,
+                  error_message: error.message,
                 });
 
-                return {
-                  success: false,
-                  errorCode:
-                    "printify_order_rejected" as PrintifySubmitErrorCode,
-                  errorMessage:
-                    "Product not configured for Printify fulfillment",
-                };
+                if (error.retryable) {
+                  throw error;
+                }
+
+                logger.warn(
+                  {
+                    shop_id: payload.shop_id,
+                    order_line_id: payload.order_line_id,
+                    personalization_id: payload.personalization_id,
+                    error_code: error.code,
+                  },
+                  "Asset resolution failed with non-retryable error - marking as failed",
+                );
+
+                return null;
               }
 
-              const printifyProduct = await getPrintifyProductDetails(
-                payload.shop_id,
-                shopProduct.printify_product_id,
-              );
+              throw error;
+            }
+          });
 
-              // Resolve Printify variant ID from Shopify variant ID
-              let printifyVariantId: number;
-              if (payload.variant_id && normalizedProductId) {
-                const variantMapping = await resolvePrintifyVariantId(
-                  payload.shop_id,
-                  normalizedProductId,
-                  String(payload.variant_id),
-                );
-                if (variantMapping) {
-                  printifyVariantId = Number(variantMapping.printifyVariantId);
-                } else {
-                  // Fallback: use first enabled variant from Printify product
-                  const firstEnabledVariant = printifyProduct.variants.find(
-                    (v) => v.isEnabled,
-                  );
-                  if (!firstEnabledVariant) {
-                    throw new Error(
-                      "No enabled variants found for Printify product",
-                    );
-                  }
-                  printifyVariantId = firstEnabledVariant.id;
-                }
-              } else {
-                // No variant_id provided - use first enabled variant
-                const firstEnabledVariant = printifyProduct.variants.find(
-                  (v) => v.isEnabled,
-                );
-                if (!firstEnabledVariant) {
-                  throw new Error(
-                    "No enabled variants found for Printify product",
-                  );
-                }
-                printifyVariantId = firstEnabledVariant.id;
-              }
+          if (!resolvedAsset) {
+            return {
+              success: false,
+              errorCode: "order_line_not_found" as PrintifySubmitErrorCode,
+              errorMessage: RECOVERY_GUIDANCE.asset_not_found,
+            };
+          }
 
-              const printAreaFront = await getPrintifyVariantPrintArea({
-                shopId: payload.shop_id,
-                blueprintId: printifyProduct.blueprintId,
-                printProviderId: printifyProduct.printProviderId,
-                variantId: printifyVariantId,
-                position: "front",
-              });
+          const finalAsset = resolvedAsset;
+          let printAreaTransform = {
+            x: 0.5,
+            y: 0.5,
+            scale: 1,
+            angle: 0,
+          };
 
-              const printAreaFallback =
-                printAreaFront ??
-                (await getPrintifyVariantPrintArea({
-                  shopId: payload.shop_id,
-                  blueprintId: printifyProduct.blueprintId,
-                  printProviderId: printifyProduct.printProviderId,
-                  variantId: printifyVariantId,
-                }));
+          const template = await getTemplate(
+            finalAsset.templateId,
+            payload.shop_id,
+          );
+          if (!template) {
+            logger.warn(
+              {
+                shop_id: payload.shop_id,
+                template_id: finalAsset.templateId,
+                order_line_id: payload.order_line_id,
+              },
+              "Template not found for fulfillment; using default print area scale",
+            );
+          }
 
-              const printAreaPosition =
-                printAreaFront?.position ??
-                printAreaFallback?.position ??
-                "front";
+          const coverPrintArea = template?.coverPrintArea ?? false;
+          const imageSize = calculateFalImageSize({
+            coverPrintArea,
+            templateAspectRatio: template?.aspectRatio ?? null,
+            printAreaDimensions,
+          });
+          const computedTransform = buildPrintAreaTransform({
+            coverPrintArea,
+            imageSize,
+            printAreaDimensions,
+          });
+          printAreaTransform = {
+            x: finalAsset.printAreaX ?? computedTransform.x,
+            y: finalAsset.printAreaY ?? computedTransform.y,
+            scale: finalAsset.printAreaScale ?? computedTransform.scale,
+            angle: finalAsset.printAreaAngle ?? computedTransform.angle,
+          };
 
+          printifySubmissionResult = await step.run(
+            "submit-to-printify",
+            async () => {
               let shippingMethodId: number | undefined;
               let shippingAddressForPrintify = shippingAddress;
               let shippingAddressPayload = buildPrintifyShippingAddress(
@@ -1127,6 +1192,9 @@ export const processOrderLine = inngest.createFunction(
                 }
               }
 
+              // Generate signed URL for the asset
+              const assetWithUrl = await generateAssetSignedUrl(finalAsset);
+
               if (missingFields.length > 0) {
                 const message = protectedDataBlockedByApi
                   ? PRINTIFY_RECOVERY_GUIDANCE.protected_customer_data_not_approved
@@ -1195,7 +1263,7 @@ export const processOrderLine = inngest.createFunction(
                   address: shippingAddressPayload,
                   lineItems: [
                     {
-                      productId: shopProduct.printify_product_id,
+                      productId: printifyProductId,
                       variantId: printifyVariantId,
                       quantity: payload.quantity ?? 1,
                     },
@@ -1223,8 +1291,13 @@ export const processOrderLine = inngest.createFunction(
                 orderId: payload.order_id,
                 orderLineId: payload.order_line_id,
                 assetUrl: assetWithUrl.signedUrl,
+                printifyUploadId: finalAsset.printifyUploadId ?? null,
                 idempotencyKey: printifyIdempotencyKey,
                 printAreaPosition,
+                printAreaX: printAreaTransform.x,
+                printAreaY: printAreaTransform.y,
+                printAreaScale: printAreaTransform.scale,
+                printAreaAngle: printAreaTransform.angle,
                 shippingMethodId,
                 customer: {
                   firstName: shippingAddressPayload.firstName,
@@ -1240,7 +1313,9 @@ export const processOrderLine = inngest.createFunction(
                     country: shippingAddressPayload.country,
                   },
                 },
-                printifyProductId: shopProduct.printify_product_id,
+                printifyProductId,
+                printifyBlueprintId: printifyProduct.blueprintId,
+                printifyPrintProviderId: printifyProduct.printProviderId,
                 variantId: printifyVariantId,
                 quantity: payload.quantity ?? 1,
               };
@@ -1273,6 +1348,15 @@ export const processOrderLine = inngest.createFunction(
                   printify_order_id: result.printifyOrderId ?? "",
                   printify_order_number: result.printifyOrderNumber,
                   idempotency_key: printifyIdempotencyKey,
+                });
+
+                // Emit fulfillment.succeeded event per AC requirements
+                captureEvent("fulfillment.succeeded", {
+                  shop_id: payload.shop_id,
+                  order_id: payload.order_id,
+                  order_line_id: payload.order_line_id,
+                  personalization_id: payload.personalization_id,
+                  printify_order_id: result.printifyOrderId ?? "",
                 });
 
                 logger.info(

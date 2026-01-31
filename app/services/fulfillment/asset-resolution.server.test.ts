@@ -60,6 +60,7 @@ describe("Asset Resolution Service", () => {
         templateId: "template-456",
         designStorageKey: "designs/shop-123/job-789.png",
         designUrl: "https://example.com/design.png",
+        printifyUploadId: null,
         status: "done",
       };
 
@@ -76,6 +77,7 @@ describe("Asset Resolution Service", () => {
         bucket: "generated-designs",
         storageKey: "designs/shop-123/job-789.png",
         designUrl: "https://example.com/design.png",
+        printifyUploadId: null,
         jobId: personalizationId,
         templateId: "template-456",
         productId: "product-123",
@@ -260,6 +262,11 @@ describe("Asset Resolution Service", () => {
       bucket: "generated-designs",
       storageKey: "designs/shop-123/job-789.png",
       designUrl: "https://example.com/design.png",
+      printifyUploadId: null,
+      printAreaX: null,
+      printAreaY: null,
+      printAreaScale: null,
+      printAreaAngle: null,
       jobId: "job-789",
       templateId: "template-456",
       productId: "product-123",

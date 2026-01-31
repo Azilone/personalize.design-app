@@ -110,9 +110,9 @@ export const generateFakeImage = async (
   params: GenerateFakeImageParams,
 ): Promise<GenerateFakeImageResult> => {
   const placeholderUrl = buildPlaceholderUrl(params.imageSize);
-  const textParam = params.text
-    ? `?text=${encodeURIComponent(params.text)}`
-    : "";
+  const sizeLabel = `${params.imageSize.width}x${params.imageSize.height}`;
+  const textValue = params.text ? `${params.text} ${sizeLabel}` : sizeLabel;
+  const textParam = `?text=${encodeURIComponent(textValue)}`;
   const fullUrl = `${placeholderUrl}${textParam}`;
 
   logger.info(

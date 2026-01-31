@@ -64,6 +64,7 @@ describe("createTempProduct", () => {
     expect(result).toEqual({
       productId: "product-1",
       mockupUrls: ["https://cdn.test/mockup.png"],
+      uploadId: "upload-1",
     });
 
     expect(fetchSpy).toHaveBeenCalledWith(

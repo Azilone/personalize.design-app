@@ -8,6 +8,9 @@ export type GenerateMockupsParams = {
   printArea: {
     position?: string;
     scale?: number;
+    x?: number;
+    y?: number;
+    angle?: number;
     width: number;
     height: number;
   };
@@ -17,6 +20,7 @@ export type GenerateMockupsParams = {
 export type GenerateMockupsResult = {
   mockupUrls: string[];
   tempProductId: string;
+  uploadId: string;
 };
 
 export const generateMockups = async (
@@ -31,11 +35,15 @@ export const generateMockups = async (
       url: params.designUrl,
       position: params.printArea.position,
       scale: params.printArea.scale,
+      x: params.printArea.x,
+      y: params.printArea.y,
+      angle: params.printArea.angle,
     },
   );
 
   return {
     mockupUrls: tempProduct.mockupUrls,
     tempProductId: tempProduct.productId,
+    uploadId: tempProduct.uploadId,
   };
 };

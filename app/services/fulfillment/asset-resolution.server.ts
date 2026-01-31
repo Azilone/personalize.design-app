@@ -83,6 +83,13 @@ export interface ResolvedAsset {
   storageKey: string;
   /** Original design URL (for reference) */
   designUrl: string | null;
+  /** Printify upload ID (optional) */
+  printifyUploadId: string | null;
+  /** Print area transform */
+  printAreaX: number | null;
+  printAreaY: number | null;
+  printAreaScale: number | null;
+  printAreaAngle: number | null;
   /** Preview job ID */
   jobId: string;
   /** Template ID used for generation */
@@ -234,6 +241,11 @@ export async function resolveAssetByPersonalizationId(
     bucket: GENERATED_DESIGNS_BUCKET,
     storageKey: previewJob.designStorageKey,
     designUrl: previewJob.designUrl,
+    printifyUploadId: previewJob.printifyUploadId,
+    printAreaX: previewJob.printAreaX,
+    printAreaY: previewJob.printAreaY,
+    printAreaScale: previewJob.printAreaScale,
+    printAreaAngle: previewJob.printAreaAngle,
     jobId: previewJob.jobId,
     templateId: previewJob.templateId,
     productId: previewJob.productId,

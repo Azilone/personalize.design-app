@@ -4,6 +4,12 @@ import { createHmac, timingSafeEqual } from "crypto";
 import prisma from "../../../db.server";
 import logger from "../../../lib/logger";
 import { mapPrintifyStatusToInternal } from "../../../services/printify/order-submission.server";
+import {
+  cancelPrintifyOrder,
+  canCancelPrintifyOrder,
+} from "../../../services/printify/order-cancel.server";
+import { getPrintifyOrderDetails } from "../../../services/printify/order-details.server";
+import { checkAutoImportedOrder } from "../../../services/printify/auto-order-check.server";
 
 type PrintifyWebhookPayload = {
   id?: string | number;
@@ -52,6 +58,9 @@ const parseExternalOrderLineId = (externalId: string | null | undefined) => {
   if (lastDash === -1) return null;
   return externalId.slice(lastDash + 1);
 };
+
+const shouldBlockAutoOrders =
+  process.env.PRINTIFY_BLOCK_AUTO_ORDERS !== "false";
 
 const resolvePayloadOrder = (payload: PrintifyWebhookPayload) => {
   if (payload.data && typeof payload.data === "object") return payload.data;
@@ -169,6 +178,100 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   }
 
   if (!orderLineRecord) {
+    if (
+      eventType === "order:created" &&
+      shouldBlockAutoOrders &&
+      shopId &&
+      printifyOrderId
+    ) {
+      try {
+        const orderDetails = await getPrintifyOrderDetails(
+          shopId,
+          printifyOrderId,
+        );
+
+        const checkResult = await checkAutoImportedOrder(shopId, orderDetails);
+
+        switch (checkResult.action) {
+          case "skip": {
+            logger.info(
+              {
+                shop_id: shopId,
+                printify_shop_id: printifyShopId,
+                printify_order_id: printifyOrderId,
+                external_id: orderDetails.externalId,
+                event_type: eventType,
+                reason: checkResult.reason,
+              },
+              "Printify order does not include personalized products; skipping cancel",
+            );
+            break;
+          }
+
+          case "cancel": {
+            // Check if order can be cancelled based on status
+            if (!canCancelPrintifyOrder(orderDetails.status)) {
+              logger.warn(
+                {
+                  shop_id: shopId,
+                  printify_shop_id: printifyShopId,
+                  printify_order_id: printifyOrderId,
+                  external_id: orderDetails.externalId,
+                  status: orderDetails.status,
+                  event_type: eventType,
+                },
+                "Cannot cancel auto-imported Printify order - order is already in production",
+              );
+            } else {
+              await cancelPrintifyOrder({
+                shopId,
+                printifyOrderId,
+              });
+
+              logger.warn(
+                {
+                  shop_id: shopId,
+                  printify_shop_id: printifyShopId,
+                  printify_order_id: printifyOrderId,
+                  external_id: orderDetails.externalId,
+                  event_type: eventType,
+                },
+                "Cancelled auto-imported Printify order for personalized product",
+              );
+            }
+            break;
+          }
+
+          case "warn": {
+            logger.warn(
+              {
+                shop_id: shopId,
+                printify_shop_id: printifyShopId,
+                printify_order_id: printifyOrderId,
+                external_id: orderDetails.externalId,
+                event_type: eventType,
+                reason: checkResult.reason,
+              },
+              "Printify order matched expected format but no record found",
+            );
+            break;
+          }
+        }
+      } catch (error) {
+        logger.error(
+          {
+            shop_id: shopId,
+            printify_shop_id: printifyShopId,
+            printify_order_id: printifyOrderId,
+            external_id: externalId,
+            event_type: eventType,
+            error: error instanceof Error ? error.message : String(error),
+          },
+          "Failed to inspect or cancel auto-imported Printify order",
+        );
+      }
+    }
+
     logger.warn(
       {
         printify_order_id: printifyOrderId,

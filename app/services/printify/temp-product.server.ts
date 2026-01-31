@@ -28,6 +28,7 @@ export type PrintifyPrintAreaImage = {
 export type PrintifyTempProductResult = {
   productId: string;
   mockupUrls: string[];
+  uploadId: string;
 };
 
 const DEFAULT_PREVIEW_IMAGE_SCALE = 1;
@@ -215,7 +216,7 @@ export const createTempProduct = async (
     "Created temporary Printify product",
   );
 
-  return { productId, mockupUrls };
+  return { productId, mockupUrls, uploadId };
 };
 
 export const deleteProduct = async (
